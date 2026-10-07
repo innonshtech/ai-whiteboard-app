@@ -55,6 +55,7 @@ enum class WhiteboardTool(val label: String, val shortcut: String) {
     STICKY_NOTE("Sticky Note", "N"),
     ERASER("Eraser", "E"),
     FRAME("Frame tool", "F"),
+    RULER("Ruler", "U"),
     LASER("Laser pointer", "K"),
     BUCKET_FILL("Bucket fill", "B"),
     LASSO("Lasso selection", "")

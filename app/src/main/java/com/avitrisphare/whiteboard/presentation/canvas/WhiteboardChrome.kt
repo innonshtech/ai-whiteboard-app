@@ -59,6 +59,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.Videocam
@@ -462,6 +463,10 @@ fun AvitriSphareWhiteboardChrome(
                             "Geometry",
                             state.isDrawToShapeEnabled || state.currentTool == WhiteboardTool.FRAME || panel == "geometry"
                         ) { toggle("geometry") }
+                        DockItem(Icons.Default.Straighten, "Ruler", state.currentTool == WhiteboardTool.RULER) {
+                            panel = null
+                            viewModel.setTool(WhiteboardTool.RULER)
+                        }
                         DockItem(
                             Icons.Default.Videocam,
                             "Media",

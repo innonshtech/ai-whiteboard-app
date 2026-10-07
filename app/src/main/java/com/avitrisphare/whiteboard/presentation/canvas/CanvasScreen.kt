@@ -140,6 +140,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke as DrawStroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -514,6 +515,181 @@ fun DrawScope.renderStroke(
     }
 }
 
+// --- Ruler tool: screen-space overlay independent of canvas pan/zoom ---
+
+private const val RULER_THICKNESS = 64f
+private const val RULER_MIN_LENGTH = 140f
+private const val RULER_MAX_LENGTH = 1400f
+private const val RULER_HANDLE_RADIUS = 26f
+private const val RULER_EDGE_INSET = 18f
+private val RAD_TO_DEG = 180f / kotlin.math.PI.toFloat()
+
+private enum class RulerZone { NONE, MOVE, ROTATE, RESIZE_LEFT, RESIZE_RIGHT }
+
+/** Unit vector pointing along the ruler's long axis, consistent with Compose's clockwise [rotate]. */
+private fun rulerDirection(rotationDeg: Float): Offset {
+    val rad = rotationDeg / RAD_TO_DEG
+    return Offset(cos(rad), sin(rad))
+}
+
+/** Unit vector perpendicular to the ruler's long axis (its short/thickness axis). */
+private fun rulerPerp(rotationDeg: Float): Offset {
+    val rad = rotationDeg / RAD_TO_DEG
+    return Offset(-sin(rad), cos(rad))
+}
+
+/**
+ * Projects a screen point into the ruler's local (unrotated) coordinate frame and
+ * classifies which interactive zone, if any, it lands in.
+ */
+private fun hitTestRuler(
+    point: Offset,
+    center: Offset,
+    rotationDeg: Float,
+    length: Float,
+    thickness: Float
+): RulerZone {
+    val dir = rulerDirection(rotationDeg)
+    val perp = rulerPerp(rotationDeg)
+    val relX = point.x - center.x
+    val relY = point.y - center.y
+    val localX = relX * dir.x + relY * dir.y
+    val localY = relX * perp.x + relY * perp.y
+
+    fun near(ax: Float, ay: Float, bx: Float, by: Float, radius: Float): Boolean {
+        val dx = ax - bx
+        val dy = ay - by
+        return dx * dx + dy * dy <= radius * radius
+    }
+
+    val rotateHandleLocalY = -(thickness / 2f + 34f)
+    if (near(localX, localY, length / 2f, rotateHandleLocalY, RULER_HANDLE_RADIUS)) {
+        return RulerZone.ROTATE
+    }
+    if (near(localX, localY, length / 2f, 0f, RULER_HANDLE_RADIUS)) {
+        return RulerZone.RESIZE_RIGHT
+    }
+    if (near(localX, localY, -length / 2f, 0f, RULER_HANDLE_RADIUS)) {
+        return RulerZone.RESIZE_LEFT
+    }
+    if (kotlin.math.abs(localX) <= length / 2f && kotlin.math.abs(localY) <= thickness / 2f - RULER_EDGE_INSET) {
+        return RulerZone.MOVE
+    }
+    return RulerZone.NONE
+}
+
+/** Draws the ruler body, tick marks, angle readout, and drag handles in screen space. */
+private fun DrawScope.drawRuler(
+    center: Offset,
+    rotationDeg: Float,
+    length: Float,
+    thickness: Float,
+    isDark: Boolean,
+    pxPerCm: Float
+) {
+    rotate(degrees = rotationDeg, pivot = center) {
+        val left = center.x - length / 2f
+        val top = center.y - thickness / 2f
+        val bodyColor = if (isDark) Color(0xE62A2F3A) else Color(0xE6FFFFFF)
+        val borderColor = if (isDark) Color(0xFF4B5563) else Color(0xFF9CA3AF)
+        val tickColor = if (isDark) 0xFFD1D5DB.toInt() else 0xFF374151.toInt()
+        val handleColor = Color(0xFF6366F1)
+
+        drawRoundRect(
+            color = bodyColor,
+            topLeft = Offset(left, top),
+            size = Size(length, thickness),
+            cornerRadius = CornerRadius(10f, 10f)
+        )
+        drawRoundRect(
+            color = borderColor,
+            topLeft = Offset(left, top),
+            size = Size(length, thickness),
+            cornerRadius = CornerRadius(10f, 10f),
+            style = DrawStroke(width = 1.5f)
+        )
+
+        // One tick per millimetre so the printed scale is physically accurate (1 cm = 10 ticks).
+        val mmSpacing = (pxPerCm / 10f).coerceAtLeast(1.5f)
+        var i = 0
+        var x = left + 6f
+        val usableRight = left + length - 6f
+        while (x <= usableRight) {
+            val isCm = i % 10 == 0
+            val isHalfCm = i % 5 == 0
+            val tickHeight = when {
+                isCm -> thickness * 0.42f
+                isHalfCm -> thickness * 0.28f
+                else -> thickness * 0.16f
+            }
+            val tickStrokeWidth = if (isCm) 2f else 1f
+            drawLine(
+                color = Color(tickColor),
+                start = Offset(x, top + 4f),
+                end = Offset(x, top + 4f + tickHeight),
+                strokeWidth = tickStrokeWidth
+            )
+            drawLine(
+                color = Color(tickColor),
+                start = Offset(x, top + thickness - 4f),
+                end = Offset(x, top + thickness - 4f - tickHeight),
+                strokeWidth = tickStrokeWidth
+            )
+            if (isCm && i > 0) {
+                drawContext.canvas.nativeCanvas.apply {
+                    val paint = Paint().apply {
+                        color = tickColor
+                        textSize = 11f
+                        isAntiAlias = true
+                        textAlign = Paint.Align.CENTER
+                    }
+                    drawText("${i / 10}", x, top + thickness / 2f + 4f, paint)
+                }
+            }
+            i++
+            x += mmSpacing
+        }
+
+        drawContext.canvas.nativeCanvas.apply {
+            val paint = Paint().apply {
+                color = tickColor
+                textSize = 13f
+                isAntiAlias = true
+                textAlign = Paint.Align.CENTER
+            }
+            val normalizedAngle = ((rotationDeg % 360f) + 360f) % 360f
+            drawText("${normalizedAngle.toInt()}°", center.x, top - 14f, paint)
+        }
+
+        val leftEnd = Offset(left, center.y)
+        val rightEnd = Offset(left + length, center.y)
+        listOf(leftEnd, rightEnd).forEach { handle ->
+            drawCircle(color = Color.White, radius = RULER_HANDLE_RADIUS * 0.8f, center = handle)
+            drawCircle(
+                color = handleColor,
+                radius = RULER_HANDLE_RADIUS * 0.8f,
+                center = handle,
+                style = DrawStroke(width = 2.5f)
+            )
+        }
+
+        val rotateHandleCenter = Offset(center.x + length / 2f, center.y - (thickness / 2f + 34f))
+        drawLine(
+            color = handleColor,
+            start = Offset(center.x + length / 2f, top),
+            end = rotateHandleCenter,
+            strokeWidth = 1.5f
+        )
+        drawCircle(color = Color.White, radius = RULER_HANDLE_RADIUS * 0.7f, center = rotateHandleCenter)
+        drawCircle(
+            color = handleColor,
+            radius = RULER_HANDLE_RADIUS * 0.7f,
+            center = rotateHandleCenter,
+            style = DrawStroke(width = 2.5f)
+        )
+    }
+}
+
 @Composable
 fun WhiteboardDockButton(
     icon: ImageVector,
@@ -726,6 +902,24 @@ fun CanvasScreen(
     var canvasOffsetY by remember { mutableFloatStateOf(0f) }
     var canvasSize by remember { mutableStateOf(Size.Zero) }
 
+    // Ruler tool: ephemeral screen-space overlay, not persisted with note content.
+    var rulerCenter by remember { mutableStateOf<Offset?>(null) }
+    var rulerRotationDeg by remember { mutableFloatStateOf(0f) }
+    var rulerLength by remember { mutableFloatStateOf(360f) }
+    val rulerPxPerCm = remember {
+        val metrics = context.resources.displayMetrics
+        val xdpi = if (metrics.xdpi > 50f) metrics.xdpi else metrics.densityDpi.toFloat()
+        xdpi / 2.54f
+    }
+
+    LaunchedEffect(state.currentTool, canvasSize) {
+        if (state.currentTool == WhiteboardTool.RULER && rulerCenter == null) {
+            val cx = if (canvasSize.width > 0) canvasSize.width / 2f else 400f
+            val cy = if (canvasSize.height > 0) canvasSize.height / 2f else 500f
+            rulerCenter = Offset(cx, cy)
+        }
+    }
+
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -850,6 +1044,11 @@ fun CanvasScreen(
                             inkPressures.add(pressure)
                         }
                         var isDraggingSelection = false
+                        var rulerZone = RulerZone.NONE
+                        var rulerFixedEnd = Offset.Zero
+                        var rulerStartPointerAngle = 0f
+                        var rulerStartRotation = 0f
+                        var rulerDrawDir = Offset(1f, 0f)
 
                         when (state.currentTool) {
                             WhiteboardTool.HAND -> {
@@ -912,6 +1111,50 @@ fun CanvasScreen(
                                 )
                                 shapePoints = newStroke.points
                                 viewModel.startStroke(newStroke)
+                            }
+                            WhiteboardTool.RULER -> {
+                                val center = rulerCenter
+                                rulerZone = if (center != null) {
+                                    hitTestRuler(down.position, center, rulerRotationDeg, rulerLength, RULER_THICKNESS)
+                                } else {
+                                    RulerZone.NONE
+                                }
+                                val dir = rulerDirection(rulerRotationDeg)
+                                when (rulerZone) {
+                                    RulerZone.ROTATE -> {
+                                        rulerStartPointerAngle = atan2(
+                                            down.position.y - center!!.y,
+                                            down.position.x - center.x
+                                        )
+                                        rulerStartRotation = rulerRotationDeg
+                                    }
+                                    RulerZone.RESIZE_LEFT -> {
+                                        rulerFixedEnd = Offset(
+                                            center!!.x + dir.x * (rulerLength / 2f),
+                                            center.y + dir.y * (rulerLength / 2f)
+                                        )
+                                    }
+                                    RulerZone.RESIZE_RIGHT -> {
+                                        rulerFixedEnd = Offset(
+                                            center!!.x - dir.x * (rulerLength / 2f),
+                                            center.y - dir.y * (rulerLength / 2f)
+                                        )
+                                    }
+                                    RulerZone.MOVE -> {
+                                        // Translated via screen-position delta in the drag loop.
+                                    }
+                                    RulerZone.NONE -> {
+                                        rulerDrawDir = dir
+                                        val newStroke = Stroke(
+                                            points = listOf(downWorld, downWorld),
+                                            colorValue = state.selectedColor,
+                                            strokeWidth = state.strokeWidth,
+                                            strokeType = StrokeType.LINE
+                                        )
+                                        shapePoints = newStroke.points
+                                        viewModel.startStroke(newStroke)
+                                    }
+                                }
                             }
                             else -> {}
                         }
@@ -988,6 +1231,51 @@ fun CanvasScreen(
                                     ) {
                                         shapePoints = listOf(downWorld, curWorld)
                                         viewModel.updateStroke(shapePoints)
+                                    } else if (state.currentTool == WhiteboardTool.RULER) {
+                                        when (rulerZone) {
+                                            RulerZone.MOVE -> {
+                                                val dx = change.position.x - prevPosition.x
+                                                val dy = change.position.y - prevPosition.y
+                                                rulerCenter = rulerCenter?.let { Offset(it.x + dx, it.y + dy) }
+                                            }
+                                            RulerZone.ROTATE -> {
+                                                val center = rulerCenter
+                                                if (center != null) {
+                                                    val currentAngle = atan2(
+                                                        change.position.y - center.y,
+                                                        change.position.x - center.x
+                                                    )
+                                                    rulerRotationDeg = rulerStartRotation +
+                                                        (currentAngle - rulerStartPointerAngle) * RAD_TO_DEG
+                                                }
+                                            }
+                                            RulerZone.RESIZE_LEFT, RulerZone.RESIZE_RIGHT -> {
+                                                val dir = rulerDirection(rulerRotationDeg)
+                                                val relX = change.position.x - rulerFixedEnd.x
+                                                val relY = change.position.y - rulerFixedEnd.y
+                                                val proj = relX * dir.x + relY * dir.y
+                                                val newLength = kotlin.math.abs(proj)
+                                                    .coerceIn(RULER_MIN_LENGTH, RULER_MAX_LENGTH)
+                                                val sign = if (rulerZone == RulerZone.RESIZE_RIGHT) 1f else -1f
+                                                rulerCenter = Offset(
+                                                    rulerFixedEnd.x + dir.x * (sign * newLength / 2f),
+                                                    rulerFixedEnd.y + dir.y * (sign * newLength / 2f)
+                                                )
+                                                rulerLength = newLength
+                                            }
+                                            RulerZone.NONE -> {
+                                                val startWorld = downWorld
+                                                val relWx = curWorld.x - startWorld.x
+                                                val relWy = curWorld.y - startWorld.y
+                                                val t = relWx * rulerDrawDir.x + relWy * rulerDrawDir.y
+                                                val endWorld = Offset(
+                                                    startWorld.x + rulerDrawDir.x * t,
+                                                    startWorld.y + rulerDrawDir.y * t
+                                                )
+                                                shapePoints = listOf(startWorld, endWorld)
+                                                viewModel.updateStroke(shapePoints)
+                                            }
+                                        }
                                     }
                                     prevPosition = change.position
                                     change.consume()
@@ -1036,6 +1324,11 @@ fun CanvasScreen(
                                 if (!state.isToolLocked) {
                                     viewModel.setTool(WhiteboardTool.SELECT)
                                 }
+                            } else if (state.currentTool == WhiteboardTool.RULER &&
+                                rulerZone == RulerZone.NONE && shapePoints.size >= 2
+                            ) {
+                                viewModel.updateStroke(shapePoints)
+                                viewModel.finishStroke()
                             }
                         }
                     }
@@ -1209,6 +1502,18 @@ fun CanvasScreen(
                             )
                         )
                     }
+                }
+
+                val liveRulerCenter = rulerCenter
+                if (state.currentTool == WhiteboardTool.RULER && liveRulerCenter != null) {
+                    drawRuler(
+                        center = liveRulerCenter,
+                        rotationDeg = rulerRotationDeg,
+                        length = rulerLength,
+                        thickness = RULER_THICKNESS,
+                        isDark = state.isDarkCanvas,
+                        pxPerCm = rulerPxPerCm
+                    )
                 }
             }
         }
@@ -1688,6 +1993,7 @@ fun CanvasScreen(
                         "Draw Arrow" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.ARROW) },
                         "Add Sticky Note" to { showCommandPalette = false; showStickyInputDialog = true },
                         "Toggle Laser Pointer" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.LASER) },
+                        "Enable Ruler" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.RULER) },
                         "Export as PNG" to { showCommandPalette = false; viewModel.exportAsPng(context) { exportedUri = it; showExportDialog = true } },
                         "Reset Zoom (100%)" to { showCommandPalette = false; viewModel.resetTransform() },
                         "Fit to Content" to { showCommandPalette = false; viewModel.fitToContent(canvasSize.width, canvasSize.height) }
