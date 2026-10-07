@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -45,7 +46,11 @@ enum class WhiteboardTool(val label: String, val shortcut: String) {
     CIRCLE("Circle", "O"),
     ARROW("Arrow", "A"),
     LINE("Line", "L"),
-    PEN("Draw", "P"),
+    PEN("Pen", "P"),
+    PENCIL("Pencil", ""),
+    MARKER("Marker", ""),
+    HIGHLIGHTER("Highlighter", ""),
+    BRUSH("Brush", ""),
     TEXT("Text", "T"),
     STICKY_NOTE("Sticky Note", "N"),
     ERASER("Eraser", "E"),
@@ -58,10 +63,11 @@ enum class WhiteboardTool(val label: String, val shortcut: String) {
 data class CanvasState(
     val strokes: List<Stroke> = emptyList(),
     val currentStroke: Stroke? = null,
-    val selectedColor: Int = Color.White.toArgb(),
+    val selectedColor: Int = 0xFF1B1F2A.toInt(),
     val fillColor: Int = 0,
     val strokeWidth: Float = 4f,
     val currentTool: WhiteboardTool = WhiteboardTool.SELECT,
+    val inkTool: WhiteboardTool = WhiteboardTool.PEN,
     val isToolLocked: Boolean = false,
     val isDrawToShapeEnabled: Boolean = false,
     val laserPoints: List<Offset> = emptyList(),
@@ -77,7 +83,12 @@ data class CanvasState(
     val noteId: String = "",
     val noteTitle: String = "Untitled",
     val isLoading: Boolean = false,
-    val canvasBackground: CanvasBackground = CanvasBackground.DARK,
+    val canvasBackground: CanvasBackground = CanvasBackground.DOTTED,
+    val showGrid: Boolean = false,
+    val isDarkCanvas: Boolean = false,
+    val pageIndex: Int = 0,
+    val pageCount: Int = 1,
+    val pagePreviews: List<List<Stroke>> = listOf(emptyList()),
     val contentJson: String = "",
     val isLiveCollabActive: Boolean = false,
     val collabRoomId: String = "",
@@ -86,7 +97,41 @@ data class CanvasState(
     val errorMessage: String? = null
 )
 
+val WRITING_TOOLS = setOf(
+    WhiteboardTool.PEN,
+    WhiteboardTool.PENCIL,
+    WhiteboardTool.MARKER,
+    WhiteboardTool.HIGHLIGHTER,
+    WhiteboardTool.BRUSH
+)
+
+fun WhiteboardTool.toStrokeType(): StrokeType = when (this) {
+    WhiteboardTool.PENCIL -> StrokeType.PENCIL
+    WhiteboardTool.MARKER -> StrokeType.MARKER
+    WhiteboardTool.HIGHLIGHTER -> StrokeType.HIGHLIGHTER
+    WhiteboardTool.BRUSH -> StrokeType.BRUSH
+    else -> StrokeType.PEN
+}
+
+fun WhiteboardTool.defaultStrokeWidth(): Float = when (this) {
+    WhiteboardTool.PENCIL -> 8f
+    WhiteboardTool.MARKER -> 18f
+    WhiteboardTool.HIGHLIGHTER -> 28f
+    WhiteboardTool.BRUSH -> 12f
+    else -> 4f
+}
+
+val INK_PRESETS = listOf(
+    0xFF1B1F2A, 0xFF4B5563, 0xFF9CA3AF, 0xFFFFFFFF,
+    0xFFEF4444, 0xFFF97316, 0xFFF59E0B, 0xFFEAB308,
+    0xFF84CC16, 0xFF22C55E, 0xFF10B981, 0xFF14B8A6,
+    0xFF06B6D4, 0xFF0EA5E9, 0xFF3B82F6, 0xFF6366F1,
+    0xFF8B5CF6, 0xFFA855F7, 0xFFD946EF, 0xFFEC4899,
+    0xFFF43F5E, 0xFF7C2D12, 0xFF14532D, 0xFF1E3A8A
+).map { it.toInt() }
+
 val PEN_COLORS = listOf(
+    0xFF1B1F2A.toInt(), // Ink
     0xFFFFFFFF.toInt(), // White
     0xFF3ECF8E.toInt(), // Brand Green
     0xFFFF6B6B.toInt(), // Red
@@ -118,19 +163,34 @@ class CanvasViewModel @Inject constructor(
     private val redoStack = mutableListOf<List<Stroke>>()
     private val gson = Gson()
     private val MAX_UNDO = 50
+    private val MAX_PAGES = 50
     private var saveJob: Job? = null
+    private var autoSaveJob: Job? = null
     private var laserJob: Job? = null
+    private val pages = mutableListOf<List<Stroke>>(emptyList())
+    private var activePage = 0
+    private var selectionUndoCaptured = false
+    private val toolWidths = mutableMapOf(
+        WhiteboardTool.PEN to 4f,
+        WhiteboardTool.PENCIL to 8f,
+        WhiteboardTool.MARKER to 18f,
+        WhiteboardTool.HIGHLIGHTER to 28f,
+        WhiteboardTool.BRUSH to 12f
+    )
 
     fun setTool(tool: WhiteboardTool) {
         if (tool == WhiteboardTool.LOCK) {
             _state.update { it.copy(isToolLocked = !it.isToolLocked) }
             return
         }
+        val width = toolWidths[tool]
         _state.update {
             it.copy(
                 currentTool = tool,
+                inkTool = if (tool in WRITING_TOOLS) tool else it.inkTool,
+                strokeWidth = width ?: it.strokeWidth,
                 isEraser = tool == WhiteboardTool.ERASER,
-                isHighlighter = false,
+                isHighlighter = tool == WhiteboardTool.HIGHLIGHTER,
                 isShapeMode = tool in listOf(
                     WhiteboardTool.RECTANGLE,
                     WhiteboardTool.DIAMOND,
@@ -149,9 +209,9 @@ class CanvasViewModel @Inject constructor(
 
     fun addLaserPoint(point: Offset) {
         laserJob?.cancel()
-        _state.update { it.copy(laserPoints = (it.laserPoints + point).takeLast(40)) }
+        _state.update { it.copy(laserPoints = listOf(point)) }
         laserJob = viewModelScope.launch {
-            delay(1200)
+            delay(900)
             _state.update { it.copy(laserPoints = emptyList()) }
         }
     }
@@ -346,39 +406,127 @@ class CanvasViewModel @Inject constructor(
         )
     }
 
-    fun loadNote(noteId: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            _state.update { it.copy(isLoading = true, noteId = noteId) }
-            
-            val note = noteRepository.getNoteById(noteId)
-            if (note != null) {
-                _state.update { it.copy(
-                    noteTitle = note.title,
-                    canvasBackground = note.canvasBackground,
-                    contentJson = note.contentJson ?: ""
-                ) }
-                
-                val strokesFile = File(context.filesDir, "strokes_$noteId.json")
-                if (strokesFile.exists()) {
-                    try {
-                        if (strokesFile.length() > 10_000_000) {
-                            _state.update { it.copy(strokes = emptyList(), isLoading = false, errorMessage = "Note file too large") }
-                            return@launch
-                        }
-                        val json = strokesFile.readText()
-                        val type = object : TypeToken<List<StrokeDto>>() {}.type
-                        val dtos: List<StrokeDto> = gson.fromJson(json, type) ?: emptyList()
-                        val strokes = dtos.take(10000).map { it.toDomain() }
-                        _state.update { it.copy(strokes = strokes, isLoading = false) }
-                    } catch (e: Exception) {
-                        _state.update { it.copy(strokes = emptyList(), isLoading = false, errorMessage = "Failed to load note") }
-                    }
-                } else {
-                    _state.update { it.copy(isLoading = false) }
-                }
-            } else {
-                _state.update { it.copy(isLoading = false) }
+    fun addPage() {
+        if (pages.size >= MAX_PAGES) return
+        commitActivePage()
+        pages.add(emptyList())
+        switchTo(pages.lastIndex)
+        scheduleSave()
+    }
+
+    fun selectPage(index: Int) {
+        if (index !in pages.indices || index == activePage) return
+        commitActivePage()
+        switchTo(index)
+        scheduleSave()
+    }
+
+    fun toggleGrid() {
+        _state.update { it.copy(showGrid = !it.showGrid) }
+        scheduleSave()
+    }
+
+    fun toggleCanvasTheme() {
+        val dark = !_state.value.isDarkCanvas
+        val background = if (dark) CanvasBackground.DARK else CanvasBackground.DOTTED
+        val ink = 0xFF1B1F2A.toInt()
+        val white = Color.White.toArgb()
+        _state.update { s ->
+            val color = when {
+                dark && s.selectedColor == ink -> white
+                !dark && s.selectedColor == white -> ink
+                else -> s.selectedColor
             }
+            s.copy(isDarkCanvas = dark, canvasBackground = background, selectedColor = color)
+        }
+        val noteId = _state.value.noteId
+        if (noteId.isNotEmpty()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                val note = noteRepository.getNoteById(noteId) ?: return@launch
+                noteRepository.updateNote(note.copy(canvasBackground = background, updatedAt = System.currentTimeMillis()))
+            }
+        }
+        scheduleSave()
+    }
+
+    fun beginSelectionMove() {
+        if (selectionUndoCaptured) return
+        saveToUndoStack()
+        redoStack.clear()
+        selectionUndoCaptured = true
+        _state.update { it.copy(canUndo = true, canRedo = false) }
+    }
+
+    fun endSelectionMove() {
+        selectionUndoCaptured = false
+    }
+
+    private fun switchTo(index: Int) {
+        activePage = index
+        undoStack.clear()
+        redoStack.clear()
+        selectionUndoCaptured = false
+        _state.update {
+            it.copy(
+                strokes = pages[index],
+                currentStroke = null,
+                selectedStrokeIds = emptySet(),
+                pageIndex = index,
+                pageCount = pages.size,
+                pagePreviews = pages.toList(),
+                canUndo = false,
+                canRedo = false
+            )
+        }
+    }
+
+    private fun commitActivePage() {
+        if (pages.isEmpty()) pages.add(emptyList())
+        if (activePage !in pages.indices) activePage = 0
+        pages[activePage] = _state.value.strokes
+    }
+
+    fun loadNote(noteId: String) {
+        viewModelScope.launch {
+            _state.update { it.copy(isLoading = true, noteId = noteId) }
+            val loaded = withContext(Dispatchers.IO) { readBoard(noteId) }
+            val note = withContext(Dispatchers.IO) { noteRepository.getNoteById(noteId) }
+            pages.clear()
+            val restored = loaded.pages.map { page -> page.strokes.map { it.toDomain() } }
+            if (restored.isEmpty()) pages.add(emptyList()) else pages.addAll(restored)
+            activePage = loaded.activePage.coerceIn(0, pages.lastIndex)
+            undoStack.clear()
+            redoStack.clear()
+            val dark = if (loaded.fromFile) loaded.darkMode else note?.canvasBackground == CanvasBackground.DARK
+            val background = when {
+                dark -> CanvasBackground.DARK
+                note?.canvasBackground == CanvasBackground.GRID ||
+                    note?.canvasBackground == CanvasBackground.LINED ||
+                    note?.canvasBackground == CanvasBackground.WHITE -> note.canvasBackground
+                else -> CanvasBackground.DOTTED
+            }
+            _state.update {
+                it.copy(
+                    noteTitle = note?.title ?: "Untitled",
+                    canvasBackground = background,
+                    isDarkCanvas = dark,
+                    showGrid = loaded.showGrid,
+                    contentJson = note?.contentJson ?: "",
+                    strokes = pages[activePage],
+                    pageIndex = activePage,
+                    pageCount = pages.size,
+                    pagePreviews = pages.toList(),
+                    scale = loaded.scale.coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE),
+                    offsetX = loaded.offsetX,
+                    offsetY = loaded.offsetY,
+                    isLoading = false,
+                    canUndo = false,
+                    canRedo = false,
+                    selectedStrokeIds = emptySet(),
+                    errorMessage = null
+                )
+            }
+            ensureAutoSave()
         }
     }
 
@@ -386,18 +534,28 @@ class CanvasViewModel @Inject constructor(
         _state.update { it.copy(currentStroke = stroke) }
     }
 
-    fun updateStroke(points: List<Offset>) {
+    fun updateStroke(points: List<Offset>, pressures: List<Float> = emptyList()) {
         _state.update { current ->
-            current.copy(currentStroke = current.currentStroke?.copy(points = points))
+            current.copy(
+                currentStroke = current.currentStroke?.copy(
+                    points = points,
+                    pointPressures = pressures
+                )
+            )
         }
     }
 
     fun finishStroke() {
         val currentStroke = _state.value.currentStroke ?: return
+        commitStroke(currentStroke)
+    }
+
+    fun commitStroke(stroke: Stroke) {
+        if (stroke.points.isEmpty()) return
         saveToUndoStack()
         _state.update { s ->
             s.copy(
-                strokes = s.strokes + currentStroke,
+                strokes = s.strokes + stroke,
                 currentStroke = null,
                 canUndo = true,
                 canRedo = false
@@ -420,11 +578,20 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun setColor(color: Int) {
-        _state.update { it.copy(selectedColor = color, isEraser = false, isHighlighter = false) }
+        _state.update { it.copy(selectedColor = color, isEraser = false) }
     }
 
     fun setStrokeWidth(width: Float) {
-        _state.update { it.copy(strokeWidth = width) }
+        val clamped = width.coerceIn(1f, 50f)
+        val tool = _state.value.inkTool
+        if (tool in WRITING_TOOLS) toolWidths[tool] = clamped
+        _state.update {
+            it.copy(
+                strokeWidth = clamped,
+                currentTool = if (it.currentTool in WRITING_TOOLS || it.currentTool == tool) tool else it.currentTool,
+                isHighlighter = tool == WhiteboardTool.HIGHLIGHTER && (it.currentTool in WRITING_TOOLS || it.currentTool == tool)
+            )
+        }
     }
 
     fun updateTransform(scale: Float, offsetX: Float, offsetY: Float) {
@@ -439,6 +606,7 @@ class CanvasViewModel @Inject constructor(
         if (undoStack.isEmpty()) return
         val currentStrokes = _state.value.strokes
         redoStack.add(currentStrokes)
+        if (redoStack.size > MAX_UNDO) redoStack.removeAt(0)
         val previousStrokes = undoStack.removeLastOrNull() ?: emptyList()
         _state.update { s ->
             s.copy(
@@ -502,9 +670,9 @@ class CanvasViewModel @Inject constructor(
                 if (note != null) {
                     noteRepository.deleteNote(note)
                     val strokesFile = File(context.filesDir, "strokes_$noteId.json")
-                    if (strokesFile.exists()) {
-                        strokesFile.delete()
-                    }
+                    if (strokesFile.exists()) strokesFile.delete()
+                    val boardFile = File(context.filesDir, "board_$noteId.json")
+                    if (boardFile.exists()) boardFile.delete()
                     withContext(Dispatchers.Main) { onDeleted() }
                 }
             }
@@ -524,42 +692,95 @@ class CanvasViewModel @Inject constructor(
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
             delay(1500)
-            val noteId = _state.value.noteId
-            if (noteId.isEmpty()) return@launch
-            val strokes = _state.value.strokes
-            val timestamp = System.currentTimeMillis()
-            
-            withContext(Dispatchers.IO) {
-                try {
-                    val strokesFile = File(context.filesDir, "strokes_$noteId.json")
-                    val dtos = strokes.map { it.toDto() }
-                    val json = gson.toJson(dtos)
-                    strokesFile.writeText(json)
-                    noteRepository.updateNoteTimestamp(noteId, timestamp)
-                } catch (e: Exception) {
-                    _state.update { it.copy(errorMessage = "Failed to save note: ${e.message}") }
-                }
+            persistSnapshot()
+        }
+    }
+
+    private fun ensureAutoSave() {
+        if (autoSaveJob?.isActive == true) return
+        autoSaveJob = viewModelScope.launch {
+            while (isActive) {
+                delay(30_000)
+                persistSnapshot()
             }
         }
     }
 
     suspend fun saveNow() {
         saveJob?.cancel()
+        persistSnapshot()
+    }
+
+    private suspend fun persistSnapshot() {
         val noteId = _state.value.noteId
         if (noteId.isEmpty()) return
-        val strokes = _state.value.strokes
+        commitActivePage()
+        val snapshot = BoardSnapshot(
+            activePage = activePage,
+            showGrid = _state.value.showGrid,
+            darkMode = _state.value.isDarkCanvas,
+            scale = _state.value.scale,
+            offsetX = _state.value.offsetX,
+            offsetY = _state.value.offsetY,
+            pages = pages.map { strokes -> PageSnapshot(strokes.map { it.toDto() }) }
+        )
+        val boardJson = gson.toJson(snapshot)
+        val activeJson = gson.toJson(snapshot.pages.getOrElse(activePage) { PageSnapshot() }.strokes)
         val timestamp = System.currentTimeMillis()
         withContext(Dispatchers.IO) {
             try {
-                val strokesFile = File(context.filesDir, "strokes_$noteId.json")
-                val dtos = strokes.map { it.toDto() }
-                val json = gson.toJson(dtos)
-                strokesFile.writeText(json)
+                File(context.filesDir, "board_$noteId.json").writeText(boardJson)
+                File(context.filesDir, "strokes_$noteId.json").writeText(activeJson)
                 noteRepository.updateNoteTimestamp(noteId, timestamp)
             } catch (e: Exception) {
                 _state.update { it.copy(errorMessage = "Failed to save note: ${e.message}") }
             }
         }
+    }
+
+    private fun readBoard(noteId: String): BoardSnapshot {
+        val boardFile = File(context.filesDir, "board_$noteId.json")
+        if (boardFile.exists() && boardFile.length() <= 20_000_000L) {
+            try {
+                val type = object : TypeToken<BoardSnapshot>() {}.type
+                val parsed: BoardSnapshot? = gson.fromJson(boardFile.readText(), type)
+                if (parsed != null && parsed.pages.isNotEmpty()) {
+                    return parsed.copy(fromFile = true)
+                }
+            } catch (_: Exception) {
+            }
+        }
+        val strokesFile = File(context.filesDir, "strokes_$noteId.json")
+        if (strokesFile.exists() && strokesFile.length() <= 10_000_000L) {
+            try {
+                val type = object : TypeToken<List<StrokeDto>>() {}.type
+                val dtos: List<StrokeDto> = gson.fromJson(strokesFile.readText(), type) ?: emptyList()
+                return BoardSnapshot(pages = listOf(PageSnapshot(dtos.take(10000))))
+            } catch (_: Exception) {
+            }
+        }
+        return BoardSnapshot()
+    }
+
+    override fun onCleared() {
+        val noteId = _state.value.noteId
+        if (noteId.isNotEmpty()) {
+            try {
+                commitActivePage()
+                val snapshot = BoardSnapshot(
+                    activePage = activePage,
+                    showGrid = _state.value.showGrid,
+                    darkMode = _state.value.isDarkCanvas,
+                    scale = _state.value.scale,
+                    offsetX = _state.value.offsetX,
+                    offsetY = _state.value.offsetY,
+                    pages = pages.map { strokes -> PageSnapshot(strokes.map { it.toDto() }) }
+                )
+                File(context.filesDir, "board_$noteId.json").writeText(gson.toJson(snapshot))
+            } catch (_: Exception) {
+            }
+        }
+        super.onCleared()
     }
 
     private var isErasingActive = false
@@ -636,8 +857,8 @@ class CanvasViewModel @Inject constructor(
             val canvas = android.graphics.Canvas(bitmap)
 
             val bgArgb = when (_state.value.canvasBackground) {
-                CanvasBackground.WHITE -> 0xFFFFFFFF.toInt()
-                else -> 0xFF171717.toInt()
+                CanvasBackground.DARK -> 0xFF171717.toInt()
+                else -> 0xFFFFFFFF.toInt()
             }
             canvas.drawColor(bgArgb)
 
@@ -672,11 +893,11 @@ class CanvasViewModel @Inject constructor(
                 }
             }
 
-            val filename = "bloom_${_state.value.noteTitle.replace(" ", "_")}_${System.currentTimeMillis()}.png"
+            val filename = "avitrisphere_${_state.value.noteTitle.replace(" ", "_")}_${System.currentTimeMillis()}.png"
             val contentValues = ContentValues().apply {
                 put(MediaStore.Images.Media.DISPLAY_NAME, filename)
                 put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Bloom")
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Avitrisphere")
             }
             val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
             uri?.let {
@@ -693,7 +914,12 @@ class CanvasViewModel @Inject constructor(
         val noteId = _state.value.noteId
         if (noteId.isEmpty()) return
         
-        _state.update { it.copy(canvasBackground = background) }
+        _state.update {
+            it.copy(
+                canvasBackground = background,
+                isDarkCanvas = background == CanvasBackground.DARK
+            )
+        }
         
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -709,6 +935,7 @@ class CanvasViewModel @Inject constructor(
                 _state.update { it.copy(errorMessage = "Failed to update background: ${e.message}") }
             }
         }
+        scheduleSave()
     }
 
     fun startLiveSession() {
@@ -740,9 +967,24 @@ class CanvasViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val dtos = _state.value.strokes.map { it.toDto() }
             val json = gson.toJson(dtos)
-            val file = File(context.filesDir, "export_${_state.value.noteTitle.replace(" ", "_")}.bloom")
+            val file = File(context.filesDir, "export_${_state.value.noteTitle.replace(" ", "_")}.whiteboard")
             file.writeText(json)
             withContext(Dispatchers.Main) { onSaved(file.absolutePath) }
         }
     }
 }
+
+private data class PageSnapshot(
+    val strokes: List<StrokeDto> = emptyList()
+)
+
+private data class BoardSnapshot(
+    val activePage: Int = 0,
+    val showGrid: Boolean = false,
+    val darkMode: Boolean = false,
+    val scale: Float = 1f,
+    val offsetX: Float = 0f,
+    val offsetY: Float = 0f,
+    val pages: List<PageSnapshot> = emptyList(),
+    val fromFile: Boolean = false
+)

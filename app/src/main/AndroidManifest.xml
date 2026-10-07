@@ -9,7 +9,7 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
-        android:label="Bloom"
+        android:label="Avitrisphere Whiteboard"
         android:supportsRtl="true"
         android:theme="@style/Theme.Bloom">
         <activity

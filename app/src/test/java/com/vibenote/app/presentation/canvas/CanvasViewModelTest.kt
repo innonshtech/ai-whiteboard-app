@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -41,8 +42,9 @@ class CanvasViewModelTest {
         val state = viewModel.state.value
         assertEquals("Untitled", state.noteTitle)
         assertTrue(state.strokes.isEmpty())
-        // Color.White.toArgb() is 0xFFFFFFFF.toInt() which is -1
-        assertEquals(-1, state.selectedColor)
+        assertEquals(0xFF1B1F2A.toInt(), state.selectedColor)
+        assertEquals(1, state.pageCount)
+        assertFalse(state.showGrid)
     }
 
     @Test

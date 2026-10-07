@@ -24,6 +24,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
@@ -111,13 +112,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -132,6 +143,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke as DrawStroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -156,6 +168,15 @@ import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.sin
+
+private class LiveInk {
+    var stroke: Stroke? = null
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+private fun androidx.compose.ui.input.pointer.PointerInputChange.pastPositions(): List<Offset> {
+    return historical.map { it.position }
+}
 
 fun List<Offset>.toSmoothedPath(): Path {
     val path = Path()
@@ -459,26 +480,11 @@ fun DrawScope.renderStroke(
                 }
             }
         }
-        else -> {
-            if (pointsList.size == 1) {
-                drawCircle(
-                    color = strokeColor,
-                    radius = strokeWidth / 2f,
-                    center = pointsList[0]
-                )
-            } else {
-                val path = pointsList.toSmoothedPath()
-                drawPath(
-                    path = path,
-                    color = strokeColor,
-                    style = DrawStroke(
-                        width = strokeWidth,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round
-                    )
-                )
-            }
-        }
+        StrokeType.PEN,
+        StrokeType.PENCIL,
+        StrokeType.MARKER,
+        StrokeType.HIGHLIGHTER,
+        StrokeType.BRUSH -> drawWritingStroke(stroke, safeScale)
     }
 
     if (isSelected) {
@@ -693,16 +699,13 @@ fun CanvasScreen(
 
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
+    val focusRequester = remember { FocusRequester() }
 
     var showSidebar by remember { mutableStateOf(false) }
     var showLiveCollabDialog by remember { mutableStateOf(false) }
-    var showOverflowPane by remember { mutableStateOf(false) }
-    var showColorPicker by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
     var showEditTitleDialog by remember { mutableStateOf(false) }
-    var showBackgroundPicker by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var showTextInputDialog by remember { mutableStateOf(false) }
     var showStickyInputDialog by remember { mutableStateOf(false) }
@@ -717,6 +720,8 @@ fun CanvasScreen(
     var lassoPoints by remember { mutableStateOf(listOf<Offset>()) }
 
     var canvasScale by remember { mutableFloatStateOf(1f) }
+    val liveInkTick = remember { mutableIntStateOf(0) }
+    val liveInk = remember { LiveInk() }
     var canvasOffsetX by remember { mutableFloatStateOf(0f) }
     var canvasOffsetY by remember { mutableFloatStateOf(0f) }
     var canvasSize by remember { mutableStateOf(Size.Zero) }
@@ -740,10 +745,32 @@ fun CanvasScreen(
         canvasOffsetY = state.offsetY
     }
 
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(LocalVibeColors.current.background)
+            .background(if (state.isDarkCanvas) Color(0xFF171717) else Color.White)
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val shortcut = event.isCtrlPressed || event.isMetaPressed
+                if (!shortcut) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.Z -> {
+                        if (event.isShiftPressed) viewModel.redo() else viewModel.undo()
+                        true
+                    }
+                    Key.Y -> {
+                        viewModel.redo()
+                        true
+                    }
+                    else -> false
+                }
+            }
     ) {
         // 1. Full-bleed Infinite Whiteboard Canvas Viewport
         Box(
@@ -780,8 +807,48 @@ fun CanvasScreen(
                             offset = Offset(canvasOffsetX, canvasOffsetY)
                         )
                         var prevPosition = down.position
-                        var points = listOf(downWorld)
+                        var shapePoints = listOf(downWorld)
+                        val inkPoints = ArrayList<Offset>(256)
+                        val inkPressures = ArrayList<Float>(256)
+                        inkPoints.add(downWorld)
+                        inkPressures.add(down.inkPressure())
                         var wasMultiTouch = false
+                        val writingNow = state.currentTool in WRITING_TOOLS
+                        val inkTemplate = if (writingNow) {
+                            Stroke(
+                                points = inkPoints,
+                                pointPressures = inkPressures,
+                                colorValue = state.selectedColor,
+                                strokeWidth = state.strokeWidth,
+                                isHighlighter = state.currentTool == WhiteboardTool.HIGHLIGHTER,
+                                strokeType = state.currentTool.toStrokeType()
+                            )
+                        } else {
+                            null
+                        }
+                        fun publishInk() {
+                            val template = inkTemplate ?: return
+                            liveInk.stroke = template.copy(
+                                points = ArrayList(inkPoints),
+                                pointPressures = ArrayList(inkPressures)
+                            )
+                            liveInkTick.intValue = liveInkTick.intValue + 1
+                        }
+                        fun appendInk(screen: Offset, pressure: Float) {
+                            val world = CanvasTransform.screenToWorld(
+                                screenPoint = screen,
+                                scale = canvasScale,
+                                offset = Offset(canvasOffsetX, canvasOffsetY)
+                            )
+                            val last = inkPoints.lastOrNull()
+                            if (last != null) {
+                                val dx = (world.x - last.x) * canvasScale
+                                val dy = (world.y - last.y) * canvasScale
+                                if (dx * dx + dy * dy < 0.49f) return
+                            }
+                            inkPoints.add(world)
+                            inkPressures.add(pressure)
+                        }
                         var isDraggingSelection = false
 
                         when (state.currentTool) {
@@ -817,15 +884,11 @@ fun CanvasScreen(
                                 val eraseRadius = 24f / canvasScale.coerceAtLeast(0.001f)
                                 viewModel.eraseAt(downWorld, eraseRadius)
                             }
-                            WhiteboardTool.PEN -> {
-                                val newStroke = Stroke(
-                                    points = points,
-                                    colorValue = state.selectedColor,
-                                    strokeWidth = state.strokeWidth,
-                                    strokeType = StrokeType.PEN
-                                )
-                                viewModel.startStroke(newStroke)
-                            }
+                            WhiteboardTool.PEN,
+                            WhiteboardTool.PENCIL,
+                            WhiteboardTool.MARKER,
+                            WhiteboardTool.HIGHLIGHTER,
+                            WhiteboardTool.BRUSH -> publishInk()
                             WhiteboardTool.RECTANGLE,
                             WhiteboardTool.DIAMOND,
                             WhiteboardTool.CIRCLE,
@@ -847,6 +910,7 @@ fun CanvasScreen(
                                     strokeWidth = state.strokeWidth,
                                     strokeType = sType
                                 )
+                                shapePoints = newStroke.points
                                 viewModel.startStroke(newStroke)
                             }
                             else -> {}
@@ -900,6 +964,7 @@ fun CanvasScreen(
                                             offset = Offset(canvasOffsetX, canvasOffsetY)
                                         )
                                         val delta = Offset(curWorld.x - prevWorld.x, curWorld.y - prevWorld.y)
+                                        viewModel.beginSelectionMove()
                                         viewModel.moveSelectedStrokes(delta)
                                     } else if (state.currentTool == WhiteboardTool.LASER) {
                                         viewModel.addLaserPoint(curWorld)
@@ -908,9 +973,10 @@ fun CanvasScreen(
                                     } else if (state.currentTool == WhiteboardTool.ERASER) {
                                         val eraseRadius = 24f / canvasScale.coerceAtLeast(0.001f)
                                         viewModel.eraseAt(curWorld, eraseRadius)
-                                    } else if (state.currentTool == WhiteboardTool.PEN) {
-                                        points = points + curWorld
-                                        viewModel.updateStroke(points)
+                                    } else if (writingNow) {
+                                        change.pastPositions().forEach { appendInk(it, change.inkPressure()) }
+                                        appendInk(change.position, change.inkPressure())
+                                        publishInk()
                                     } else if (state.currentTool in listOf(
                                             WhiteboardTool.RECTANGLE,
                                             WhiteboardTool.DIAMOND,
@@ -920,14 +986,16 @@ fun CanvasScreen(
                                             WhiteboardTool.FRAME
                                         )
                                     ) {
-                                        points = listOf(downWorld, curWorld)
-                                        viewModel.updateStroke(points)
+                                        shapePoints = listOf(downWorld, curWorld)
+                                        viewModel.updateStroke(shapePoints)
                                     }
                                     prevPosition = change.position
                                     change.consume()
                                 }
                             }
                         } while (event.changes.any { it.pressed })
+
+                        viewModel.endSelectionMove()
 
                         // Release Touch
                         if (!wasMultiTouch) {
@@ -939,18 +1007,21 @@ fun CanvasScreen(
                                 }
                             } else if (state.currentTool == WhiteboardTool.ERASER) {
                                 viewModel.finishErasing()
-                            } else if (state.currentTool == WhiteboardTool.PEN && points.size >= 1) {
-                                if (state.isDrawToShapeEnabled && points.size >= 5) {
-                                    val shape = viewModel.applyShapeRecognition(points)
-                                    if (shape != null) {
-                                        viewModel.startStroke(shape)
-                                    } else {
-                                        viewModel.updateStroke(points)
-                                    }
+                            } else if (writingNow && inkPoints.isNotEmpty()) {
+                                val finished = if (state.currentTool == WhiteboardTool.PEN && state.isDrawToShapeEnabled && inkPoints.size >= 5) {
+                                    viewModel.applyShapeRecognition(inkPoints) ?: inkTemplate!!.copy(
+                                        points = ArrayList(inkPoints),
+                                        pointPressures = ArrayList(inkPressures)
+                                    )
                                 } else {
-                                    viewModel.updateStroke(points)
+                                    inkTemplate!!.copy(
+                                        points = ArrayList(inkPoints),
+                                        pointPressures = ArrayList(inkPressures)
+                                    )
                                 }
-                                viewModel.finishStroke()
+                                liveInk.stroke = null
+                                liveInkTick.intValue = liveInkTick.intValue + 1
+                                viewModel.commitStroke(finished)
                             } else if (state.currentTool in listOf(
                                     WhiteboardTool.RECTANGLE,
                                     WhiteboardTool.DIAMOND,
@@ -958,9 +1029,9 @@ fun CanvasScreen(
                                     WhiteboardTool.ARROW,
                                     WhiteboardTool.LINE,
                                     WhiteboardTool.FRAME
-                                ) && points.size >= 2
+                                ) && shapePoints.size >= 2
                             ) {
-                                viewModel.updateStroke(points)
+                                viewModel.updateStroke(shapePoints)
                                 viewModel.finishStroke()
                                 if (!state.isToolLocked) {
                                     viewModel.setTool(WhiteboardTool.SELECT)
@@ -970,10 +1041,9 @@ fun CanvasScreen(
                     }
                 }
         ) {
-            val themeBgColor = LocalVibeColors.current.background
             val bgColor = when (state.canvasBackground) {
-                CanvasBackground.WHITE -> Color.White
-                else -> themeBgColor
+                CanvasBackground.DARK -> Color(0xFF171717)
+                else -> Color.White
             }
 
             Canvas(modifier = Modifier.fillMaxSize()) {
@@ -989,7 +1059,7 @@ fun CanvasScreen(
                     translate(canvasOffsetX, canvasOffsetY)
                     scale(canvasScale, canvasScale, pivot = Offset.Zero)
                 }) {
-                    val gridColor = if (state.canvasBackground == CanvasBackground.WHITE) Color(0xFFE0E0E0) else Color(0xFF2E2E2E)
+                    val gridColor = if (state.canvasBackground == CanvasBackground.DARK) Color(0xFF2E2E2E) else Color(0xFFD5D8DE)
                     val spacing = CanvasTransform.getAdaptiveGridSpacing(80f, canvasScale)
 
                     when (state.canvasBackground) {
@@ -1013,7 +1083,7 @@ fun CanvasScreen(
                             val endX = ceil(viewportBounds.right / spacing) * spacing
                             val startY = floor(viewportBounds.top / spacing) * spacing
                             val endY = ceil(viewportBounds.bottom / spacing) * spacing
-                            val dotRadius = 2f / canvasScale.coerceAtLeast(0.5f)
+                            val dotRadius = 1.25f / canvasScale.coerceAtLeast(0.5f)
                             var y = startY
                             while (y <= endY) {
                                 var x = startX
@@ -1058,6 +1128,35 @@ fun CanvasScreen(
                         else -> {}
                     }
 
+                    if (state.showGrid && state.canvasBackground != CanvasBackground.GRID) {
+                        val startX = floor(viewportBounds.left / spacing) * spacing
+                        val endX = ceil(viewportBounds.right / spacing) * spacing
+                        val startY = floor(viewportBounds.top / spacing) * spacing
+                        val endY = ceil(viewportBounds.bottom / spacing) * spacing
+                        val lineThickness = 1f / canvasScale.coerceAtLeast(0.5f)
+                        val overlay = if (state.isDarkCanvas) Color(0xFF3A3A3A) else Color(0xFFC5C8D0)
+                        var x = startX
+                        while (x <= endX) {
+                            drawLine(
+                                color = overlay,
+                                start = Offset(x, viewportBounds.top),
+                                end = Offset(x, viewportBounds.bottom),
+                                strokeWidth = lineThickness
+                            )
+                            x += spacing
+                        }
+                        var y = startY
+                        while (y <= endY) {
+                            drawLine(
+                                color = overlay,
+                                start = Offset(viewportBounds.left, y),
+                                end = Offset(viewportBounds.right, y),
+                                strokeWidth = lineThickness
+                            )
+                            y += spacing
+                        }
+                    }
+
                     // Render visible strokes
                     val visibleStrokes = state.strokes.filter { stroke ->
                         stroke.bounds.overlaps(viewportBounds)
@@ -1068,28 +1167,33 @@ fun CanvasScreen(
                         renderStroke(context, stroke, canvasScale, isSelected)
                     }
 
+                    val liveTick = liveInkTick.intValue
+                    if (liveTick >= 0) {
+                        liveInk.stroke?.let { activeStroke ->
+                            if (activeStroke.points.isNotEmpty()) {
+                                renderStroke(context, activeStroke, canvasScale, false)
+                            }
+                        }
+                    }
+
                     state.currentStroke?.let { activeStroke ->
                         if (activeStroke.points.isNotEmpty()) {
                             renderStroke(context, activeStroke, canvasScale, false)
                         }
                     }
 
-                    // Render Laser Pointer Trail
-                    if (state.laserPoints.size >= 2) {
-                        val laserPath = state.laserPoints.toSmoothedPath()
-                        drawPath(
-                            path = laserPath,
-                            color = Color(0xFFFF2A6D),
-                            style = DrawStroke(
-                                width = 5f / canvasScale.coerceAtLeast(0.5f),
-                                cap = StrokeCap.Round,
-                                join = StrokeJoin.Round
-                            )
+                    if (state.laserPoints.isNotEmpty()) {
+                        val center = state.laserPoints.last()
+                        val radius = 10f / canvasScale.coerceAtLeast(0.5f)
+                        drawCircle(
+                            color = Color(0x55FF2A2A),
+                            radius = radius * 2.2f,
+                            center = center
                         )
                         drawCircle(
-                            color = Color(0xFFFF2A6D),
-                            radius = 6f / canvasScale.coerceAtLeast(0.5f),
-                            center = state.laserPoints.last()
+                            color = Color(0xFFFF2A2A),
+                            radius = radius,
+                            center = center
                         )
                     }
 
@@ -1109,612 +1213,64 @@ fun CanvasScreen(
             }
         }
 
-        // 2. Floating Top Header: Left Hamburger Menu & Right Live Share
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Floating Left: Hamburger (☰) Button + Note Title
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = Color.White,
-                shadowElevation = 6.dp,
-                border = BorderStroke(1.dp, Color(0xFFE5E7EB))
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                ) {
-                    IconButton(
-                        onClick = { showSidebar = true },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Menu,
-                            contentDescription = "Menu",
-                            tint = Color(0xFF374151),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Text(
-                        text = state.noteTitle.ifEmpty { "Untitled" },
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1F2937),
-                        modifier = Modifier
-                            .clickable { showEditTitleDialog = true }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+        AvitrisphereWhiteboardChrome(
+            state = state,
+            viewModel = viewModel,
+            onExit = onNavigateBack,
+            onOpenMenu = { showSidebar = true },
+            onInsertImage = { imagePickerLauncher.launch("image/*") },
+            onExport = {
+                viewModel.exportAsPng(context) { uri ->
+                    exportedUri = uri
+                    showExportDialog = true
                 }
-            }
-
-            // Floating Right: Live Status Badge + Purple Share Button
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (state.isLiveCollabActive) {
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = Color(0xFFECFDF5),
-                        border = BorderStroke(1.dp, Color(0xFF10B981)),
-                        modifier = Modifier.clickable { showLiveCollabDialog = true }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF10B981))
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                "Live (${state.connectedCollaborators.size})",
-                                color = Color(0xFF065F46),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-
-                // Purple Share Button (Excalidraw Live Collab Pill)
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF6366F1),
-                    shadowElevation = 4.dp,
-                    modifier = Modifier.clickable { showLiveCollabDialog = true }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Group,
-                            contentDescription = "Share",
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            "Share",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-
-        // 3. Floating Whiteboard Dock (Centered at Top)
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 58.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = Color.White,
-                shadowElevation = 8.dp,
-                border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
-                modifier = Modifier.padding(horizontal = 8.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 6.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    // 1. Lock Tool
-                    WhiteboardDockButton(
-                        icon = if (state.isToolLocked) Icons.Default.Lock else Icons.Default.LockOpen,
-                        shortcut = "",
-                        isActive = state.isToolLocked,
-                        onClick = { viewModel.setTool(WhiteboardTool.LOCK) }
-                    )
-
-                    // Divider
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .width(1.dp)
-                            .height(22.dp)
-                            .background(Color(0xFFE5E7EB))
-                    )
-
-                    // 2. Hand Tool (H)
-                    WhiteboardDockButton(
-                        icon = Icons.Default.PanTool,
-                        shortcut = "H",
-                        isActive = state.currentTool == WhiteboardTool.HAND,
-                        onClick = { viewModel.setTool(WhiteboardTool.HAND) }
-                    )
-
-                    // 3. Selection Tool (V)
-                    WhiteboardDockButton(
-                        icon = Icons.Default.NearMe,
-                        shortcut = "V",
-                        isActive = state.currentTool == WhiteboardTool.SELECT,
-                        onClick = { viewModel.setTool(WhiteboardTool.SELECT) }
-                    )
-
-                    // 4. Rectangle Tool (R)
-                    WhiteboardDockButton(
-                        icon = Icons.Default.CropSquare,
-                        shortcut = "R",
-                        isActive = state.currentTool == WhiteboardTool.RECTANGLE,
-                        onClick = { viewModel.setTool(WhiteboardTool.RECTANGLE) }
-                    )
-
-                    // 5. Diamond Tool (D)
-                    WhiteboardDockButton(
-                        icon = Icons.Default.Diamond,
-                        shortcut = "D",
-                        isActive = state.currentTool == WhiteboardTool.DIAMOND,
-                        onClick = { viewModel.setTool(WhiteboardTool.DIAMOND) }
-                    )
-
-                    // 6. Circle Tool (O)
-                    WhiteboardDockButton(
-                        icon = Icons.Default.RadioButtonUnchecked,
-                        shortcut = "O",
-                        isActive = state.currentTool == WhiteboardTool.CIRCLE,
-                        onClick = { viewModel.setTool(WhiteboardTool.CIRCLE) }
-                    )
-
-                    // 7. Arrow Tool (A)
-                    WhiteboardDockButton(
-                        icon = Icons.Default.ArrowForward,
-                        shortcut = "A",
-                        isActive = state.currentTool == WhiteboardTool.ARROW,
-                        onClick = { viewModel.setTool(WhiteboardTool.ARROW) }
-                    )
-
-                    // 8. Line Tool (L)
-                    WhiteboardDockButton(
-                        icon = Icons.Default.HorizontalRule,
-                        shortcut = "L",
-                        isActive = state.currentTool == WhiteboardTool.LINE,
-                        onClick = { viewModel.setTool(WhiteboardTool.LINE) }
-                    )
-
-                    // 9. Draw / Pen Tool (P)
-                    WhiteboardDockButton(
-                        icon = Icons.Default.Edit,
-                        shortcut = "P",
-                        isActive = state.currentTool == WhiteboardTool.PEN,
-                        onClick = { viewModel.setTool(WhiteboardTool.PEN) }
-                    )
-
-                    // 10. Text Tool (T)
-                    WhiteboardDockButton(
-                        icon = Icons.Default.TextFields,
-                        shortcut = "T",
-                        isActive = state.currentTool == WhiteboardTool.TEXT,
-                        onClick = { viewModel.setTool(WhiteboardTool.TEXT) }
-                    )
-
-                    // 11. Sticky Note Tool (N)
-                    WhiteboardDockButton(
-                        icon = Icons.Default.Description,
-                        shortcut = "N",
-                        isActive = state.currentTool == WhiteboardTool.STICKY_NOTE,
-                        onClick = { viewModel.setTool(WhiteboardTool.STICKY_NOTE) }
-                    )
-
-                    // 12. Eraser Tool (E)
-                    WhiteboardDockButton(
-                        icon = Icons.Default.AutoFixNormal,
-                        shortcut = "E",
-                        isActive = state.currentTool == WhiteboardTool.ERASER,
-                        onClick = { viewModel.setTool(WhiteboardTool.ERASER) }
-                    )
-
-                    // Divider
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .width(1.dp)
-                            .height(22.dp)
-                            .background(Color(0xFFE5E7EB))
-                    )
-
-                    // 13. More (Overflow ⋮) Button
-                    Box {
-                        IconButton(
-                            onClick = { showOverflowPane = !showOverflowPane },
-                            modifier = Modifier.size(38.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.MoreVert,
-                                contentDescription = "More tools",
-                                tint = if (showOverflowPane) Color(0xFF4338CA) else Color(0xFF4B5563),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        if (showOverflowPane) {
-                            Popup(
-                                alignment = Alignment.TopEnd,
-                                offset = IntOffset(0, 120),
-                                onDismissRequest = { showOverflowPane = false },
-                                properties = PopupProperties(focusable = true)
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = Color.White,
-                                    shadowElevation = 12.dp,
-                                    border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
-                                    modifier = Modifier
-                                        .width(220.dp)
-                                        .padding(4.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(6.dp),
-                                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                                    ) {
-                                        OverflowMenuItem(
-                                            icon = Icons.Default.Image,
-                                            label = "Insert image",
-                                            shortcut = "9",
-                                            onClick = {
-                                                showOverflowPane = false
-                                                imagePickerLauncher.launch("image/*")
-                                            }
-                                        )
-                                        OverflowMenuItem(
-                                            icon = Icons.Default.CropFree,
-                                            label = "Frame tool",
-                                            shortcut = "F",
-                                            isSelected = state.currentTool == WhiteboardTool.FRAME,
-                                            onClick = {
-                                                showOverflowPane = false
-                                                viewModel.setTool(WhiteboardTool.FRAME)
-                                            }
-                                        )
-                                        OverflowMenuItem(
-                                            icon = Icons.Default.Code,
-                                            label = "Web Embed",
-                                            shortcut = "",
-                                            onClick = {
-                                                showOverflowPane = false
-                                                textInputValue = ""
-                                                val centerWorld = CanvasTransform.screenToWorld(
-                                                    screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
-                                                    scale = canvasScale,
-                                                    offset = Offset(canvasOffsetX, canvasOffsetY)
-                                                )
-                                                pendingWorldPoint = centerWorld
-                                                showWebEmbedDialog = true
-                                            }
-                                        )
-                                        OverflowMenuItem(
-                                            icon = Icons.Default.AutoFixHigh,
-                                            label = "Draw to shape",
-                                            shortcut = "Shift+X",
-                                            isSelected = state.isDrawToShapeEnabled,
-                                            onClick = {
-                                                showOverflowPane = false
-                                                viewModel.toggleDrawToShape()
-                                            }
-                                        )
-                                        OverflowMenuItem(
-                                            icon = Icons.Default.Highlight,
-                                            label = "Laser pointer",
-                                            shortcut = "K",
-                                            isSelected = state.currentTool == WhiteboardTool.LASER,
-                                            onClick = {
-                                                showOverflowPane = false
-                                                viewModel.setTool(WhiteboardTool.LASER)
-                                            }
-                                        )
-                                        OverflowMenuItem(
-                                            icon = Icons.Default.FormatColorFill,
-                                            label = "Bucket fill",
-                                            shortcut = "B",
-                                            isSelected = state.currentTool == WhiteboardTool.BUCKET_FILL,
-                                            onClick = {
-                                                showOverflowPane = false
-                                                viewModel.setTool(WhiteboardTool.BUCKET_FILL)
-                                            }
-                                        )
-                                        OverflowMenuItem(
-                                            icon = Icons.Default.Gesture,
-                                            label = "Lasso selection",
-                                            shortcut = "",
-                                            isSelected = state.currentTool == WhiteboardTool.LASSO,
-                                            onClick = {
-                                                showOverflowPane = false
-                                                viewModel.setTool(WhiteboardTool.LASSO)
-                                            }
-                                        )
-                                        Divider(
-                                            color = Color(0xFFF3F4F6),
-                                            thickness = 1.dp,
-                                            modifier = Modifier.padding(vertical = 4.dp)
-                                        )
-                                        OverflowMenuItem(
-                                            icon = Icons.Default.GridOn,
-                                            label = "Canvas Background",
-                                            onClick = {
-                                                showOverflowPane = false
-                                                showBackgroundPicker = true
-                                            }
-                                        )
-                                        OverflowMenuItem(
-                                            icon = Icons.Default.FormatPaint,
-                                            label = "Stroke Color & Width",
-                                            onClick = {
-                                                showOverflowPane = false
-                                                showColorPicker = true
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Selection Quick Actions Bar
-            if (state.selectedStrokeIds.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF1F2937),
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            "${state.selectedStrokeIds.size} selected",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        IconButton(
-                            onClick = { viewModel.deleteSelectedStrokes() },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Delete selection",
-                                tint = Color(0xFFFF6B6B),
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Property Bar (Color & Stroke Width)
-            AnimatedVisibility(
-                visible = showColorPicker,
-                enter = fadeIn() + slideInVertically(),
-                exit = fadeOut() + slideOutVertically()
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = LocalVibeColors.current.surface,
-                    shadowElevation = 6.dp,
-                    border = BorderStroke(1.dp, LocalVibeColors.current.borderStandard),
-                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            PEN_COLORS.forEach { color ->
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(color))
-                                        .border(
-                                            if (state.selectedColor == color) 2.5.dp else 1.dp,
-                                            if (state.selectedColor == color) LocalVibeColors.current.brand else LocalVibeColors.current.borderStandard,
-                                            CircleShape
-                                        )
-                                        .clickable { viewModel.setColor(color) }
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.width(260.dp)
-                        ) {
-                            Text("Width", fontSize = 12.sp, color = LocalVibeColors.current.textMuted)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Slider(
-                                value = state.strokeWidth,
-                                onValueChange = { viewModel.setStrokeWidth(it) },
-                                valueRange = 2f..24f,
-                                modifier = Modifier.weight(1f),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = LocalVibeColors.current.brand,
-                                    activeTrackColor = LocalVibeColors.current.brand
-                                )
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                "${state.strokeWidth.toInt()}px",
-                                fontSize = 12.sp,
-                                color = LocalVibeColors.current.textPrimary
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Background Picker Popup
-            AnimatedVisibility(
-                visible = showBackgroundPicker,
-                enter = fadeIn() + slideInVertically(),
-                exit = fadeOut() + slideOutVertically()
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = LocalVibeColors.current.surface,
-                    shadowElevation = 6.dp,
-                    border = BorderStroke(1.dp, LocalVibeColors.current.borderStandard),
-                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        listOf(
-                            CanvasBackground.DARK,
-                            CanvasBackground.WHITE,
-                            CanvasBackground.LINED,
-                            CanvasBackground.DOTTED,
-                            CanvasBackground.GRID
-                        ).forEach { type ->
-                            BackgroundSwatch(
-                                type = type,
-                                isSelected = state.canvasBackground == type,
-                                onClick = {
-                                    viewModel.setCanvasBackground(type)
-                                    showBackgroundPicker = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // 4. Floating Navigation HUD (Bottom Right)
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(LocalVibeColors.current.surface.copy(alpha = 0.94f))
-                .border(1.dp, LocalVibeColors.current.borderStandard, RoundedCornerShape(20.dp))
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            IconButton(
-                onClick = {
-                    val newScale = (canvasScale / 1.5f).coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE)
-                    val center = Offset(canvasSize.width / 2f, canvasSize.height / 2f)
-                    val newOffset = CanvasTransform.calculatePivotZoomOffset(
-                        canvasScale,
-                        newScale,
-                        Offset(canvasOffsetX, canvasOffsetY),
-                        center,
-                        Offset.Zero
-                    )
-                    canvasScale = newScale
-                    canvasOffsetX = newOffset.x
-                    canvasOffsetY = newOffset.y
-                    viewModel.updateTransform(canvasScale, canvasOffsetX, canvasOffsetY)
-                },
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    Icons.Default.Remove,
-                    contentDescription = "Zoom out",
-                    tint = LocalVibeColors.current.textMuted,
-                    modifier = Modifier.size(16.dp)
+            },
+            onLive = { showLiveCollabDialog = true },
+            onHelp = { showHelpDialog = true },
+            onClear = { showClearDialog = true },
+            onRename = { showEditTitleDialog = true },
+            onWebEmbed = {
+                textInputValue = ""
+                val centerWorld = CanvasTransform.screenToWorld(
+                    screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
+                    scale = canvasScale,
+                    offset = Offset(canvasOffsetX, canvasOffsetY)
                 )
-            }
-
-            Text(
-                text = CanvasTransform.formatZoom(canvasScale),
-                color = LocalVibeColors.current.textPrimary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .clickable {
-                        canvasScale = 1f
-                        canvasOffsetX = 0f
-                        canvasOffsetY = 0f
-                        viewModel.resetTransform()
-                    }
-                    .padding(horizontal = 6.dp, vertical = 4.dp)
-            )
-
-            IconButton(
-                onClick = {
-                    val newScale = (canvasScale * 1.5f).coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE)
-                    val center = Offset(canvasSize.width / 2f, canvasSize.height / 2f)
-                    val newOffset = CanvasTransform.calculatePivotZoomOffset(
-                        canvasScale,
-                        newScale,
-                        Offset(canvasOffsetX, canvasOffsetY),
-                        center,
-                        Offset.Zero
-                    )
-                    canvasScale = newScale
-                    canvasOffsetX = newOffset.x
-                    canvasOffsetY = newOffset.y
-                    viewModel.updateTransform(canvasScale, canvasOffsetX, canvasOffsetY)
-                },
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "Zoom in",
-                    tint = LocalVibeColors.current.textMuted,
-                    modifier = Modifier.size(16.dp)
+                pendingWorldPoint = centerWorld
+                showWebEmbedDialog = true
+            },
+            onZoomIn = {
+                val newScale = (canvasScale * 1.5f).coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE)
+                val center = Offset(canvasSize.width / 2f, canvasSize.height / 2f)
+                val newOffset = CanvasTransform.calculatePivotZoomOffset(
+                    canvasScale,
+                    newScale,
+                    Offset(canvasOffsetX, canvasOffsetY),
+                    center,
+                    Offset.Zero
                 )
-            }
-
-            IconButton(
-                onClick = {
-                    viewModel.fitToContent(canvasSize.width, canvasSize.height)
-                },
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    Icons.Default.CenterFocusStrong,
-                    contentDescription = "Fit to content",
-                    tint = LocalVibeColors.current.brand,
-                    modifier = Modifier.size(16.dp)
+                canvasScale = newScale
+                canvasOffsetX = newOffset.x
+                canvasOffsetY = newOffset.y
+                viewModel.updateTransform(canvasScale, canvasOffsetX, canvasOffsetY)
+            },
+            onZoomOut = {
+                val newScale = (canvasScale / 1.5f).coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE)
+                val center = Offset(canvasSize.width / 2f, canvasSize.height / 2f)
+                val newOffset = CanvasTransform.calculatePivotZoomOffset(
+                    canvasScale,
+                    newScale,
+                    Offset(canvasOffsetX, canvasOffsetY),
+                    center,
+                    Offset.Zero
                 )
-            }
-        }
+                canvasScale = newScale
+                canvasOffsetX = newOffset.x
+                canvasOffsetY = newOffset.y
+                viewModel.updateTransform(canvasScale, canvasOffsetX, canvasOffsetY)
+            },
+            onFit = { viewModel.fitToContent(canvasSize.width, canvasSize.height) }
+        )
 
         // 5. Left Floating Sidebar (Exact Match to User's Image 1)
         AnimatedVisibility(
@@ -1750,12 +1306,20 @@ fun CanvasScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                "Bloom",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1F2937)
-                            )
+                            Column {
+                                Text(
+                                    "Avitrisphere",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1F2937)
+                                )
+                                Text(
+                                    "Whiteboard",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF6B7280)
+                                )
+                            }
                             IconButton(
                                 onClick = { showSidebar = false },
                                 modifier = Modifier.size(28.dp)
@@ -1765,6 +1329,15 @@ fun CanvasScreen(
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
+
+                        SidebarMenuItem(
+                            icon = Icons.Default.Edit,
+                            label = "Rename board",
+                            onClick = {
+                                showSidebar = false
+                                showEditTitleDialog = true
+                            }
+                        )
 
                         // 1. Open (Ctrl+O)
                         SidebarMenuItem(
@@ -1974,7 +1547,7 @@ fun CanvasScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         // 2. Link with Copy button
-                        val roomUrl = "https://bloom.app/#room=${state.collabRoomId}"
+                        val roomUrl = "https://avitrisphere.app/#room=${state.collabRoomId}"
                         Text(
                             text = "Link",
                             fontSize = 13.sp,
@@ -2004,7 +1577,7 @@ fun CanvasScreen(
                             Button(
                                 onClick = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText("Bloom Live Session", roomUrl)
+                                    val clip = ClipData.newPlainText("Avitrisphere Live Session", roomUrl)
                                     clipboard.setPrimaryClip(clip)
                                     Toast.makeText(context, "Link copied to clipboard!", Toast.LENGTH_SHORT).show()
                                 },
@@ -2145,9 +1718,9 @@ fun CanvasScreen(
             title = { Text("Whiteboard Guide & Shortcuts", color = Color(0xFF1F2937), fontWeight = FontWeight.Bold) },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    Text("• V: Selection tool\n• H: Hand (Pan tool)\n• R: Rectangle\n• D: Diamond\n• O: Circle\n• A: Arrow\n• L: Line\n• P: Freehand Pen\n• T: Text placement\n• N: Sticky Note\n• E: Eraser\n• K: Laser Pointer\n• B: Bucket Fill\n• 9: Insert Image", fontSize = 13.sp, color = Color(0xFF4B5563), lineHeight = 20.sp)
+                    Text("• V: Selection tool\n• H: Hand (Pan tool)\n• R: Rectangle\n• D: Diamond\n• O: Circle\n• A: Arrow\n• L: Line\n• P: Pen, plus pencil, marker, highlighter, and brush\n• T: Text placement\n• N: Sticky Note\n• E: Eraser\n• K: Laser Pointer\n• B: Bucket Fill\n• 9: Insert Image", fontSize = 13.sp, color = Color(0xFF4B5563), lineHeight = 20.sp)
                     Spacer(modifier = Modifier.height(10.dp))
-                    Text("Pinch with 2 fingers to zoom (0.001x to 100x). Double tap to fit content.", fontSize = 12.sp, color = Color(0xFF6B7280))
+                    Text("Pinch with 2 fingers to zoom from 10% to 500%. Two fingers also pan. Ctrl+Z undoes, Ctrl+Y redoes. Double tap fits the page.", fontSize = 12.sp, color = Color(0xFF6B7280))
                 }
             },
             confirmButton = {
@@ -2181,7 +1754,7 @@ fun CanvasScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.addWebEmbed(textInputValue.ifBlank { "https://bloom.app" }, pendingWorldPoint)
+                    viewModel.addWebEmbed(textInputValue.ifBlank { "https://avitrisphere.app" }, pendingWorldPoint)
                     showWebEmbedDialog = false
                 }) {
                     Text("Embed", color = LocalVibeColors.current.brand)
@@ -2391,7 +1964,7 @@ fun CanvasScreen(
                 exportedUri = null
             },
             title = { Text("Export Successful", color = LocalVibeColors.current.textPrimary) },
-            text = { Text("Note exported to Pictures/Bloom", color = LocalVibeColors.current.textMuted) },
+            text = { Text("Note exported to Pictures/Avitrisphere", color = LocalVibeColors.current.textMuted) },
             confirmButton = {
                 TextButton(onClick = {
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {

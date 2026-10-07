@@ -34,11 +34,12 @@ fun StrokeDto.toDomain(): Stroke {
         )
     }
     
-    val pointsList = points.split(";").take(5000).mapNotNull { pair ->
+    val parsed = points.split(";").take(5000).mapNotNull { pair ->
         val coords = pair.split(",")
-        if (coords.size == 2) {
+        if (coords.size >= 2) {
             try {
-                Offset(coords[0].toFloat(), coords[1].toFloat())
+                val pressure = if (coords.size >= 3) coords[2].toFloat() else 1f
+                Offset(coords[0].toFloat(), coords[1].toFloat()) to pressure
             } catch (e: Exception) {
                 null
             }
@@ -46,20 +47,28 @@ fun StrokeDto.toDomain(): Stroke {
     }
     return Stroke(
         id = id.ifEmpty { UUID.randomUUID().toString() },
-        points = pointsList,
+        points = parsed.map { it.first },
         colorValue = colorValue,
         strokeWidth = strokeWidth,
         isEraser = isEraser,
-        isHighlighter = isHighlighter,
+        isHighlighter = isHighlighter || strokeType == StrokeType.HIGHLIGHTER,
         strokeType = strokeType,
         text = text,
         fillColor = fillColor,
-        imageUri = imageUri
+        imageUri = imageUri,
+        pointPressures = parsed.map { it.second }
     )
 }
 
 fun Stroke.toDto(): StrokeDto {
-    val pointsString = points.joinToString(";") { "${it.x},${it.y}" }
+    val pointsString = points.mapIndexed { index, point ->
+        val pressure = pointPressures.getOrNull(index)
+        if (pressure == null || pressure == 1f) {
+            "${point.x},${point.y}"
+        } else {
+            "${point.x},${point.y},$pressure"
+        }
+    }.joinToString(";")
     return StrokeDto(
         id = id,
         points = pointsString,

@@ -27,11 +27,17 @@ fun WorkspaceSidebar(
         drawerContentColor = VibeColors.Dark.textPrimaryDark
     ) {
         Spacer(Modifier.height(16.dp))
-        Text(
-            "Workspace",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(16.dp)
-        )
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "Avitrisphere",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                "Whiteboard",
+                style = MaterialTheme.typography.labelMedium,
+                color = VibeColors.Dark.brandGreen
+            )
+        }
         Divider(color = VibeColors.Dark.borderStandardDark)
         
         LazyColumn(modifier = Modifier.fillMaxWidth()) {

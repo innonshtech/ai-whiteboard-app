@@ -14,7 +14,8 @@ data class Stroke(
     val strokeType: StrokeType = StrokeType.PEN,
     val text: String = "",
     val fillColor: Int = 0,
-    val imageUri: String = ""
+    val imageUri: String = "",
+    val pointPressures: List<Float> = emptyList()
 ) {
     val bounds: Rect by lazy {
         if (points.isEmpty()) {
@@ -59,7 +60,10 @@ data class Stroke(
 
 enum class StrokeType {
     PEN,
+    PENCIL,
+    MARKER,
     HIGHLIGHTER,
+    BRUSH,
     LINE,
     ARROW,
     RECTANGLE,

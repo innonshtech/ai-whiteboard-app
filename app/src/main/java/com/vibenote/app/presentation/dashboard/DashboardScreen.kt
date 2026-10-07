@@ -101,7 +101,7 @@ fun DashboardScreen(
                         } else {
                             Column {
                                 Text(
-                                    text = "LIBRARY",
+                                    text = "Avitrisphere",
                                     fontSize = 18.sp,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Medium,

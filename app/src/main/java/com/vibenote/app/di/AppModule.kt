@@ -40,13 +40,24 @@ object DatabaseModule {
                 NoteDatabase.MIGRATION_4_5
             )
             .addCallback(object : androidx.room.RoomDatabase.Callback() {
+                override fun onOpen(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    super.onOpen(db)
+                    db.execSQL(
+                        "UPDATE notes SET title = 'Welcome to Avitrisphere Whiteboard' " +
+                            "WHERE title = 'Welcome to Bloom 🌸'"
+                    )
+                    db.execSQL(
+                        "UPDATE notes SET canvasBackground = 'dotted' WHERE canvasBackground = 'dark'"
+                    )
+                }
+
                 override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                     super.onCreate(db)
                     val id = java.util.UUID.randomUUID().toString()
                     val now = System.currentTimeMillis()
                     db.execSQL(
                         "INSERT INTO notes (id, title, createdAt, updatedAt, strokeDataPath, isFavorite, tags, folder, canvasBackground) " +
-                        "VALUES ('$id', 'Welcome to Bloom 🌸', $now, $now, '', 0, 'tutorial', '', 'dark')"
+                        "VALUES ('$id', 'Welcome to Avitrisphere Whiteboard', $now, $now, '', 0, 'tutorial', '', 'dotted')"
                     )
                     
                     // Seed strokes file

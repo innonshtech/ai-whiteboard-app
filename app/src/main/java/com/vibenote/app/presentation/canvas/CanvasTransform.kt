@@ -9,8 +9,8 @@ import kotlin.math.min
 
 object CanvasTransform {
 
-    const val MIN_SCALE = 0.001f
-    const val MAX_SCALE = 100.0f
+    const val MIN_SCALE = 0.1f
+    const val MAX_SCALE = 5.0f
     const val DEFAULT_SCALE = 1.0f
 
     /**
@@ -120,7 +120,7 @@ object CanvasTransform {
 
         val scaleX = availableWidth / contentWidth
         val scaleY = availableHeight / contentHeight
-        val fitScale = min(scaleX, scaleY).coerceIn(MIN_SCALE, 2.5f)
+        val fitScale = min(scaleX, scaleY).coerceIn(MIN_SCALE, MAX_SCALE)
 
         val contentCenter = contentBounds.center
         val targetOffsetX = (viewportSize.width / 2f) - (contentCenter.x * fitScale)
