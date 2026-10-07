@@ -1,7 +1,7 @@
-# Bloom
+# AvitriSphare
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/pallab-js/bloom/master/.github/icon.png" width="120" alt="Bloom Logo"/>
+  <img src=".github/icon.png" width="120" alt="AvitriSphare Logo"/>
 </p>
 
 <p align="center">
@@ -47,7 +47,7 @@
 - **Note Actions** - Long-press for quick actions (favorite, duplicate, delete)
 
 ### Export & Share
-- **PNG Export** - Save notes as high-quality images to Pictures/Bloom
+- **PNG Export** - Save notes as high-quality images to Pictures/AvitriSphare
 - **Share Sheet** - Share via Android share intent
 - **Clear Canvas** - Quickly reset a canvas with one tap (supports Undo)
 
@@ -72,7 +72,7 @@
 ## Project Structure
 
 ```
-app/src/main/java/com/vibenote/app/
+app/src/main/java/com/avitrisphare/whiteboard/
 ├── core/theme/           # Design tokens (Colors, Typography, Shapes)
 ├── data/
 │   ├── local/       # Room database (NoteEntity, NoteDao, Converters, StrokeDto)
@@ -84,7 +84,7 @@ app/src/main/java/com/vibenote/app/
 └── presentation/
     ├── canvas/      # Canvas screen + ViewModel + Shape recognition
     ├── dashboard/   # Dashboard screen + ViewModel
-    └── BloomActivity.kt
+    └── AvitriSphareActivity.kt
 ```
 
 ---

@@ -5,17 +5,17 @@
         android:maxSdkVersion="28" />
 
     <application
-        android:name=".BloomApplication"
+        android:name=".AvitriSphareApplication"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
-        android:label="Avitrisphere Whiteboard"
+        android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Bloom">
+        android:theme="@style/Theme.AvitriSphare">
         <activity
-            android:name=".presentation.BloomActivity"
+            android:name=".presentation.AvitriSphareActivity"
             android:exported="true"
-            android:theme="@style/Theme.Bloom">
+            android:theme="@style/Theme.AvitriSphare">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

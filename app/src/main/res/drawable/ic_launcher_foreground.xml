@@ -5,33 +5,25 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Leaf - growing from bottom, white on dark -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,78 C54,78 38,65 38,52 C38,45 43,38 54,38 C65,38 70,45 70,52 C70,65 54,78 54,78 Z"/>
+    <!-- Orbit ring, rotated behind/around the sphere -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="-22">
+        <path
+            android:strokeColor="#FF3ECF8E"
+            android:strokeWidth="1.6"
+            android:pathData="M34,54 A20,9 0 1,0 74,54 A20,9 0 1,0 34,54 Z"/>
+    </group>
 
-    <!-- Leaf vein -->
+    <!-- Sphere base -->
     <path
-        android:strokeColor="#1A1A1A"
-        android:strokeWidth="1.5"
-        android:pathData="M54,42 L54,68"/>
+        android:fillColor="#FF3ECF8E"
+        android:pathData="M25,54 A29,29 0 1,0 83,54 A29,29 0 1,0 25,54 Z"/>
 
-    <!-- Leaf side veins -->
+    <!-- Highlight sheen -->
     <path
-        android:strokeColor="#1A1A1A"
-        android:strokeWidth="1"
-        android:pathData="M54,50 L46,46"/>
-    <path
-        android:strokeColor="#1A1A1A"
-        android:strokeWidth="1"
-        android:pathData="M54,50 L62,46"/>
-    <path
-        android:strokeColor="#1A1A1A"
-        android:strokeWidth="1"
-        android:pathData="M54,58 L45,54"/>
-    <path
-        android:strokeColor="#1A1A1A"
-        android:strokeWidth="1"
-        android:pathData="M54,58 L63,54"/>
+        android:fillColor="#90FFFFFF"
+        android:pathData="M39,41 A9,6 0 1,0 57,41 A9,6 0 1,0 39,41 Z"/>
 
 </vector>

@@ -11,11 +11,11 @@ repositories {
 }
 
 android {
-    namespace 'com.vibenote.app'
+    namespace 'com.avitrisphare.whiteboard'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.bloom.app"
+        applicationId "com.avitrisphare.whiteboard"
         minSdk 24
         targetSdk 34
         versionCode 1

@@ -1,9 +1,9 @@
 # Add project specific ProGuard rules here.
--keep class com.vibenote.app.** { *; }
+-keep class com.avitrisphare.whiteboard.** { *; }
 
 # Keep Room entities
--keep class com.vibenote.app.data.local.** { *; }
--keep class com.vibenote.app.domain.model.** { *; }
+-keep class com.avitrisphare.whiteboard.data.local.** { *; }
+-keep class com.avitrisphare.whiteboard.domain.model.** { *; }
 -keep class * extends androidx.room.RoomDatabase
 -dontwarn androidx.room.**
 
