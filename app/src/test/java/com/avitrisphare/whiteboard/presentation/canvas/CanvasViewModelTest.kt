@@ -94,6 +94,27 @@ class CanvasViewModelTest {
     }
 
     @Test
+    fun `clearCanvas empties the page and undo restores it`() {
+        val stroke = Stroke(points = listOf(Offset(0f, 0f), Offset(20f, 0f)))
+        viewModel.commitStroke(stroke)
+        viewModel.clearCanvas()
+        assertTrue(viewModel.state.value.strokes.isEmpty())
+        assertTrue(viewModel.state.value.canUndo)
+        viewModel.undo()
+        assertEquals(1, viewModel.state.value.strokes.size)
+    }
+
+    @Test
+    fun `commitErasedStrokes keeps one undo step for the gesture`() {
+        val stroke = Stroke(points = listOf(Offset(0f, 0f), Offset(40f, 0f)))
+        viewModel.commitStroke(stroke)
+        viewModel.commitErasedStrokes(emptyList())
+        assertTrue(viewModel.state.value.strokes.isEmpty())
+        viewModel.undo()
+        assertEquals(1, viewModel.state.value.strokes.size)
+    }
+
+    @Test
     fun `fitToContent updates scale and offset to center strokes`() {
         val stroke = Stroke(
             points = listOf(Offset(100f, 100f), Offset(300f, 300f)),

@@ -35,8 +35,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -57,6 +59,54 @@ fun PointerInputChange.inkPressure(): Float {
     val raw = pressure
     if (raw.isNaN() || raw <= 0.05f) return 1f
     return raw.coerceIn(0.72f, 1f)
+}
+
+/** Half the on-canvas thickness of a stroke, in world units. */
+fun strokeInkHalfWidth(stroke: Stroke): Float {
+    val multiplier = when (stroke.strokeType) {
+        StrokeType.PENCIL -> 1f
+        StrokeType.MARKER -> 1.7f
+        StrokeType.HIGHLIGHTER -> 2.4f
+        StrokeType.BRUSH -> 1.25f
+        else -> if (stroke.isHighlighter) 3f else 1f
+    }
+    return stroke.strokeWidth * multiplier / 2f
+}
+
+/**
+ * In-progress ink. The path grows by one segment per point so a long stroke
+ * does not rebuild its whole curve on every touch sample.
+ */
+class LiveInk {
+    var stroke: Stroke? = null
+    val path = Path()
+    private var pending: Offset? = null
+    private var tip: Offset? = null
+    var predicted: Offset? = null
+
+    fun begin(start: Offset) {
+        path.reset()
+        path.moveTo(start.x, start.y)
+        pending = null
+        tip = start
+        predicted = null
+    }
+
+    fun extend(point: Offset) {
+        val control = pending
+        if (control == null) {
+            pending = point
+            return
+        }
+        val midX = (control.x + point.x) / 2f
+        val midY = (control.y + point.y) / 2f
+        path.quadraticBezierTo(control.x, control.y, midX, midY)
+        tip = Offset(midX, midY)
+        pending = point
+    }
+
+    fun tail(): Offset? = pending
+    fun tipPoint(): Offset? = tip
 }
 
 fun DrawScope.drawWritingStroke(stroke: Stroke, screenScale: Float) {
@@ -86,6 +136,37 @@ fun DrawScope.drawWritingStroke(stroke: Stroke, screenScale: Float) {
                 cap = StrokeCap.Round,
                 join = StrokeJoin.Round
             )
+        )
+    }
+}
+
+fun DrawScope.drawLiveWritingStroke(live: LiveInk, screenScale: Float) {
+    val stroke = live.stroke ?: return
+    val points = stroke.points
+    if (points.isEmpty()) return
+    val safeScale = if (screenScale <= 0f) 1f else screenScale
+    val style = inkLook(stroke.strokeType)
+    val width = (stroke.strokeWidth * style.widthMul / safeScale).coerceAtLeast(1.5f / safeScale)
+    val color = Color(stroke.colorValue).copy(alpha = style.alpha)
+    val round = InkStroke(width = width, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    if (points.size == 1) {
+        drawCircle(color = color, radius = width / 2f, center = points[0])
+        return
+    }
+    drawPath(path = live.path, color = color, style = round)
+    val tip = live.tipPoint()
+    val tail = live.tail()
+    if (tip != null && tail != null) {
+        drawLine(color = color, start = tip, end = tail, strokeWidth = width, cap = StrokeCap.Round)
+    }
+    val predicted = live.predicted
+    if (tail != null && predicted != null) {
+        drawLine(
+            color = color.copy(alpha = style.alpha * 0.45f),
+            start = tail,
+            end = predicted,
+            strokeWidth = width,
+            cap = StrokeCap.Round
         )
     }
 }
@@ -208,6 +289,68 @@ fun InkToolPanel(state: CanvasState, viewModel: CanvasViewModel) {
             blue = it
             viewModel.setColor(Color(red, green, it).toArgb())
         }
+    }
+}
+
+@Composable
+fun EraserToolPanel(
+    state: CanvasState,
+    viewModel: CanvasViewModel,
+    onClearPage: () -> Unit
+) {
+    Column(modifier = Modifier.width(260.dp)) {
+        Text("Eraser", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(
+                EraserMode.STANDARD to "Standard",
+                EraserMode.SMART to "Smart"
+            ).forEach { (mode, label) ->
+                val selected = state.eraserMode == mode
+                Text(
+                    text = label,
+                    color = if (selected) Color.White else Color(0xFF1F2937),
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (selected) Color(0xFF6366F1) else Color(0xFFF3F4F6))
+                        .clickable { viewModel.setEraserMode(mode) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = if (state.eraserMode == EraserMode.STANDARD) {
+                "Erases the ink inside the circle."
+            } else {
+                "Erases each whole stroke or object you touch."
+            },
+            fontSize = 11.sp,
+            color = Color(0xFF6B7280)
+        )
+        Spacer(Modifier.height(8.dp))
+        Text("Size ${state.eraserSize.toInt()}px", fontSize = 12.sp, color = Color(0xFF6B7280))
+        Slider(
+            value = state.eraserSize.coerceIn(8f, 80f),
+            onValueChange = { viewModel.setEraserSize(it) },
+            valueRange = 8f..80f,
+            modifier = Modifier.fillMaxWidth(),
+            colors = SliderDefaults.colors(
+                thumbColor = Color(0xFF6366F1),
+                activeTrackColor = Color(0xFF6366F1)
+            )
+        )
+        Text(
+            text = "Clear page",
+            color = Color(0xFFB91C1C),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onClearPage)
+                .padding(vertical = 8.dp)
+        )
     }
 }
 

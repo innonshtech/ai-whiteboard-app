@@ -62,7 +62,14 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.OndemandVideo
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -109,6 +116,13 @@ fun AvitriSphareWhiteboardChrome(
     onClear: () -> Unit,
     onRename: () -> Unit,
     onWebEmbed: () -> Unit,
+    onSearchImages: () -> Unit,
+    onInsertVideo: () -> Unit,
+    onYouTube: () -> Unit,
+    shadeFromTop: Boolean,
+    onToggleShadeSide: () -> Unit,
+    spotlightRadius: Float,
+    onSpotlightRadius: (Float) -> Unit,
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
     onFit: () -> Unit
@@ -274,14 +288,41 @@ fun AvitriSphareWhiteboardChrome(
                     }
                 }
                 "media" -> DockPopover {
-                    PopoverRow(Icons.Default.Image, "Insert image") { panel = null; onInsertImage() }
+                    PopoverRow(Icons.Default.Image, "Image from device") { panel = null; onInsertImage() }
+                    PopoverRow(Icons.Default.Search, "Google Images") { panel = null; onSearchImages() }
+                    PopoverRow(Icons.Default.Videocam, "Video from device") { panel = null; onInsertVideo() }
+                    PopoverRow(Icons.Default.OndemandVideo, "YouTube") { panel = null; onYouTube() }
+                    PopoverRow(Icons.Default.Language, "Website") { panel = null; onWebEmbed() }
+                    PopoverRow(Icons.Default.CenterFocusStrong, "Spotlight", state.currentTool == WhiteboardTool.SPOTLIGHT) {
+                        viewModel.setTool(WhiteboardTool.SPOTLIGHT); panel = null
+                    }
+                    PopoverRow(Icons.Default.VisibilityOff, "Screen shade", state.currentTool == WhiteboardTool.SHADE) {
+                        viewModel.setTool(WhiteboardTool.SHADE)
+                    }
+                    if (state.currentTool == WhiteboardTool.SHADE) {
+                        PopoverRow(
+                            Icons.Default.SwapVert,
+                            if (shadeFromTop) "Shade from top" else "Shade from bottom"
+                        ) { onToggleShadeSide() }
+                    }
+                    if (state.currentTool == WhiteboardTool.SPOTLIGHT) {
+                        Text("Spotlight size", fontSize = 12.sp, color = Color(0xFF6B7280))
+                        Slider(
+                            value = spotlightRadius.coerceIn(60f, 360f),
+                            onValueChange = onSpotlightRadius,
+                            valueRange = 60f..360f,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    PopoverRow(Icons.Default.ZoomIn, "Magnifier", state.currentTool == WhiteboardTool.MAGNIFIER) {
+                        viewModel.setTool(WhiteboardTool.MAGNIFIER); panel = null
+                    }
                     PopoverRow(Icons.Default.TextFields, "Text", state.currentTool == WhiteboardTool.TEXT) {
                         viewModel.setTool(WhiteboardTool.TEXT); panel = null
                     }
                     PopoverRow(Icons.Default.Description, "Sticky note", state.currentTool == WhiteboardTool.STICKY_NOTE) {
                         viewModel.setTool(WhiteboardTool.STICKY_NOTE); panel = null
                     }
-                    PopoverRow(Icons.Default.Code, "Web embed") { panel = null; onWebEmbed() }
                 }
                 "add" -> DockPopover {
                     PopoverRow(Icons.Default.TextFields, "Text") {
@@ -314,10 +355,16 @@ fun AvitriSphareWhiteboardChrome(
                     PopoverRow(Icons.Default.IosShare, "Export image") { panel = null; onExport() }
                     PopoverRow(Icons.Default.Group, "Live collaboration") { panel = null; onLive() }
                     PopoverRow(Icons.Default.HelpOutline, "Help") { panel = null; onHelp() }
-                    PopoverRow(Icons.Default.LayersClear, "Clear canvas") { panel = null; onClear() }
+                    PopoverRow(Icons.Default.LayersClear, "Clear page") { panel = null; onClear() }
                     PopoverRow(Icons.Default.Add, "Zoom in") { onZoomIn() }
                     PopoverRow(Icons.Default.ChevronLeft, "Zoom out") { onZoomOut() }
                     PopoverRow(Icons.Default.CropFree, "Fit to content") { panel = null; onFit() }
+                }
+                "eraser" -> DockPopover {
+                    EraserToolPanel(state = state, viewModel = viewModel, onClearPage = {
+                        panel = null
+                        onClear()
+                    })
                 }
                 "ink" -> DockPopover {
                     InkToolPanel(state = state, viewModel = viewModel)
@@ -450,9 +497,13 @@ fun AvitriSphareWhiteboardChrome(
                         DockItem(Icons.Default.Category, "Shapes", state.currentTool in shapeTools || panel == "shapes") {
                             toggle("shapes")
                         }
-                        DockItem(Icons.Default.AutoFixNormal, "Eraser", state.currentTool == WhiteboardTool.ERASER) {
-                            panel = null
+                        DockItem(
+                            Icons.Default.AutoFixNormal,
+                            "Eraser",
+                            state.currentTool == WhiteboardTool.ERASER || panel == "eraser"
+                        ) {
                             viewModel.setTool(WhiteboardTool.ERASER)
+                            toggle("eraser")
                         }
                         DockItem(Icons.Default.Highlight, "Laser", state.currentTool == WhiteboardTool.LASER) {
                             panel = null

@@ -20,23 +20,26 @@ data class Stroke(
     val bounds: Rect by lazy {
         if (points.isEmpty()) {
             Rect.Zero
-        } else if (strokeType == StrokeType.STICKY_NOTE || strokeType == StrokeType.TEXT || strokeType == StrokeType.WEB_EMBED) {
+        } else if (strokeType == StrokeType.STICKY_NOTE || strokeType == StrokeType.TEXT) {
             val origin = points.first()
             val w = when (strokeType) {
                 StrokeType.STICKY_NOTE -> 220f
-                StrokeType.WEB_EMBED -> 280f
                 else -> (text.length * 12f).coerceIn(120f, 400f)
             }
             val h = when (strokeType) {
                 StrokeType.STICKY_NOTE -> 180f
-                StrokeType.WEB_EMBED -> 140f
                 else -> 60f
             }
             Rect(origin.x, origin.y, origin.x + w, origin.y + h)
-        } else if (strokeType == StrokeType.IMAGE && points.size >= 2) {
+        } else if ((strokeType == StrokeType.IMAGE || strokeType == StrokeType.VIDEO || strokeType == StrokeType.WEB_EMBED) && points.size >= 2) {
             val p1 = points.first()
             val p2 = points.last()
             Rect(minOf(p1.x, p2.x), minOf(p1.y, p2.y), maxOf(p1.x, p2.x), maxOf(p1.y, p2.y))
+        } else if (strokeType == StrokeType.WEB_EMBED || strokeType == StrokeType.VIDEO) {
+            val origin = points.first()
+            val w = if (strokeType == StrokeType.VIDEO) 640f else 780f
+            val h = if (strokeType == StrokeType.VIDEO) 360f else 480f
+            Rect(origin.x, origin.y, origin.x + w, origin.y + h)
         } else if (strokeType == StrokeType.FRAME && points.size >= 2) {
             val p1 = points.first()
             val p2 = points.last()
@@ -58,6 +61,12 @@ data class Stroke(
     }
 }
 
+fun Stroke.isPlacedMedia(): Boolean {
+    return strokeType == StrokeType.IMAGE ||
+        strokeType == StrokeType.VIDEO ||
+        strokeType == StrokeType.WEB_EMBED
+}
+
 enum class StrokeType {
     PEN,
     PENCIL,
@@ -73,5 +82,6 @@ enum class StrokeType {
     STICKY_NOTE,
     FRAME,
     WEB_EMBED,
-    IMAGE
+    IMAGE,
+    VIDEO
 }

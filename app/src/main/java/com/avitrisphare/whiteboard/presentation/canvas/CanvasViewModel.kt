@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
@@ -21,6 +22,7 @@ import com.avitrisphare.whiteboard.data.local.toDto
 import com.avitrisphare.whiteboard.domain.model.CanvasBackground
 import com.avitrisphare.whiteboard.domain.model.Stroke
 import com.avitrisphare.whiteboard.domain.model.StrokeType
+import com.avitrisphare.whiteboard.domain.model.isPlacedMedia
 import com.avitrisphare.whiteboard.domain.repository.NoteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -58,7 +60,17 @@ enum class WhiteboardTool(val label: String, val shortcut: String) {
     RULER("Ruler", "U"),
     LASER("Laser pointer", "K"),
     BUCKET_FILL("Bucket fill", "B"),
-    LASSO("Lasso selection", "")
+    LASSO("Lasso selection", ""),
+    SPOTLIGHT("Spotlight", ""),
+    SHADE("Screen shade", ""),
+    MAGNIFIER("Magnifier", "")
+}
+
+enum class EraserMode {
+    /** Removes ink inside a circle, splitting the rest of the stroke. */
+    STANDARD,
+    /** Removes every stroke or object the circle touches. */
+    SMART
 }
 
 data class CanvasState(
@@ -74,6 +86,8 @@ data class CanvasState(
     val laserPoints: List<Offset> = emptyList(),
     val selectedStrokeIds: Set<String> = emptySet(),
     val isEraser: Boolean = false,
+    val eraserMode: EraserMode = EraserMode.STANDARD,
+    val eraserSize: Float = 28f,
     val isHighlighter: Boolean = false,
     val isShapeMode: Boolean = false,
     val scale: Float = 1f,
@@ -220,7 +234,7 @@ class CanvasViewModel @Inject constructor(
     fun selectStrokeAt(worldPoint: Offset, isMulti: Boolean = false): Boolean {
         val strokes = _state.value.strokes
         val hit = strokes.lastOrNull { stroke ->
-            if (stroke.strokeType in listOf(StrokeType.STICKY_NOTE, StrokeType.TEXT, StrokeType.WEB_EMBED, StrokeType.IMAGE, StrokeType.FRAME)) {
+            if (stroke.isPlacedMedia() || stroke.strokeType in listOf(StrokeType.STICKY_NOTE, StrokeType.TEXT, StrokeType.FRAME)) {
                 stroke.bounds.contains(worldPoint)
             } else {
                 CanvasTransform.strokeIntersectsPoint(stroke, worldPoint, thresholdRadius = 16f)
@@ -343,18 +357,55 @@ class CanvasViewModel @Inject constructor(
 
     fun addImage(uriString: String, worldPoint: Offset) {
         if (uriString.isBlank()) return
+        viewModelScope.launch {
+            val stored = withContext(Dispatchers.IO) { storeImage(uriString) } ?: return@launch
+            placeMedia(StrokeType.IMAGE, worldPoint, 520f, 360f, imageUri = stored)
+        }
+    }
+
+    fun addLocalVideo(uriString: String, worldPoint: Offset) {
+        if (uriString.isBlank()) return
+        try {
+            context.contentResolver.takePersistableUriPermission(
+                Uri.parse(uriString),
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (_: Exception) {
+        }
+        placeMedia(StrokeType.VIDEO, worldPoint, 640f, 360f, imageUri = uriString)
+    }
+
+    fun addYouTube(raw: String, worldPoint: Offset) {
+        val embed = youtubeEmbedUrl(raw) ?: return
+        placeMedia(StrokeType.VIDEO, worldPoint, 640f, 360f, text = embed)
+    }
+
+    fun addWebEmbed(url: String, worldPoint: Offset) {
+        val normalized = normalizeWebUrl(url)
+        placeMedia(StrokeType.WEB_EMBED, worldPoint, 780f, 480f, text = normalized)
+    }
+
+    private fun placeMedia(
+        type: StrokeType,
+        worldPoint: Offset,
+        width: Float,
+        height: Float,
+        imageUri: String = "",
+        text: String = ""
+    ) {
         saveToUndoStack()
-        val endPoint = Offset(worldPoint.x + 300f, worldPoint.y + 220f)
         val newStroke = Stroke(
-            points = listOf(worldPoint, endPoint),
-            strokeType = StrokeType.IMAGE,
-            imageUri = uriString
+            points = listOf(worldPoint, Offset(worldPoint.x + width, worldPoint.y + height)),
+            strokeType = type,
+            imageUri = imageUri,
+            text = text,
+            colorValue = 0xFF6366F1.toInt()
         )
         _state.update { s ->
             s.copy(
                 strokes = s.strokes + newStroke,
                 selectedStrokeIds = setOf(newStroke.id),
-                currentTool = WhiteboardTool.SELECT,
+                currentTool = if (s.isToolLocked) s.currentTool else WhiteboardTool.SELECT,
                 canUndo = true,
                 canRedo = false
             )
@@ -363,26 +414,44 @@ class CanvasViewModel @Inject constructor(
         scheduleSave()
     }
 
-    fun addWebEmbed(url: String, worldPoint: Offset) {
-        if (url.isBlank()) return
-        saveToUndoStack()
-        val newStroke = Stroke(
-            points = listOf(worldPoint),
-            strokeType = StrokeType.WEB_EMBED,
-            text = url,
-            colorValue = 0xFF6366F1.toInt()
-        )
-        _state.update { s ->
-            s.copy(
-                strokes = s.strokes + newStroke,
-                selectedStrokeIds = setOf(newStroke.id),
-                currentTool = WhiteboardTool.SELECT,
-                canUndo = true,
-                canRedo = false
-            )
+    private fun storeImage(uriString: String): String? {
+        return try {
+            val bitmap = decodeSampled(uriString, 1600) ?: return null
+            val dir = File(context.filesDir, "media")
+            dir.mkdirs()
+            val file = File(dir, "img_${System.currentTimeMillis()}.jpg")
+            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 86, it) }
+            bitmap.recycle()
+            file.absolutePath
+        } catch (_: Exception) {
+            null
         }
-        redoStack.clear()
-        scheduleSave()
+    }
+
+    private fun decodeSampled(uriString: String, maxEdge: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        openImage(uriString)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (bounds.outWidth / sample > maxEdge * 2 || bounds.outHeight / sample > maxEdge * 2) {
+            sample *= 2
+        }
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        return openImage(uriString)?.use { BitmapFactory.decodeStream(it, null, opts) }
+    }
+
+    private fun openImage(uriString: String): java.io.InputStream? {
+        return when {
+            uriString.startsWith("/") -> File(uriString).inputStream()
+            uriString.startsWith("http://") || uriString.startsWith("https://") -> {
+                val connection = java.net.URL(uriString).openConnection()
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0")
+                connection.connectTimeout = 12000
+                connection.readTimeout = 12000
+                connection.getInputStream()
+            }
+            else -> context.contentResolver.openInputStream(Uri.parse(uriString))
+        }
     }
 
     fun updateStrokeText(id: String, newText: String) {
@@ -566,6 +635,26 @@ class CanvasViewModel @Inject constructor(
         scheduleSave()
     }
 
+    fun setEraserMode(mode: EraserMode) {
+        _state.update {
+            it.copy(
+                eraserMode = mode,
+                currentTool = WhiteboardTool.ERASER,
+                isEraser = true
+            )
+        }
+    }
+
+    fun setEraserSize(size: Float) {
+        _state.update {
+            it.copy(
+                eraserSize = size.coerceIn(8f, 80f),
+                currentTool = WhiteboardTool.ERASER,
+                isEraser = true
+            )
+        }
+    }
+
     fun toggleEraser() {
         _state.update { it.copy(isEraser = !it.isEraser, isHighlighter = false, isShapeMode = false) }
     }
@@ -635,10 +724,32 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun clearCanvas() {
+        if (_state.value.strokes.isEmpty()) return
         saveToUndoStack()
         _state.update { s ->
             s.copy(
                 strokes = emptyList(),
+                currentStroke = null,
+                selectedStrokeIds = emptySet(),
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    /**
+     * Replaces the current page after an eraser gesture.
+     * One undo step restores the page as it was before the gesture.
+     */
+    fun commitErasedStrokes(updated: List<Stroke>) {
+        if (updated === _state.value.strokes) return
+        saveToUndoStack()
+        _state.update { s ->
+            s.copy(
+                strokes = updated,
+                currentStroke = null,
                 canUndo = true,
                 canRedo = false
             )

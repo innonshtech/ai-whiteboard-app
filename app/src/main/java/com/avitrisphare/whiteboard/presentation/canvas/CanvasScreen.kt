@@ -8,6 +8,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.net.Uri
+import android.view.MotionEvent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -48,6 +49,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -132,7 +136,9 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
@@ -145,9 +151,15 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -170,8 +182,11 @@ import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.sin
 
-private class LiveInk {
-    var stroke: Stroke? = null
+private class EraserSession {
+    var active: Boolean = false
+    var changed: Boolean = false
+    var strokes: List<Stroke> = emptyList()
+    var cursor: Offset? = null
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -363,72 +378,7 @@ fun DrawScope.renderStroke(
                 )
             }
         }
-        StrokeType.IMAGE -> {
-            if (pointsList.size >= 2 && stroke.imageUri.isNotEmpty()) {
-                val p1 = pointsList.first()
-                val p2 = pointsList.last()
-                val left = minOf(p1.x, p2.x)
-                val top = minOf(p1.y, p2.y)
-                val width = kotlin.math.abs(p2.x - p1.x).toInt().coerceAtLeast(10)
-                val height = kotlin.math.abs(p2.y - p1.y).toInt().coerceAtLeast(10)
-
-                try {
-                    val uri = Uri.parse(stroke.imageUri)
-                    val input: InputStream? = context.contentResolver.openInputStream(uri)
-                    val bmp = BitmapFactory.decodeStream(input)
-                    input?.close()
-                    if (bmp != null) {
-                        val composeBmp = bmp.asImageBitmap()
-                        drawImage(
-                            image = composeBmp,
-                            dstOffset = IntOffset(left.toInt(), top.toInt()),
-                            dstSize = IntSize(width, height)
-                        )
-                    }
-                } catch (e: Exception) {
-                    drawRoundRect(
-                        color = Color(0xFF1E293B),
-                        topLeft = Offset(left, top),
-                        size = Size(width.toFloat(), height.toFloat()),
-                        cornerRadius = CornerRadius(8f, 8f)
-                    )
-                }
-            }
-        }
-        StrokeType.WEB_EMBED -> {
-            val origin = pointsList.first()
-            val w = 280f
-            val h = 130f
-            drawRoundRect(
-                color = Color(0xFF1E1E2E),
-                topLeft = origin,
-                size = Size(w, h),
-                cornerRadius = CornerRadius(12f, 12f)
-            )
-            drawRoundRect(
-                color = Color(0xFF6366F1),
-                topLeft = origin,
-                size = Size(w, h),
-                cornerRadius = CornerRadius(12f, 12f),
-                style = DrawStroke(width = 1.5f)
-            )
-            drawContext.canvas.nativeCanvas.apply {
-                val titlePaint = Paint().apply {
-                    color = 0xFFFFFFFF.toInt()
-                    textSize = 15f
-                    isAntiAlias = true
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                }
-                val urlPaint = Paint().apply {
-                    color = 0xFF818CF8.toInt()
-                    textSize = 12f
-                    isAntiAlias = true
-                }
-                drawText("🌐 Web Embed", origin.x + 16f, origin.y + 36f, titlePaint)
-                val urlText = stroke.text.ifEmpty { "https://..." }
-                drawText(urlText.take(35), origin.x + 16f, origin.y + 70f, urlPaint)
-            }
-        }
+        StrokeType.IMAGE, StrokeType.VIDEO, StrokeType.WEB_EMBED -> Unit
         StrokeType.STICKY_NOTE -> {
             val origin = pointsList.first()
             val w = 220f
@@ -862,6 +812,7 @@ fun BackgroundSwatch(type: CanvasBackground, isSelected: Boolean, onClick: () ->
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun CanvasScreen(
     noteId: String,
@@ -898,6 +849,24 @@ fun CanvasScreen(
     var canvasScale by remember { mutableFloatStateOf(1f) }
     val liveInkTick = remember { mutableIntStateOf(0) }
     val liveInk = remember { LiveInk() }
+    val eraserTick = remember { mutableIntStateOf(0) }
+    val eraserSession = remember { EraserSession() }
+    var boardStage by remember { mutableStateOf<BoardStageView?>(null) }
+    var shadeFromTop by remember { mutableStateOf(true) }
+    var shadeEdge by remember { mutableFloatStateOf(0.4f) }
+    var spotlightCenter by remember { mutableStateOf<Offset?>(null) }
+    var spotlightRadius by remember { mutableFloatStateOf(150f) }
+    var showImageSearch by remember { mutableStateOf(false) }
+    var showYouTubeDialog by remember { mutableStateOf(false) }
+    var imageQuery by remember { mutableStateOf("") }
+    var imageSearchTerm by remember { mutableStateOf("") }
+    var youtubeQuery by remember { mutableStateOf("") }
+    val composeView = LocalView.current
+    val touchContacts = remember(composeView) { TouchContacts(composeView) }
+    val xdpi = remember {
+        val metrics = context.resources.displayMetrics
+        if (metrics.xdpi > 50f) metrics.xdpi else metrics.densityDpi.toFloat()
+    }
     var canvasOffsetX by remember { mutableFloatStateOf(0f) }
     var canvasOffsetY by remember { mutableFloatStateOf(0f) }
     var canvasSize by remember { mutableStateOf(Size.Zero) }
@@ -906,11 +875,7 @@ fun CanvasScreen(
     var rulerCenter by remember { mutableStateOf<Offset?>(null) }
     var rulerRotationDeg by remember { mutableFloatStateOf(0f) }
     var rulerLength by remember { mutableFloatStateOf(360f) }
-    val rulerPxPerCm = remember {
-        val metrics = context.resources.displayMetrics
-        val xdpi = if (metrics.xdpi > 50f) metrics.xdpi else metrics.densityDpi.toFloat()
-        xdpi / 2.54f
-    }
+    val rulerPxPerCm = remember(xdpi) { xdpi / 2.54f }
 
     LaunchedEffect(state.currentTool, canvasSize) {
         if (state.currentTool == WhiteboardTool.RULER && rulerCenter == null) {
@@ -931,6 +896,25 @@ fun CanvasScreen(
             )
             viewModel.addImage(it.toString(), centerWorld)
         }
+    }
+
+    val videoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        try {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (_: Exception) {
+        }
+        val centerWorld = CanvasTransform.screenToWorld(
+            screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
+            scale = canvasScale,
+            offset = Offset(canvasOffsetX, canvasOffsetY)
+        )
+        viewModel.addLocalVideo(uri.toString(), centerWorld)
     }
 
     LaunchedEffect(state.scale, state.offsetX, state.offsetY) {
@@ -971,6 +955,16 @@ fun CanvasScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .onSizeChanged { canvasSize = Size(it.width.toFloat(), it.height.toFloat()) }
+                .pointerInteropFilter { event ->
+                    touchContacts.record(event)
+                    val stage = boardStage
+                    if (stage != null && stage.shouldDeliverToMedia(event, viewModel.state.value.currentTool)) {
+                        stage.deliverToMedia(event)
+                        true
+                    } else {
+                        false
+                    }
+                }
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onDoubleTap = {
@@ -989,12 +983,37 @@ fun CanvasScreen(
                     state.currentTool,
                     state.selectedColor,
                     state.strokeWidth,
+                    state.eraserMode,
+                    state.eraserSize,
                     state.isToolLocked,
                     state.selectedStrokeIds,
                     state.isDrawToShapeEnabled
                 ) {
                     awaitEachGesture {
-                        val down = awaitFirstDown()
+                        fun PointerInputChange.rejectedPalm(): Boolean {
+                            val tool = touchContacts.toolType(id)
+                            val stylus = tool == MotionEvent.TOOL_TYPE_STYLUS ||
+                                tool == MotionEvent.TOOL_TYPE_ERASER ||
+                                type == PointerType.Stylus ||
+                                type == PointerType.Eraser
+                            return isPalmContact(
+                                touchMajorPx = touchContacts.majorPx(id),
+                                xdpi = xdpi,
+                                stylusActive = touchContacts.stylusActive || stylus,
+                                isStylus = stylus
+                            )
+                        }
+                        var down = awaitFirstDown(requireUnconsumed = false)
+                        while (down.rejectedPalm()) {
+                            down.consume()
+                            val skipped = awaitPointerEvent()
+                            val next = skipped.changes.firstOrNull { it.pressed && !it.rejectedPalm() }
+                            if (next != null) {
+                                down = next
+                                break
+                            }
+                            if (skipped.changes.none { it.pressed }) return@awaitEachGesture
+                        }
                         val downWorld = CanvasTransform.screenToWorld(
                             screenPoint = down.position,
                             scale = canvasScale,
@@ -1006,7 +1025,9 @@ fun CanvasScreen(
                         val inkPressures = ArrayList<Float>(256)
                         inkPoints.add(downWorld)
                         inkPressures.add(down.inkPressure())
+                        if (state.currentTool in WRITING_TOOLS) liveInk.begin(downWorld)
                         var wasMultiTouch = false
+                        var transformMoved = false
                         val writingNow = state.currentTool in WRITING_TOOLS
                         val inkTemplate = if (writingNow) {
                             Stroke(
@@ -1022,11 +1043,18 @@ fun CanvasScreen(
                         }
                         fun publishInk() {
                             val template = inkTemplate ?: return
-                            liveInk.stroke = template.copy(
-                                points = ArrayList(inkPoints),
-                                pointPressures = ArrayList(inkPressures)
-                            )
+                            val last = inkPoints.lastOrNull()
+                            val dx = touchContacts.predictDx
+                            val dy = touchContacts.predictDy
+                            liveInk.predicted = if (last == null || (dx == 0f && dy == 0f)) {
+                                null
+                            } else {
+                                val safeScale = canvasScale.coerceAtLeast(0.001f)
+                                Offset(last.x + dx / safeScale, last.y + dy / safeScale)
+                            }
+                            liveInk.stroke = template
                             liveInkTick.intValue = liveInkTick.intValue + 1
+                            boardStage?.setLiveInk(liveInk)
                         }
                         fun appendInk(screen: Offset, pressure: Float) {
                             val world = CanvasTransform.screenToWorld(
@@ -1038,10 +1066,33 @@ fun CanvasScreen(
                             if (last != null) {
                                 val dx = (world.x - last.x) * canvasScale
                                 val dy = (world.y - last.y) * canvasScale
-                                if (dx * dx + dy * dy < 0.49f) return
+                                if (dx * dx + dy * dy < 1.5625f) return
                             }
                             inkPoints.add(world)
                             inkPressures.add(pressure)
+                            liveInk.extend(world)
+                        }
+                        fun eraseSample(world: Offset, screen: Offset) {
+                            if (!eraserSession.active) {
+                                eraserSession.active = true
+                                eraserSession.changed = false
+                                eraserSession.strokes = viewModel.state.value.strokes
+                            }
+                            val latest = viewModel.state.value
+                            val radius = latest.eraserSize / canvasScale.coerceAtLeast(0.001f)
+                            val updated = StrokeEraser.apply(
+                                eraserSession.strokes,
+                                world,
+                                radius,
+                                latest.eraserMode
+                            )
+                            if (updated !== eraserSession.strokes) {
+                                eraserSession.strokes = updated
+                                eraserSession.changed = true
+                            }
+                            eraserSession.cursor = screen
+                            eraserTick.intValue = eraserTick.intValue + 1
+                            boardStage?.showGestureStrokes(eraserSession.strokes)
                         }
                         var isDraggingSelection = false
                         var rulerZone = RulerZone.NONE
@@ -1079,10 +1130,13 @@ fun CanvasScreen(
                                 textInputValue = ""
                                 showStickyInputDialog = true
                             }
-                            WhiteboardTool.ERASER -> {
-                                val eraseRadius = 24f / canvasScale.coerceAtLeast(0.001f)
-                                viewModel.eraseAt(downWorld, eraseRadius)
+                            WhiteboardTool.ERASER -> eraseSample(downWorld, down.position)
+                            WhiteboardTool.SPOTLIGHT -> spotlightCenter = down.position
+                            WhiteboardTool.SHADE -> {
+                                val height = canvasSize.height.coerceAtLeast(1f)
+                                shadeEdge = (down.position.y / height).coerceIn(0.05f, 0.95f)
                             }
+                            WhiteboardTool.MAGNIFIER -> boardStage?.showMagnifier(down.position.x, down.position.y)
                             WhiteboardTool.PEN,
                             WhiteboardTool.PENCIL,
                             WhiteboardTool.MARKER,
@@ -1161,7 +1215,17 @@ fun CanvasScreen(
 
                         do {
                             val event = awaitPointerEvent()
-                            if (event.changes.size > 1) {
+                            val pressed = event.changes.filter { it.pressed }
+                            val realPressed = pressed.filter { change ->
+                                if (change.rejectedPalm()) {
+                                    change.consume()
+                                    false
+                                } else {
+                                    true
+                                }
+                            }
+                            val pinch = !touchContacts.stylusActive && pressed.size > 1 && realPressed.size > 1
+                            if (pinch) {
                                 wasMultiTouch = true
                                 val zoomChange = event.calculateZoom()
                                 val panChange = event.calculatePan()
@@ -1182,12 +1246,19 @@ fun CanvasScreen(
                                     canvasScale = newScale
                                     canvasOffsetX = newOffset.x
                                     canvasOffsetY = newOffset.y
-                                    viewModel.updateTransform(canvasScale, canvasOffsetX, canvasOffsetY)
+                                    transformMoved = true
+                                    boardStage?.setTransform(canvasScale, canvasOffsetX, canvasOffsetY)
                                 }
                                 event.changes.forEach { it.consume() }
                             } else {
-                                val change = event.changes.first()
-                                if (change.pressed) {
+                                val change = realPressed.firstOrNull { pointer ->
+                                    val tool = touchContacts.toolType(pointer.id)
+                                    tool == MotionEvent.TOOL_TYPE_STYLUS ||
+                                        tool == MotionEvent.TOOL_TYPE_ERASER ||
+                                        pointer.type == PointerType.Stylus ||
+                                        pointer.type == PointerType.Eraser
+                                } ?: realPressed.firstOrNull()
+                                if (change != null) {
                                     val curWorld = CanvasTransform.screenToWorld(
                                         screenPoint = change.position,
                                         scale = canvasScale,
@@ -1199,7 +1270,8 @@ fun CanvasScreen(
                                         val panY = change.position.y - prevPosition.y
                                         canvasOffsetX += panX
                                         canvasOffsetY += panY
-                                        viewModel.updateTransform(canvasScale, canvasOffsetX, canvasOffsetY)
+                                        transformMoved = true
+                                        boardStage?.setTransform(canvasScale, canvasOffsetX, canvasOffsetY)
                                     } else if (state.currentTool == WhiteboardTool.SELECT && isDraggingSelection) {
                                         val prevWorld = CanvasTransform.screenToWorld(
                                             screenPoint = prevPosition,
@@ -1214,8 +1286,14 @@ fun CanvasScreen(
                                     } else if (state.currentTool == WhiteboardTool.LASSO) {
                                         lassoPoints = lassoPoints + curWorld
                                     } else if (state.currentTool == WhiteboardTool.ERASER) {
-                                        val eraseRadius = 24f / canvasScale.coerceAtLeast(0.001f)
-                                        viewModel.eraseAt(curWorld, eraseRadius)
+                                        eraseSample(curWorld, change.position)
+                                    } else if (state.currentTool == WhiteboardTool.SPOTLIGHT) {
+                                        spotlightCenter = change.position
+                                    } else if (state.currentTool == WhiteboardTool.SHADE) {
+                                        val height = canvasSize.height.coerceAtLeast(1f)
+                                        shadeEdge = (change.position.y / height).coerceIn(0.05f, 0.95f)
+                                    } else if (state.currentTool == WhiteboardTool.MAGNIFIER) {
+                                        boardStage?.showMagnifier(change.position.x, change.position.y)
                                     } else if (writingNow) {
                                         change.pastPositions().forEach { appendInk(it, change.inkPressure()) }
                                         appendInk(change.position, change.inkPressure())
@@ -1285,6 +1363,21 @@ fun CanvasScreen(
 
                         viewModel.endSelectionMove()
 
+                        if (state.currentTool == WhiteboardTool.MAGNIFIER) {
+                            boardStage?.hideMagnifier()
+                        }
+                        if (transformMoved) {
+                            viewModel.updateTransform(canvasScale, canvasOffsetX, canvasOffsetY)
+                        }
+                        if (eraserSession.active) {
+                            boardStage?.clearGestureStrokes()
+                            if (eraserSession.changed) viewModel.commitErasedStrokes(eraserSession.strokes)
+                            eraserSession.active = false
+                            eraserSession.changed = false
+                            eraserSession.cursor = null
+                            eraserTick.intValue = eraserTick.intValue + 1
+                        }
+
                         // Release Touch
                         if (!wasMultiTouch) {
                             if (state.currentTool == WhiteboardTool.LASSO) {
@@ -1293,8 +1386,6 @@ fun CanvasScreen(
                                 if (!state.isToolLocked) {
                                     viewModel.setTool(WhiteboardTool.SELECT)
                                 }
-                            } else if (state.currentTool == WhiteboardTool.ERASER) {
-                                viewModel.finishErasing()
                             } else if (writingNow && inkPoints.isNotEmpty()) {
                                 val finished = if (state.currentTool == WhiteboardTool.PEN && state.isDrawToShapeEnabled && inkPoints.size >= 5) {
                                     viewModel.applyShapeRecognition(inkPoints) ?: inkTemplate!!.copy(
@@ -1309,6 +1400,7 @@ fun CanvasScreen(
                                 }
                                 liveInk.stroke = null
                                 liveInkTick.intValue = liveInkTick.intValue + 1
+                                boardStage?.setLiveInk(null)
                                 viewModel.commitStroke(finished)
                             } else if (state.currentTool in listOf(
                                     WhiteboardTool.RECTANGLE,
@@ -1334,167 +1426,81 @@ fun CanvasScreen(
                     }
                 }
         ) {
-            val bgColor = when (state.canvasBackground) {
-                CanvasBackground.DARK -> Color(0xFF171717)
-                else -> Color.White
-            }
-
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                drawRect(bgColor, size = size)
-
-                val viewportBounds = CanvasTransform.calculateViewportWorldBounds(
-                    viewportSize = size,
-                    scale = canvasScale,
-                    offset = Offset(canvasOffsetX, canvasOffsetY)
-                )
-
+            AndroidView(
+                factory = { context ->
+                    BoardStageView(context).also { boardStage = it }
+                },
+                update = { stage ->
+                    val page = viewModel.state.value
+                    stage.syncPage(
+                        strokes = if (eraserSession.active) eraserSession.strokes else page.strokes,
+                        background = page.canvasBackground,
+                        showGrid = page.showGrid,
+                        dark = page.isDarkCanvas,
+                        scale = page.scale,
+                        offsetX = page.offsetX,
+                        offsetY = page.offsetY,
+                        selected = page.selectedStrokeIds
+                    )
+                    stage.currentStroke = page.currentStroke
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        compositingStrategy = if (state.currentTool == WhiteboardTool.SPOTLIGHT) {
+                            CompositingStrategy.Offscreen
+                        } else {
+                            CompositingStrategy.Auto
+                        }
+                    }
+            ) {
+                if (state.currentTool == WhiteboardTool.SPOTLIGHT) {
+                    val center = spotlightCenter ?: Offset(size.width / 2f, size.height / 2f)
+                    drawRect(Color(0xB3000000))
+                    drawCircle(
+                        color = Color.Transparent,
+                        radius = spotlightRadius,
+                        center = center,
+                        blendMode = BlendMode.Clear
+                    )
+                    drawCircle(
+                        color = Color.White,
+                        radius = spotlightRadius,
+                        center = center,
+                        style = DrawStroke(width = 2f)
+                    )
+                }
+                if (state.currentTool == WhiteboardTool.SHADE) {
+                    val edge = (shadeEdge * size.height).coerceIn(0f, size.height)
+                    val shade = Color(0xF21B1F2A)
+                    if (shadeFromTop) {
+                        drawRect(shade, size = Size(size.width, edge))
+                    } else {
+                        drawRect(shade, topLeft = Offset(0f, edge), size = Size(size.width, size.height - edge))
+                    }
+                    drawLine(
+                        color = Color(0xFF8B5CF6),
+                        start = Offset(0f, edge),
+                        end = Offset(size.width, edge),
+                        strokeWidth = 6f
+                    )
+                }
                 withTransform({
                     translate(canvasOffsetX, canvasOffsetY)
                     scale(canvasScale, canvasScale, pivot = Offset.Zero)
                 }) {
-                    val gridColor = if (state.canvasBackground == CanvasBackground.DARK) Color(0xFF2E2E2E) else Color(0xFFD5D8DE)
-                    val spacing = CanvasTransform.getAdaptiveGridSpacing(80f, canvasScale)
-
-                    when (state.canvasBackground) {
-                        CanvasBackground.LINED -> {
-                            val startY = floor(viewportBounds.top / spacing) * spacing
-                            val endY = ceil(viewportBounds.bottom / spacing) * spacing
-                            var y = startY
-                            val lineThickness = 1f / canvasScale.coerceAtLeast(0.5f)
-                            while (y <= endY) {
-                                drawLine(
-                                    color = gridColor,
-                                    start = Offset(viewportBounds.left, y),
-                                    end = Offset(viewportBounds.right, y),
-                                    strokeWidth = lineThickness
-                                )
-                                y += spacing
-                            }
-                        }
-                        CanvasBackground.DOTTED -> {
-                            val startX = floor(viewportBounds.left / spacing) * spacing
-                            val endX = ceil(viewportBounds.right / spacing) * spacing
-                            val startY = floor(viewportBounds.top / spacing) * spacing
-                            val endY = ceil(viewportBounds.bottom / spacing) * spacing
-                            val dotRadius = 1.25f / canvasScale.coerceAtLeast(0.5f)
-                            var y = startY
-                            while (y <= endY) {
-                                var x = startX
-                                while (x <= endX) {
-                                    drawCircle(
-                                        color = gridColor,
-                                        radius = dotRadius,
-                                        center = Offset(x, y)
-                                    )
-                                    x += spacing
-                                }
-                                y += spacing
-                            }
-                        }
-                        CanvasBackground.GRID -> {
-                            val startX = floor(viewportBounds.left / spacing) * spacing
-                            val endX = ceil(viewportBounds.right / spacing) * spacing
-                            val startY = floor(viewportBounds.top / spacing) * spacing
-                            val endY = ceil(viewportBounds.bottom / spacing) * spacing
-                            val lineThickness = 1f / canvasScale.coerceAtLeast(0.5f)
-                            var x = startX
-                            while (x <= endX) {
-                                drawLine(
-                                    color = gridColor,
-                                    start = Offset(x, viewportBounds.top),
-                                    end = Offset(x, viewportBounds.bottom),
-                                    strokeWidth = lineThickness
-                                )
-                                x += spacing
-                            }
-                            var y = startY
-                            while (y <= endY) {
-                                drawLine(
-                                    color = gridColor,
-                                    start = Offset(viewportBounds.left, y),
-                                    end = Offset(viewportBounds.right, y),
-                                    strokeWidth = lineThickness
-                                )
-                                y += spacing
-                            }
-                        }
-                        else -> {}
-                    }
-
-                    if (state.showGrid && state.canvasBackground != CanvasBackground.GRID) {
-                        val startX = floor(viewportBounds.left / spacing) * spacing
-                        val endX = ceil(viewportBounds.right / spacing) * spacing
-                        val startY = floor(viewportBounds.top / spacing) * spacing
-                        val endY = ceil(viewportBounds.bottom / spacing) * spacing
-                        val lineThickness = 1f / canvasScale.coerceAtLeast(0.5f)
-                        val overlay = if (state.isDarkCanvas) Color(0xFF3A3A3A) else Color(0xFFC5C8D0)
-                        var x = startX
-                        while (x <= endX) {
-                            drawLine(
-                                color = overlay,
-                                start = Offset(x, viewportBounds.top),
-                                end = Offset(x, viewportBounds.bottom),
-                                strokeWidth = lineThickness
-                            )
-                            x += spacing
-                        }
-                        var y = startY
-                        while (y <= endY) {
-                            drawLine(
-                                color = overlay,
-                                start = Offset(viewportBounds.left, y),
-                                end = Offset(viewportBounds.right, y),
-                                strokeWidth = lineThickness
-                            )
-                            y += spacing
-                        }
-                    }
-
-                    // Render visible strokes
-                    val visibleStrokes = state.strokes.filter { stroke ->
-                        stroke.bounds.overlaps(viewportBounds)
-                    }
-
-                    visibleStrokes.forEach { stroke ->
-                        val isSelected = stroke.id in state.selectedStrokeIds
-                        renderStroke(context, stroke, canvasScale, isSelected)
-                    }
-
-                    val liveTick = liveInkTick.intValue
-                    if (liveTick >= 0) {
-                        liveInk.stroke?.let { activeStroke ->
-                            if (activeStroke.points.isNotEmpty()) {
-                                renderStroke(context, activeStroke, canvasScale, false)
-                            }
-                        }
-                    }
-
-                    state.currentStroke?.let { activeStroke ->
-                        if (activeStroke.points.isNotEmpty()) {
-                            renderStroke(context, activeStroke, canvasScale, false)
-                        }
-                    }
-
                     if (state.laserPoints.isNotEmpty()) {
                         val center = state.laserPoints.last()
                         val radius = 10f / canvasScale.coerceAtLeast(0.5f)
-                        drawCircle(
-                            color = Color(0x55FF2A2A),
-                            radius = radius * 2.2f,
-                            center = center
-                        )
-                        drawCircle(
-                            color = Color(0xFFFF2A2A),
-                            radius = radius,
-                            center = center
-                        )
+                        drawCircle(Color(0x55FF2A2A), radius * 2.2f, center)
+                        drawCircle(Color(0xFFFF2A2A), radius, center)
                     }
-
-                    // Render Lasso Loop
                     if (lassoPoints.size >= 2) {
-                        val lassoPath = lassoPoints.toSmoothedPath()
                         drawPath(
-                            path = lassoPath,
+                            path = lassoPoints.toSmoothedPath(),
                             color = Color(0xFF6366F1),
                             style = DrawStroke(
                                 width = 1.5f / canvasScale.coerceAtLeast(0.5f),
@@ -1503,7 +1509,15 @@ fun CanvasScreen(
                         )
                     }
                 }
-
+                val eraserCursor = eraserSession.cursor
+                if (state.currentTool == WhiteboardTool.ERASER && eraserCursor != null) {
+                    drawCircle(
+                        color = Color(0xAA374151),
+                        radius = state.eraserSize,
+                        center = eraserCursor,
+                        style = DrawStroke(width = 1.5f)
+                    )
+                }
                 val liveRulerCenter = rulerCenter
                 if (state.currentTool == WhiteboardTool.RULER && liveRulerCenter != null) {
                     drawRuler(
@@ -1534,6 +1548,16 @@ fun CanvasScreen(
             onHelp = { showHelpDialog = true },
             onClear = { showClearDialog = true },
             onRename = { showEditTitleDialog = true },
+            onSearchImages = { showImageSearch = true },
+            onInsertVideo = { videoPickerLauncher.launch(arrayOf("video/*")) },
+            onYouTube = {
+                youtubeQuery = ""
+                showYouTubeDialog = true
+            },
+            shadeFromTop = shadeFromTop,
+            onToggleShadeSide = { shadeFromTop = !shadeFromTop },
+            spotlightRadius = spotlightRadius,
+            onSpotlightRadius = { spotlightRadius = it },
             onWebEmbed = {
                 textInputValue = ""
                 val centerWorld = CanvasTransform.screenToWorld(
@@ -1994,6 +2018,9 @@ fun CanvasScreen(
                         "Add Sticky Note" to { showCommandPalette = false; showStickyInputDialog = true },
                         "Toggle Laser Pointer" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.LASER) },
                         "Enable Ruler" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.RULER) },
+                        "Standard eraser" to { showCommandPalette = false; viewModel.setEraserMode(EraserMode.STANDARD) },
+                        "Smart eraser" to { showCommandPalette = false; viewModel.setEraserMode(EraserMode.SMART) },
+                        "Clear page" to { showCommandPalette = false; showClearDialog = true },
                         "Export as PNG" to { showCommandPalette = false; viewModel.exportAsPng(context) { exportedUri = it; showExportDialog = true } },
                         "Reset Zoom (100%)" to { showCommandPalette = false; viewModel.resetTransform() },
                         "Fit to Content" to { showCommandPalette = false; viewModel.fitToContent(canvasSize.width, canvasSize.height) }
@@ -2024,7 +2051,7 @@ fun CanvasScreen(
             title = { Text("Whiteboard Guide & Shortcuts", color = Color(0xFF1F2937), fontWeight = FontWeight.Bold) },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    Text("• V: Selection tool\n• H: Hand (Pan tool)\n• R: Rectangle\n• D: Diamond\n• O: Circle\n• A: Arrow\n• L: Line\n• P: Pen, plus pencil, marker, highlighter, and brush\n• T: Text placement\n• N: Sticky Note\n• E: Eraser\n• K: Laser Pointer\n• B: Bucket Fill\n• 9: Insert Image", fontSize = 13.sp, color = Color(0xFF4B5563), lineHeight = 20.sp)
+                    Text("• V: Selection tool\n• H: Hand (Pan tool)\n• R: Rectangle\n• D: Diamond\n• O: Circle\n• A: Arrow\n• L: Line\n• P: Pen, plus pencil, marker, highlighter, and brush\n• T: Text placement\n• N: Sticky Note\n• E: Eraser. Standard erases inside the circle, Smart removes the whole stroke. Palm touches wider than 3 cm are ignored while a stylus is down\n• K: Laser Pointer\n• B: Bucket Fill\n• 9: Insert Image", fontSize = 13.sp, color = Color(0xFF4B5563), lineHeight = 20.sp)
                     Spacer(modifier = Modifier.height(10.dp))
                     Text("Pinch with 2 fingers to zoom from 10% to 500%. Two fingers also pan. Ctrl+Z undoes, Ctrl+Y redoes. Double tap fits the page.", fontSize = 12.sp, color = Color(0xFF6B7280))
                 }
@@ -2036,6 +2063,120 @@ fun CanvasScreen(
             },
             containerColor = Color.White
         )
+    }
+
+    if (showImageSearch) {
+        Dialog(onDismissRequest = { showImageSearch = false }) {
+            Surface(shape = RoundedCornerShape(16.dp), color = Color.White, modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Google Images", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+                    Text(
+                        "Search stays in this window. Tap a picture to paste it on the board.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF6B7280)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = imageQuery,
+                        onValueChange = { imageQuery = it },
+                        singleLine = true,
+                        placeholder = { Text("Search images") },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { imageSearchTerm = imageQuery.trim() }),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextButton(onClick = { imageSearchTerm = imageQuery.trim() }) {
+                        Text("Search in this window", color = Color(0xFF5B5BD6))
+                    }
+                    AndroidView(
+                        factory = { viewContext ->
+                            android.webkit.WebView(viewContext).apply {
+                                browseInsideApp(onImage = { raw ->
+                                    val image = googleImageResultUrl(raw) ?: raw
+                                    if (image.startsWith("http://") || image.startsWith("https://")) {
+                                        val centerWorld = CanvasTransform.screenToWorld(
+                                            screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
+                                            scale = canvasScale,
+                                            offset = Offset(canvasOffsetX, canvasOffsetY)
+                                        )
+                                        viewModel.addImage(image, centerWorld)
+                                        showImageSearch = false
+                                    }
+                                })
+                            }
+                        },
+                        update = { web ->
+                            val target = if (imageSearchTerm.isBlank()) {
+                                "https://www.google.com/search?tbm=isch&udm=2"
+                            } else {
+                                googleImageSearchUrl(imageSearchTerm)
+                            }
+                            if (web.tag != target) {
+                                web.tag = target
+                                web.loadUrl(target)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(420.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    if (showYouTubeDialog) {
+        Dialog(onDismissRequest = { showYouTubeDialog = false }) {
+            Surface(shape = RoundedCornerShape(16.dp), color = Color.White, modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("YouTube", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+                    Text("Paste a link or tap a video in the results.", fontSize = 12.sp, color = Color(0xFF6B7280))
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = youtubeQuery,
+                        onValueChange = { youtubeQuery = it },
+                        singleLine = true,
+                        placeholder = { Text("Link or search") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = {
+                        val centerWorld = CanvasTransform.screenToWorld(
+                            screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
+                            scale = canvasScale,
+                            offset = Offset(canvasOffsetX, canvasOffsetY)
+                        )
+                        if (youtubeVideoId(youtubeQuery) != null) {
+                            viewModel.addYouTube(youtubeQuery, centerWorld)
+                            showYouTubeDialog = false
+                        }
+                    }) { Text("Place link on board") }
+                    AndroidView(
+                        factory = { viewContext ->
+                            android.webkit.WebView(viewContext).apply {
+                                browseInsideApp(onNavigate = { url ->
+                                    if (youtubeVideoId(url) == null) return@browseInsideApp false
+                                    val centerWorld = CanvasTransform.screenToWorld(
+                                        screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
+                                        scale = canvasScale,
+                                        offset = Offset(canvasOffsetX, canvasOffsetY)
+                                    )
+                                    viewModel.addYouTube(url, centerWorld)
+                                    showYouTubeDialog = false
+                                    true
+                                })
+                            }
+                        },
+                        update = { web ->
+                            val target = if (youtubeQuery.isBlank()) "https://m.youtube.com" else youtubeSearchUrl(youtubeQuery)
+                            if (web.tag != target) {
+                                web.tag = target
+                                web.loadUrl(target)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(420.dp)
+                    )
+                }
+            }
+        }
     }
 
     // Web Embed Dialog
@@ -2243,14 +2384,14 @@ fun CanvasScreen(
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
-            title = { Text("Clear Canvas", color = LocalAvitriSphareColors.current.textPrimary) },
-            text = { Text("Remove all strokes? This can be undone.", color = LocalAvitriSphareColors.current.textMuted) },
+            title = { Text("Clear page", color = LocalAvitriSphareColors.current.textPrimary) },
+            text = { Text("Clear everything on this page? You can bring it back with Undo.", color = LocalAvitriSphareColors.current.textMuted) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.clearCanvas()
                     showClearDialog = false
                 }) {
-                    Text("Clear", color = Color(0xFFFF6B6B))
+                    Text("Clear all", color = Color(0xFFFF6B6B))
                 }
             },
             dismissButton = {

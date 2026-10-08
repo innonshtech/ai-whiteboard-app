@@ -78,6 +78,7 @@ dependencies {
     ksp 'androidx.room:room-compiler:2.6.1'
 
     implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'androidx.input:input-motionprediction:1.0.0'
     implementation 'androidx.datastore:datastore-preferences:1.0.0'
 
     debugImplementation 'androidx.compose.ui:ui-tooling'
