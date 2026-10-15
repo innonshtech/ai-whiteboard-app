@@ -133,7 +133,8 @@ object StrokeEraser {
         val right = maxOf(a.x, b.x)
         val bottom = maxOf(a.y, b.y)
         return when (stroke.strokeType) {
-            StrokeType.RECTANGLE, StrokeType.FRAME -> listOf(
+            StrokeType.TRIANGLE -> stroke.points + stroke.points.first()
+            StrokeType.RECTANGLE, StrokeType.SQUARE, StrokeType.FRAME -> listOf(
                 Offset(left, top),
                 Offset(right, top),
                 Offset(right, bottom),
@@ -151,7 +152,7 @@ object StrokeEraser {
                     Offset(cx, top)
                 )
             }
-            StrokeType.CIRCLE -> {
+            StrokeType.CIRCLE, StrokeType.ELLIPSE -> {
                 val cx = (left + right) / 2f
                 val cy = (top + bottom) / 2f
                 val rx = (right - left) / 2f

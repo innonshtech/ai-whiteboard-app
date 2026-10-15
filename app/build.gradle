@@ -20,6 +20,21 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0"
+
+        // Emulator alias for the host machine. A physical panel should set
+        // api.base.url=http://<pc-lan-ip>:3000 in bloom/local.properties
+        // (the webapi .env PORT, default 3000).
+        def apiBaseUrl = "http://10.0.2.2:3000"
+        def localPropsFile = rootProject.file("local.properties")
+        if (localPropsFile.exists()) {
+            def localProps = new Properties()
+            localPropsFile.withInputStream { localProps.load(it) }
+            def overrideUrl = localProps.getProperty("api.base.url")
+            if (overrideUrl != null && !overrideUrl.trim().isEmpty()) {
+                apiBaseUrl = overrideUrl.trim()
+            }
+        }
+        buildConfigField "String", "API_BASE_URL", "\"${apiBaseUrl}\""
     }
 
     buildTypes {
@@ -41,6 +56,7 @@ android {
 
     buildFeatures {
         compose true
+        buildConfig true
     }
 
     ksp {
@@ -78,8 +94,13 @@ dependencies {
     ksp 'androidx.room:room-compiler:2.6.1'
 
     implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'com.google.zxing:core:3.5.3'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'androidx.input:input-motionprediction:1.0.0'
     implementation 'androidx.datastore:datastore-preferences:1.0.0'
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
+    implementation 'com.google.mlkit:text-recognition-devanagari:16.0.1'
+    implementation 'com.google.mlkit:digital-ink-recognition:18.1.0'
 
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'

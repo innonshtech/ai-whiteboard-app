@@ -23,9 +23,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -184,6 +187,7 @@ private fun inkLook(type: StrokeType): InkLook = when (type) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun InkToolPanel(state: CanvasState, viewModel: CanvasViewModel) {
+    var showSmartWrite by remember { mutableStateOf(false) }
     var hex by remember(state.selectedColor) {
         mutableStateOf(String.format("%06X", state.selectedColor and 0xFFFFFF))
     }
@@ -232,6 +236,38 @@ fun InkToolPanel(state: CanvasState, viewModel: CanvasViewModel) {
                         .padding(horizontal = 8.dp, vertical = 6.dp)
                 )
             }
+        }
+        Spacer(Modifier.height(8.dp))
+        val language = smartWriteLanguage(state.smartWriteLanguageTag)
+        Text(
+            text = if (state.smartWriteEnabled) {
+                "Smart Write · ${language.label} · ${state.smartWriteIntervalMs / 1000f}s"
+            } else {
+                "Smart Write"
+            },
+            color = if (state.smartWriteEnabled) Color.White else Color(0xFF1F2937),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (state.smartWriteEnabled) Color(0xFF2563EB) else Color(0xFFF3F4F6))
+                .clickable { showSmartWrite = true }
+                .padding(horizontal = 10.dp, vertical = 8.dp)
+        )
+        Text(
+            "Writes handwriting into editable text after you pause.",
+            fontSize = 11.sp,
+            color = Color(0xFF6B7280),
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        if (showSmartWrite) {
+            SmartWriteLanguageDialog(
+                state = state,
+                onLanguage = { viewModel.setSmartWriteLanguage(it) },
+                onInterval = { viewModel.setSmartWriteInterval(it) },
+                onEnabled = { viewModel.setSmartWriteEnabled(it) },
+                onDismiss = { showSmartWrite = false }
+            )
         }
         Spacer(Modifier.height(8.dp))
         Text("Size", fontSize = 12.sp, color = Color(0xFF6B7280))
@@ -288,6 +324,78 @@ fun InkToolPanel(state: CanvasState, viewModel: CanvasViewModel) {
         RgbSlider("B", blue, Color(0xFF3B82F6)) {
             blue = it
             viewModel.setColor(Color(red, green, it).toArgb())
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SmartWriteLanguageDialog(
+    state: CanvasState,
+    onLanguage: (String) -> Unit,
+    onInterval: (Long) -> Unit,
+    onEnabled: (Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF2C313C))
+                .padding(16.dp)
+                .width(360.dp)
+        ) {
+            Text("Select Language", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            Spacer(Modifier.height(12.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SMART_WRITE_LANGUAGES.forEach { language ->
+                    val selected = state.smartWriteLanguageTag == language.tag
+                    Text(
+                        text = language.label,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selected) Color(0xFF1D4ED8) else Color(0xFF3A4150))
+                            .clickable { onLanguage(language.tag) }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Text("Smart Write Interval", color = Color.White, fontSize = 14.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                listOf(500L to "0.5s", 1000L to "1s", 1500L to "1.5s").forEach { (millis, label) ->
+                    RadioButton(
+                        selected = state.smartWriteIntervalMs == millis,
+                        onClick = { onInterval(millis) },
+                        colors = RadioButtonDefaults.colors(
+                            selectedColor = Color(0xFF22C55E),
+                            unselectedColor = Color(0xFF9CA3AF)
+                        )
+                    )
+                    Text(label, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(end = 8.dp))
+                }
+            }
+            Text(
+                "English, Hindi, and Marathi are ready on this board.",
+                color = Color(0xFF9CA3AF),
+                fontSize = 11.sp
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = if (state.smartWriteEnabled) "Turn off" else "Turn on",
+                    color = Color.White,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            onEnabled(!state.smartWriteEnabled)
+                            onDismiss()
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
         }
     }
 }

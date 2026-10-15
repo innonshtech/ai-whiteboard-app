@@ -15,6 +15,7 @@ class ConvertersTest {
         assertEquals("lined", converters.fromCanvasBackground(CanvasBackground.LINED))
         assertEquals("dotted", converters.fromCanvasBackground(CanvasBackground.DOTTED))
         assertEquals("grid", converters.fromCanvasBackground(CanvasBackground.GRID))
+        assertEquals("graph", converters.fromCanvasBackground(CanvasBackground.GRAPH))
     }
 
     @Test
@@ -24,6 +25,7 @@ class ConvertersTest {
         assertEquals(CanvasBackground.LINED, converters.toCanvasBackground("lined"))
         assertEquals(CanvasBackground.DOTTED, converters.toCanvasBackground("dotted"))
         assertEquals(CanvasBackground.GRID, converters.toCanvasBackground("grid"))
+        assertEquals(CanvasBackground.GRAPH, converters.toCanvasBackground("graph"))
     }
 
     @Test
@@ -38,7 +40,8 @@ class ConvertersTest {
             CanvasBackground.WHITE,
             CanvasBackground.LINED,
             CanvasBackground.DOTTED,
-            CanvasBackground.GRID
+            CanvasBackground.GRID,
+            CanvasBackground.GRAPH
         )
         
         backgrounds.forEach { background ->

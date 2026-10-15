@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import com.avitrisphare.whiteboard.domain.model.Stroke
+import com.avitrisphare.whiteboard.domain.model.StrokeType
 import kotlin.math.max
 import kotlin.math.min
 
@@ -171,6 +172,7 @@ object CanvasTransform {
         val thresholdSq = (thresholdRadius + stroke.strokeWidth / 2f) * (thresholdRadius + stroke.strokeWidth / 2f)
         val points = stroke.points
         if (points.isEmpty()) return false
+        if (stroke.strokeType == StrokeType.EQUATION) return stroke.bounds.contains(worldPoint)
 
         // Quick AABB rejection
         val expandedBounds = Rect(

@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GYOASH — Project Scope Confirmation</title>
+  <style>
+    :root {
+      --bg: #0d1117; --card: #161b22; --border: #21262d;
+      --text: #c9d1d9; --muted: #8b949e;
+      --green: #3fb950; --red: #f85149; --orange: #f97316;
+      --blue: #4fc3f7; --gold: #f5a623; --purple: #a855f7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; }
+    header {
+      background: linear-gradient(135deg, #0d1117, #1a1a2e);
+      border-bottom: 2px solid var(--blue);
+      padding: 40px; text-align: center;
+    }
+    header h1 { font-size: 2.2rem; font-weight: 900; color: #fff; }
+    header p { color: var(--muted); margin-top: 8px; font-size: 1rem; }
+    .header-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }
+    .hbadge { padding: 4px 14px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; border: 1px solid rgba(255,255,255,0.2); color: #fff; background: rgba(255,255,255,0.07); }
+    nav {
+      display: flex; flex-wrap: wrap; justify-content: center;
+      gap: 6px; padding: 12px 20px;
+      background: var(--card); border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    nav a { text-decoration: none; font-size: 0.78rem; font-weight: 600; padding: 5px 12px; border-radius: 20px; color: var(--muted); border: 1px solid var(--border); transition: all 0.2s; }
+    nav a:hover { color: #fff; border-color: #fff; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 40px 20px; }
+    section { margin-bottom: 56px; }
+    h2 { font-size: 1.3rem; font-weight: 700; color: #fff; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 1rem; font-weight: 700; color: var(--gold); margin-bottom: 10px; }
+    .scope-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    .scope-table th { background: var(--card); border: 1px solid var(--border); padding: 10px 14px; color: #fff; font-weight: 700; text-align: left; }
+    .scope-table td { padding: 10px 14px; border: 1px solid var(--border); vertical-align: top; }
+    .scope-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .in  { color: var(--green); font-weight: 700; }
+    .out { color: var(--red);   font-weight: 700; }
+    .tbd { color: var(--gold);  font-weight: 700; }
+    .tag-in  { display:inline-block; padding:2px 10px; border-radius:10px; font-size:0.73rem; font-weight:700; background:rgba(63,185,80,0.12);  color:#3fb950; border:1px solid #238636; }
+    .tag-out { display:inline-block; padding:2px 10px; border-radius:10px; font-size:0.73rem; font-weight:700; background:rgba(248,81,73,0.12);  color:#f85149; border:1px solid #b91c1c; }
+    .tag-tbd { display:inline-block; padding:2px 10px; border-radius:10px; font-size:0.73rem; font-weight:700; background:rgba(245,166,35,0.12); color:#f5a623; border:1px solid #9a6700; }
+    .mod-block { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+    .mod-block h3 { color: #fff; font-size: 0.95rem; margin-bottom: 12px; }
+    .mod-block ul { padding-left: 16px; font-size: 0.83rem; color: #aaa; }
+    .mod-block ul li { margin-bottom: 4px; }
+    .note { padding: 14px 18px; border-radius: 10px; font-size: 0.83rem; margin: 12px 0; border-left: 3px solid; }
+    .note-blue   { background: rgba(79,195,247,0.08);  border-color: var(--blue);   color: #aad4f5; }
+    .note-green  { background: rgba(63,185,80,0.08);   border-color: var(--green);  color: #8fdc9a; }
+    .note-red    { background: rgba(248,81,73,0.08);   border-color: var(--red);    color: #fca5a5; }
+    .note-gold   { background: rgba(245,166,35,0.08);  border-color: var(--gold);   color: #fde68a; }
+    .q-block { background: var(--card); border: 2px solid var(--gold); border-radius: 12px; padding: 20px; margin-bottom: 14px; }
+    .q-block .q-num { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; background:var(--gold); color:#000; font-size:0.8rem; font-weight:800; flex-shrink:0; margin-right:10px; }
+    .q-block .q-text { font-size:0.9rem; color:#fff; font-weight:600; }
+    .q-block .q-why  { font-size:0.8rem; color:var(--muted); margin-top:6px; margin-left:38px; }
+    .q-block .q-options { margin-top:8px; margin-left:38px; font-size:0.82rem; color:#aaa; }
+    .q-block .q-options span { display:inline-block; margin-right:12px; padding:2px 10px; border-radius:8px; background:rgba(255,255,255,0.06); border:1px solid var(--border); cursor:default; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media(max-width:700px) { .two-col { grid-template-columns: 1fr; } }
+    .in-card  { background: var(--card); border: 1px solid #238636; border-radius: 12px; padding: 18px; }
+    .out-card { background: var(--card); border: 1px solid #b91c1c; border-radius: 12px; padding: 18px; }
+    .in-card h3  { color: var(--green); margin-bottom: 10px; }
+    .out-card h3 { color: var(--red);   margin-bottom: 10px; }
+    .in-card ul, .out-card ul { padding-left: 16px; font-size: 0.82rem; color: #aaa; }
+    .in-card ul li, .out-card ul li { margin-bottom: 5px; }
+    .stat-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 28px; }
+    .stat { flex: 1; min-width: 120px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
+    .stat .num { font-size: 1.8rem; font-weight: 800; }
+    .stat .lbl { font-size: 0.72rem; color: var(--muted); margin-top: 3px; }
+    footer { text-align: center; padding: 28px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📋 Project Scope — GYOASH Platform</h1>
+  <p>Project 2609 &nbsp;|&nbsp; INNONSH Technologies &nbsp;|&nbsp; Scope Confirmation Document</p>
+  <div class="header-badges">
+    <span class="hbadge">AI — Whiteboard Panel Only</span>
+    <span class="hbadge">6 Repos</span>
+    <span class="hbadge">15 Modules</span>
+    <span class="hbadge">4 Surfaces</span>
+    <span class="hbadge">Pending Client Confirmation</span>
+  </div>
+</header>
+
+<nav>
+  <a href="#intent">Scope Intent</a>
+  <a href="#confirmed">Confirmed Scope</a>
+  <a href="#module-detail">Module Detail</a>
+  <a href="#removed">Removed</a>
+  <a href="#questions">Open Questions</a>
+  <a href="#sign">Sign-off</a>
+</nav>
+
+<div class="container">
+
+  <!-- SCOPE INTENT -->
+  <section id="intent">
+    <h2>📌 Scope Intent — What We Understood</h2>
+    <div class="note note-blue">
+      ℹ️ Based on the project documents (Annexes A, B, C, D) and our discussions, the agreed scope is as follows:
+      <strong> AI features are limited to the IFP Whiteboard Panel only (Module 1 + Module 2).</strong>
+      The Teacher Mobile App, Student App, Recording, Analytics, and School AI are all out of the AI scope.
+      This document consolidates the full confirmed scope for client sign-off.
+    </div>
+    <div class="stat-row" style="margin-top:20px;">
+      <div class="stat"><div class="num" style="color:var(--green)">11</div><div class="lbl">Modules In Scope</div></div>
+      <div class="stat"><div class="num" style="color:var(--red)">1</div><div class="lbl">Module Removed<br>(M9 School AI)</div></div>
+      <div class="stat"><div class="num" style="color:var(--blue)">2</div><div class="lbl">AI Modules<br>(Panel Only)</div></div>
+      <div class="stat"><div class="num" style="color:var(--gold)">4</div><div class="lbl">Open Questions<br>Need Confirmation</div></div>
+      <div class="stat"><div class="num" style="color:var(--purple)">6</div><div class="lbl">Repos / Codebases</div></div>
+    </div>
+  </section>
+
+
+  <!-- CONFIRMED SCOPE SUMMARY -->
+  <section id="confirmed">
+    <h2>✅ Confirmed Scope — In vs Out</h2>
+    <div class="two-col">
+      <div class="in-card">
+        <h3>✅ In Scope</h3>
+        <ul>
+          <li>✅ M1 — Whiteboard Engine (full — all tools, OCR, annotation)</li>
+          <li>✅ M2 — AI Teacher (IFP Panel only — lesson, quiz, PPT, voice, diagrams)</li>
+          <li>✅ M3 — Interactive Classroom (polls, raise hand, real-time — no AI)</li>
+          <li>✅ M4 — Content Library (search + filter + media delivery — no AI)</li>
+          <li>✅ M5 — Virtual Labs &amp; 3D Models (Three.js — no AI)</li>
+          <li>✅ M6 — Wireless Casting (WebRTC screen share — no AI)</li>
+          <li>✅ M7 — Classroom Recording (capture + upload + playback — no AI, no transcript)</li>
+          <li>✅ M8 — Analytics Dashboard (charts + reports — no AI insights)</li>
+          <li>✅ M10 — Device Management (license keys, remote lock, health — no AI)</li>
+          <li>✅ M11 — Cloud Sync (Drive, OneDrive, Dropbox, offline — no AI)</li>
+          <li>✅ M13 — Hardware APIs (touch, stylus, camera, mic — software layer only)</li>
+          <li>✅ M14 — Security &amp; Auth (JWT, SSO, 2FA, QR, RBAC)</li>
+          <li>✅ Teacher Mobile App — full CRUD app (no AI endpoints)</li>
+          <li>✅ Student App — full app (no AI endpoints)</li>
+          <li>✅ Admin Portal — Super Admin + School Admin (no AI)</li>
+        </ul>
+      </div>
+      <div class="out-card">
+        <h3>🚫 Out of Scope</h3>
+        <ul>
+          <li>🚫 M9 — School AI / Private RAG pipeline (entire module removed)</li>
+          <li>🚫 AI Lesson Planner in Teacher Mobile App</li>
+          <li>🚫 AI Assistant in Teacher Mobile App (quiz gen, activity suggestions, report card comments)</li>
+          <li>🚫 Auto-Transcript from classroom recordings (Whisper)</li>
+          <li>🚫 Auto-Subtitles for recordings</li>
+          <li>🚫 Auto PDF Notes generated from recordings</li>
+          <li>🚫 AI-generated insights in Analytics ("Students struggled with Chapter 5")</li>
+          <li>🚫 Doubt Resolution via AI in Student App</li>
+          <li>🚫 M15 Future Roadmap (AI Avatar, AI Image/Video Gen, Adaptive Learning)</li>
+          <li>🚫 ERP Integration</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- MODULE DETAIL -->
+  <section id="module-detail">
+    <h2>📦 Module-by-Module Scope Detail</h2>
+
+    <div class="mod-block" style="border-color:#e94560">
+      <h3>🖊️ Module 1 — Whiteboard Engine &nbsp;<span class="tag-in">✅ In Scope</span></h3>
+      <ul>
+        <li>Infinite canvas, multiple pages, templates, grid mode, dark/light theme</li>
+        <li>All writing tools — pen, pencil, marker, highlighter, brush, laser pointer, eraser, smart eraser</li>
+        <li>Shape recognition, compass, ruler, protractor, graph paper</li>
+        <li>Annotate over PDF, PPT, Word, Excel, images, videos, browser, live camera, screen share</li>
+        <li>OCR — handwriting → text, image → text, PDF → editable text, equations → digital equation</li>
+        <li>Spotlight, screen shade, magnifier, split screen (up to 6)</li>
+        <li>Timer, stopwatch, calculator, periodic table</li>
+        <li>Insert images, videos; Google Image Search, YouTube Search</li>
+        <li>Export — PDF, image, video, IWB format</li>
+        <li>Cloud sync — Google Drive, OneDrive, Dropbox</li>
+      </ul>
+    </div>
+
+    <div class="mod-block" style="border-color:#f97316">
+      <h3>🤖 Module 2 — AI Teacher &nbsp;<span class="tag-in">✅ In Scope</span>&nbsp;<span style="font-size:0.72rem;padding:2px 8px;border-radius:8px;background:rgba(233,69,96,0.15);color:#f85149;border:1px solid rgba(233,69,96,0.4);">IFP Panel Only</span></h3>
+      <ul>
+        <li>AI Lesson Planner — objectives, teaching flow, activities, homework, outcomes</li>
+        <li>AI PPT Generator — generate editable slides, export PPT + PDF</li>
+        <li>AI Explain — beginner / standard / advanced, examples, stories, analogies</li>
+        <li>AI Quiz Generator — MCQ, T/F, fill blanks, HOTS, descriptive, worksheets, difficulty levels</li>
+        <li>AI Worksheet Generator — printable worksheets, homework sheets, practice papers</li>
+        <li>AI Mind Maps — concept maps, flow charts, timelines, relationship maps</li>
+        <li>AI Diagram Generator — text to labeled, editable diagram (e.g. "Digestive System")</li>
+        <li>AI Formula Solver — solve + explain + graph + step-by-step</li>
+        <li>AI Summarizer — revision notes, flash cards, formula sheet, exam notes</li>
+        <li>AI Translator — Hindi, Marathi, Gujarati, Tamil, Telugu, Kannada, Malayalam, Bengali, Punjabi, Urdu</li>
+        <li>AI Voice Assistant — "Create quiz", "Next slide", "Explain again", "Generate homework"</li>
+      </ul>
+      <div class="note note-red" style="margin-top:10px;">🚫 AI Teacher features are <strong>panel-only</strong>. Teacher Mobile App does not get AI Lesson Planner or AI Assistant.</div>
+    </div>
+
+    <div class="mod-block" style="border-color:#4fc3f7">
+      <h3>🎓 Module 3 — Interactive Classroom &nbsp;<span class="tag-in">✅ In Scope</span>&nbsp;<span class="tag-out">🔷 No AI</span></h3>
+      <ul>
+        <li>Live Poll — teacher creates, students vote on phone, instant results on panel</li>
+        <li>Quiz participation during live class</li>
+        <li>Raise Hand queue — real-time ordered list on panel</li>
+        <li>Student Whiteboard — each student gets own canvas, teacher reviews</li>
+        <li>Random Student Picker, Emoji Feedback, Attendance via panel</li>
+        <li>Collaborative drawing — multiple students on same canvas simultaneously</li>
+        <li>Challenges — interactive quizzes, group challenges</li>
+      </ul>
+    </div>
+
+    <div class="mod-block">
+      <h3>📚 Module 4 — Content Library &nbsp;<span class="tag-in">✅ In Scope</span>&nbsp;<span class="tag-out">🔷 No AI</span></h3>
+      <ul>
+        <li>Search millions of resources — images, videos, diagrams, animations, simulations, worksheets, presentations, question banks</li>
+        <li>Filter by board (CBSE, ICSE, IB, IGCSE, State Boards, JEE, NEET), class, subject, chapter, type</li>
+        <li>Content ingestion pipeline — import GYOASH's content data</li>
+        <li>Content blocking — class-wise age-appropriate filtering (managed by Admin)</li>
+      </ul>
+    </div>
+
+    <div class="mod-block">
+      <h3>🧪 Module 5 — Virtual Labs &amp; 3D Models &nbsp;<span class="tag-in">✅ In Scope</span>&nbsp;<span class="tag-out">🔷 No AI</span></h3>
+      <ul>
+        <li>3D Interactive Models — Solar System, Human Body, DNA, Physics models, Chemistry models (rotate, zoom, animate)</li>
+        <li>Virtual Labs — Physics, Chemistry, Biology, Computer Science, Robotics</li>
+        <li>Simulation Engine — drag, drop, experiment, observe, record</li>
+        <li>Gamification — flash cards, puzzles, memory, crossword, word search, spin wheel, leaderboard, badges</li>
+      </ul>
+    </div>
+
+    <div class="mod-block">
+      <h3>📡 Module 6 — Wireless Casting &nbsp;<span class="tag-in">✅ In Scope</span>&nbsp;<span class="tag-out">🔷 No AI</span></h3>
+      <ul>
+        <li>Wireless screen casting — Android, iOS, Windows to IFP panel</li>
+        <li>Device discovery on local network, QR or PIN pairing</li>
+      </ul>
+    </div>
+
+    <div class="mod-block">
+      <h3>🎥 Module 7 — Classroom Recording &nbsp;<span class="tag-in">✅ In Scope</span>&nbsp;<span class="tag-out">🔷 No AI</span></h3>
+      <ul>
+        <li>Record whiteboard + screen + teacher audio</li>
+        <li>Auto-upload to cloud storage (S3/Azure), chunked upload</li>
+        <li>Video encoding, thumbnails, playback optimisation</li>
+        <li>Students watch recordings on app — resume, speed control, bookmark, download</li>
+      </ul>
+      <div class="note note-red" style="margin-top:10px;">🚫 <strong>Removed:</strong> Auto-transcript (Whisper), auto-subtitles (SRT), AI-generated PDF notes from recording — all out of scope.</div>
+    </div>
+
+    <div class="mod-block">
+      <h3>📊 Module 8 — Analytics Dashboard &nbsp;<span class="tag-in">✅ In Scope</span>&nbsp;<span class="tag-out">🔷 No AI</span></h3>
+      <ul>
+        <li>Teacher Dashboard — lessons delivered, topics covered, quiz results, student participation, attendance</li>
+        <li>School Dashboard — device health, teacher usage, classroom utilisation, learning reports</li>
+        <li>Export reports — PDF and Excel</li>
+      </ul>
+      <div class="note note-red" style="margin-top:10px;">🚫 <strong>Removed:</strong> AI-generated text insights (e.g. "Students struggled with Chapter 5") — out of scope. Pure data aggregation and charting only.</div>
+    </div>
+
+    <div class="mod-block" style="border-color:#b91c1c;background:rgba(185,28,28,0.05)">
+      <h3 style="color:#f85149;">🧠 Module 9 — School AI / Private RAG &nbsp;<span class="tag-out">🚫 Removed</span></h3>
+      <ul style="color:#666;">
+        <li style="text-decoration:line-through">Per-school private AI knowledge base</li>
+        <li style="text-decoration:line-through">Upload books, PDFs, notes, question banks, policies, previous papers, ERP data</li>
+        <li style="text-decoration:line-through">AI answers only from school-approved content</li>
+        <li style="text-decoration:line-through">Vector DB per school, embedding pipeline, RAG query pipeline</li>
+      </ul>
+      <div class="note note-red" style="margin-top:10px;">🚫 This entire module is removed from the current engagement scope.</div>
+    </div>
+
+  </section>
+
+
+    <div class="mod-block">
+      <h3>🔧 Module 10 — Device Management &nbsp;<span class="tag-in">✅ In Scope</span></h3>
+      <ul>
+        <li>Super Admin — school registration, branch registration, classroom-wise panel mapping</li>
+        <li>License key generation (one per panel), key validity management, key extension</li>
+        <li>Remote lock / unlock panels, remote app install, health reports, device monitoring</li>
+        <li>Cost master, log monitoring</li>
+      </ul>
+    </div>
+
+    <div class="mod-block">
+      <h3>☁️ Module 11 — Cloud Sync &nbsp;<span class="tag-in">✅ In Scope</span></h3>
+      <ul>
+        <li>Auto save to cloud, Google Drive, OneDrive, Dropbox integration</li>
+        <li>Offline mode, version history</li>
+        <li>Client-wise and branch-wise cloud storage mapping</li>
+      </ul>
+    </div>
+
+    <div class="mod-block">
+      <h3>⚙️ Module 13 — Hardware Integration &nbsp;<span class="tag-in">✅ In Scope</span></h3>
+      <ul>
+        <li>Software APIs for camera (Bluetooth + inbuilt), microphones, speakers</li>
+        <li>Touch input handling, stylus pressure (PointerEvent API), palm rejection</li>
+        <li>Gesture control (software layer) — hardware provided by GYOASH</li>
+      </ul>
+    </div>
+
+    <div class="mod-block">
+      <h3>🔒 Module 14 — Security &amp; Auth &nbsp;<span class="tag-in">✅ In Scope</span></h3>
+      <ul>
+        <li>Email login, OTP, Google SSO, 2FA (TOTP), QR code login</li>
+        <li>Role-based access control (RBAC) — Super Admin, School Admin, Teacher, Student/Parent</li>
+        <li>Audit logs, encrypted sessions, profanity filters</li>
+        <li>School-wise language mapping, AI plan mapping per school</li>
+      </ul>
+    </div>
+
+    <div class="mod-block" style="border-color:#f5a623">
+      <h3>📱 Teacher Mobile App &nbsp;<span class="tag-in">✅ In Scope</span>&nbsp;<span class="tag-out">🔷 No AI</span></h3>
+      <ul>
+        <li>Dashboard — today's timetable, upcoming classes, pending homework, notifications</li>
+        <li>My Classes — class list, sections, student list, class schedule</li>
+        <li>Attendance — mark, edit, view history, absent list, leave status, reports</li>
+        <li>Homework — create, attach files, set due date, view submissions, add remarks</li>
+        <li>Assessments — create tests, define marks, schedule, enter marks, publish results</li>
+        <li>Content Repository — lesson plans, worksheets, question papers, search by subject/class/chapter</li>
+        <li>Student Profiles — attendance, marks, assignment status, behaviour notes, parent contact</li>
+        <li>Communication — announcements, individual messages, parent messages, circulars</li>
+        <li>Calendar, Timetable, Reports (export PDF/Excel), Notifications, Teacher Profile, Settings</li>
+      </ul>
+      <div class="note note-red" style="margin-top:10px;">🚫 <strong>Removed from Teacher App:</strong> AI Lesson Planner (Section 6 of Annex C), AI Assistant (Section 14 of Annex C) — AI quiz gen, homework gen, activity suggestions, report card comments. These features are available on the IFP Panel only.</div>
+    </div>
+
+    <div class="mod-block" style="border-color:#00c896">
+      <h3>📱 Student App &nbsp;<span class="tag-in">✅ In Scope</span>&nbsp;<span class="tag-out">🔷 No AI</span></h3>
+      <ul>
+        <li>Login — parent mobile/email, OTP, Google login; multi-child switch</li>
+        <li>Dashboard — timetable, upcoming classes, homework due, announcements, attendance summary</li>
+        <li>Online Classes — join live class, raise hand, voice question, chat, emoji, polls, quiz participation</li>
+        <li>Recorded Classes — watch, resume, speed control, download, bookmark, search</li>
+        <li>Homework — view, submit (photos/PDF/audio/video), track status, view feedback</li>
+        <li>Assessments — MCQ, subjective, true/false, fill blanks, match the following</li>
+        <li>Quiz &amp; Puzzles — brain games, crossword, word search, match pairs, memory, logic puzzles, STEM challenges</li>
+        <li>Gamification — points, badges, leaderboard, streaks, achievement levels</li>
+        <li>Learning Resources — class notes, PDFs, PPTs, videos, worksheets, previous year papers</li>
+        <li>Academic Performance — test results, assignment marks, progress charts, teacher feedback</li>
+        <li>Timetable, Calendar, Announcements, Notifications, Settings, Security</li>
+      </ul>
+      <div class="note note-red" style="margin-top:10px;">🚫 <strong>Removed from Student App:</strong> AI-powered Doubt Resolution (Section 11 of Annex D — ask by voice, upload image, get AI response). Replaced with a simple teacher-reply thread (no AI).</div>
+    </div>
+
+
+  <!-- OPEN QUESTIONS -->
+  <section id="questions">
+    <h2>❓ Open Questions — Awaiting Client Confirmation</h2>
+    <div class="note note-gold">💡 These are the only unresolved points. Once you confirm these, the scope is locked and development can begin.</div>
+
+    <br/>
+
+    <div class="q-block">
+      <div style="display:flex;align-items:flex-start;gap:0;">
+        <span class="q-num">1</span>
+        <div>
+          <div class="q-text">AI Lesson Planner — Panel only, or also in Teacher Mobile App?</div>
+          <div class="q-why">Annex C (Teacher App spec) Section 6 explicitly lists AI Lesson Planner as a Teacher App feature. Your current instruction says AI only in the whiteboard. Please confirm whether the AI Lesson Planner should be accessible from the Teacher's phone, or restricted to the IFP panel only.</div>
+          <div class="q-options">
+            <span>Option A — Panel only (no AI on Teacher App)</span>
+            <span>Option B — Teacher App also gets AI Lesson Planner</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="q-block">
+      <div style="display:flex;align-items:flex-start;gap:0;">
+        <span class="q-num">2</span>
+        <div>
+          <div class="q-text">Doubt Resolution in Student App — remove completely, or replace with teacher-reply thread?</div>
+          <div class="q-why">Annex D Section 11 shows students asking questions by voice, image upload, getting AI responses. Since AI is removed from Student App, do you want to keep a manual doubt resolution feature (student asks → teacher replies), or remove it entirely?</div>
+          <div class="q-options">
+            <span>Option A — Remove completely</span>
+            <span>Option B — Keep as manual teacher-reply thread (no AI)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="q-block">
+      <div style="display:flex;align-items:flex-start;gap:0;">
+        <span class="q-num">3</span>
+        <div>
+          <div class="q-text">Module 7 Recording — is the raw video recording still required, or is recording itself out of scope?</div>
+          <div class="q-why">Annex B Module 7 listed Recording along with transcript, subtitles, and PDF notes. Since the AI outputs (transcript, subtitles, PDF notes) are removed, is basic video recording (capture + upload + student playback) still needed? Or is Module 7 removed entirely?</div>
+          <div class="q-options">
+            <span>Option A — Keep basic recording (no transcript/subtitles/PDF)</span>
+            <span>Option B — Remove Module 7 entirely</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="q-block">
+      <div style="display:flex;align-items:flex-start;gap:0;">
+        <span class="q-num">4</span>
+        <div>
+          <div class="q-text">Module 9 (School AI / Private RAG) — confirmed removed, or deferred to a later phase?</div>
+          <div class="q-why">School AI was a key differentiator in the original spec (Annex B Module 9). Please confirm whether it is removed from the current engagement entirely, or should be treated as a future phase (Phase 3) to be scoped and priced separately at a later date.</div>
+          <div class="q-options">
+            <span>Option A — Removed entirely from this project</span>
+            <span>Option B — Deferred to Phase 3 (separate scope + pricing)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+
+  <!-- SIGN-OFF -->
+  <section id="sign">
+    <h2>✍️ Scope Sign-off</h2>
+    <div class="note note-blue" style="margin-bottom:20px;">
+      ℹ️ Please review this document, answer the 4 open questions above, and confirm the scope by signing below.
+      Once signed, this document becomes the binding reference for the entire engagement.
+      Any feature not listed here is out of scope and requires a separate change order.
+    </div>
+
+    <table class="scope-table">
+      <thead>
+        <tr>
+          <th style="width:30%">Party</th>
+          <th style="width:35%">Name &amp; Designation</th>
+          <th style="width:20%">Signature</th>
+          <th style="width:15%">Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong style="color:#4fc3f7;">INNONSH Technologies Pvt. Ltd.</strong><br><span style="font-size:0.78rem;color:var(--muted);">Development Partner</span></td>
+          <td style="color:#aaa;">___________________________</td>
+          <td style="color:#aaa;">___________________________</td>
+          <td style="color:#aaa;">_______________</td>
+        </tr>
+        <tr>
+          <td><strong style="color:#f5a623;">GYOASH Technologies</strong><br><span style="font-size:0.78rem;color:var(--muted);">Client</span></td>
+          <td style="color:#aaa;">___________________________</td>
+          <td style="color:#aaa;">___________________________</td>
+          <td style="color:#aaa;">_______________</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note note-green" style="margin-top:20px;">
+      ✅ <strong>Once signed:</strong> Scope is locked. New features go to a change order. Development starts immediately after sign-off and API key + cloud account handover from GYOASH.
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:20px;">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;">
+        <div style="font-size:1.3rem;margin-bottom:6px;">🔒</div>
+        <div style="font-size:0.85rem;font-weight:700;color:#fff;margin-bottom:4px;">Scope Lock</div>
+        <div style="font-size:0.78rem;color:var(--muted);">Scope agreed at signing is fixed. New features go to a separate change order.</div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;">
+        <div style="font-size:1.3rem;margin-bottom:6px;">☁️</div>
+        <div style="font-size:0.85rem;font-weight:700;color:#fff;margin-bottom:4px;">Infra &amp; AI Costs — GYOASH</div>
+        <div style="font-size:0.78rem;color:var(--muted);">AWS/Azure hosting, OpenAI/Gemini API tokens, App Store accounts — all borne by GYOASH directly.</div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;">
+        <div style="font-size:1.3rem;margin-bottom:6px;">📄</div>
+        <div style="font-size:0.85rem;font-weight:700;color:#fff;margin-bottom:4px;">Source Code Ownership</div>
+        <div style="font-size:0.78rem;color:var(--muted);">Full source code ownership transfers to GYOASH on project completion, as per NDA.</div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;">
+        <div style="font-size:1.3rem;margin-bottom:6px;">🐛</div>
+        <div style="font-size:0.85rem;font-weight:700;color:#fff;margin-bottom:4px;">Bug Fix SLA</div>
+        <div style="font-size:0.78rem;color:var(--muted);">P1 bugs fixed within 48 hours. P2 in next sprint. P3 in following sprint.</div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;">
+        <div style="font-size:1.3rem;margin-bottom:6px;">🧪</div>
+        <div style="font-size:0.85rem;font-weight:700;color:#fff;margin-bottom:4px;">Staging Access</div>
+        <div style="font-size:0.78rem;color:var(--muted);">GYOASH has 24/7 access to staging. New builds deployed every 2 weeks (every sprint end).</div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;">
+        <div style="font-size:1.3rem;margin-bottom:6px;">📅</div>
+        <div style="font-size:0.85rem;font-weight:700;color:#fff;margin-bottom:4px;">Payment Terms</div>
+        <div style="font-size:0.78rem;color:var(--muted);">Each milestone payment due within 7 days of milestone acceptance by GYOASH.</div>
+      </div>
+    </div>
+  </section>
+
+</div><!-- end container -->
+
+<footer>
+  <p>Project 2609 — GYOASH Technologies &nbsp;|&nbsp; Scope Confirmation Document prepared by INNONSH Technologies Private Limited</p>
+  <p style="margin-top:6px;">Confidential — NDA Applies &nbsp;|&nbsp; This document supersedes all prior scope discussions</p>
+</footer>
+
+<!-- PDF BUTTON -->
+<div id="pdf-btn-wrap" style="position:fixed;bottom:28px;right:28px;z-index:9999;">
+  <button onclick="window.print()" style="background:#4fc3f7;color:#000;border:none;padding:12px 22px;border-radius:30px;font-size:0.9rem;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(79,195,247,0.4);display:flex;align-items:center;gap:8px;">⬇️ Save as PDF</button>
+</div>
+<style>@media print{#pdf-btn-wrap{display:none!important}nav{display:none!important}body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}</style>
+
+</body>
+</html>

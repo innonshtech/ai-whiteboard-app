@@ -1,0 +1,1998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GYOASH — Sprint Plan & User Stories</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f8f9fa; color: #1a1a2e; font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; font-size: 14px; }
+
+    header { background: #fff; border-bottom: 3px solid #4f46e5; padding: 36px 40px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    header h1 { font-size: 1.9rem; font-weight: 900; color: #1a1a2e; }
+    header p { color: #6b7280; margin-top: 6px; }
+    .hbadge { display:inline-block; padding:3px 12px; border-radius:20px; font-size:0.73rem; font-weight:700; border:1px solid #e5e7eb; color:#374151; background:#f3f4f6; margin:3px; }
+
+    nav { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; padding:12px 20px; background:#fff; border-bottom:1px solid #e5e7eb; position:sticky; top:0; z-index:100; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
+    nav a { text-decoration:none; font-size:0.75rem; font-weight:600; padding:5px 12px; border-radius:20px; color:#6b7280; border:1px solid #e5e7eb; transition:all 0.2s; }
+    nav a:hover { color:#4f46e5; border-color:#4f46e5; background:#f0f0ff; }
+
+    .container { max-width:1100px; margin:0 auto; padding:40px 20px; }
+
+    /* Sprint block */
+    .sprint-block { background:#fff; border-radius:14px; border:1px solid #e5e7eb; margin-bottom:48px; box-shadow:0 2px 8px rgba(0,0,0,0.04); overflow:hidden; }
+    .sprint-header { padding:24px 28px; border-bottom:1px solid #e5e7eb; display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+    .sprint-title { font-size:1.2rem; font-weight:800; }
+    .sprint-meta { font-size:0.8rem; color:#6b7280; margin-top:4px; }
+    .sprint-goal { background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:10px 14px; font-size:0.82rem; color:#0369a1; margin-top:10px; width:100%; }
+    .sprint-demo { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 14px; font-size:0.82rem; color:#166534; margin-top:8px; width:100%; }
+
+    /* Demo week badges */
+    .demo-badges { display:flex; gap:8px; flex-wrap:wrap; }
+    .demo-badge { font-size:0.72rem; font-weight:700; padding:4px 10px; border-radius:8px; }
+    .demo-w1 { background:#fef3c7; color:#92400e; border:1px solid #fde68a; }
+    .demo-w2 { background:#dbeafe; color:#1e40af; border:1px solid #bfdbfe; }
+
+    /* Story card */
+    .stories-list { padding:20px 28px; display:flex; flex-direction:column; gap:20px; }
+    .story-card { border:1px solid #e5e7eb; border-radius:10px; padding:18px; background:#fafafa; }
+    .story-card:hover { border-color:#4f46e5; background:#fafaff; }
+    .story-top { display:flex; align-items:flex-start; gap:12px; margin-bottom:10px; }
+    .story-num { display:flex; align-items:center; justify-content:center; min-width:32px; height:32px; border-radius:8px; font-size:0.75rem; font-weight:800; flex-shrink:0; }
+    .story-title { font-size:0.92rem; font-weight:700; color:#1a1a2e; }
+    .story-module { font-size:0.7rem; font-weight:600; padding:2px 8px; border-radius:6px; background:#f3f4f6; color:#6b7280; border:1px solid #e5e7eb; display:inline-block; margin-top:3px; }
+    .story-desc { font-size:0.83rem; color:#374151; margin-bottom:12px; line-height:1.7; }
+    .ac-title { font-size:0.75rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px; }
+    .ac-list { list-style:none; padding:0; }
+    .ac-list li { font-size:0.82rem; color:#374151; padding:3px 0 3px 18px; position:relative; border-bottom:1px solid #f3f4f6; }
+    .ac-list li:last-child { border-bottom:none; }
+    .ac-list li::before { content:'✓'; position:absolute; left:0; color:#10b981; font-weight:700; }
+
+    /* Flow chart */
+    .flow-wrap { margin-top:12px; background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:14px; }
+    .flow-title { font-size:0.73rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px; }
+
+    /* Module color tags */
+    .tag-auth    { background:#ede9fe; color:#5b21b6; border:1px solid #ddd6fe; }
+    .tag-admin   { background:#dbeafe; color:#1e40af; border:1px solid #bfdbfe; }
+    .tag-panel   { background:#fff7ed; color:#9a3412; border:1px solid #fed7aa; }
+    .tag-ai      { background:#fdf4ff; color:#7e22ce; border:1px solid #e9d5ff; }
+    .tag-mobile  { background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; }
+    .tag-backend { background:#f0f9ff; color:#075985; border:1px solid #bae6fd; }
+    .tag-content { background:#fefce8; color:#854d0e; border:1px solid #fef08a; }
+
+    .num-auth    { background:#ede9fe; color:#5b21b6; }
+    .num-admin   { background:#dbeafe; color:#1e40af; }
+    .num-panel   { background:#fff7ed; color:#9a3412; }
+    .num-ai      { background:#fdf4ff; color:#7e22ce; }
+    .num-mobile  { background:#f0fdf4; color:#166534; }
+    .num-backend { background:#f0f9ff; color:#075985; }
+    .num-content { background:#fefce8; color:#854d0e; }
+
+    /* Sprint color bars */
+    .s1 { border-left: 5px solid #4f46e5; }
+    .s2 { border-left: 5px solid #0891b2; }
+    .s3 { border-left: 5px solid #7c3aed; }
+    .s4 { border-left: 5px solid #059669; }
+    .s5 { border-left: 5px solid #d97706; }
+    .s6 { border-left: 5px solid #dc2626; }
+    .sb { border-left: 5px solid #9ca3af; }
+
+    /* Stats row */
+    .stat-row { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:36px; }
+    .stat { flex:1; min-width:120px; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:14px; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,0.04); }
+    .stat .num { font-size:1.8rem; font-weight:800; }
+    .stat .lbl { font-size:0.7rem; color:#9ca3af; margin-top:3px; }
+
+    footer { text-align:center; padding:28px; border-top:1px solid #e5e7eb; color:#9ca3af; font-size:0.8rem; background:#fff; margin-top:40px; }
+    @media print { nav { display:none!important; } body { background:#fff; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📋 GYOASH — Sprint Plan & User Stories</h1>
+  <p>Project 2609 &nbsp;|&nbsp; Phase 1 &nbsp;|&nbsp; 6 Sprints × 2 Weeks &nbsp;|&nbsp; 98 User Stories</p>
+  <div style="margin-top:12px;">
+    <span class="hbadge">3 Months</span>
+    <span class="hbadge">6 Sprints</span>
+    <span class="hbadge">12 Demo Checkpoints</span>
+    <span class="hbadge">98 User Stories</span>
+    <span class="hbadge">Mon–Fri Only</span>
+  </div>
+</header>
+
+<nav>
+  <a href="#overview">Overview</a>
+  <a href="#s1">Sprint 1</a>
+  <a href="#s2">Sprint 2</a>
+  <a href="#s3">Sprint 3</a>
+  <a href="#s4">Sprint 4</a>
+  <a href="#s5">Sprint 5</a>
+  <a href="#s6">Sprint 6</a>
+  <a href="#buffer">Buffer</a>
+</nav>
+
+<div class="container">
+
+  <section id="overview">
+    <div class="stat-row">
+      <div class="stat"><div class="num" style="color:#4f46e5">6</div><div class="lbl">Sprints</div></div>
+      <div class="stat"><div class="num" style="color:#0891b2">12</div><div class="lbl">Weekly Demos</div></div>
+      <div class="stat"><div class="num" style="color:#059669">98</div><div class="lbl">User Stories</div></div>
+      <div class="stat"><div class="num" style="color:#d97706">60</div><div class="lbl">Working Days</div></div>
+      <div class="stat"><div class="num" style="color:#9ca3af">5</div><div class="lbl">Buffer Days</div></div>
+    </div>
+  </section>
+
+  <!-- SPRINT 1 -->
+  <section id="s1">
+    <div class="sprint-block s1">
+      <div class="sprint-header">
+        <div style="flex:1;">
+          <div class="sprint-title" style="color:#4f46e5;">⚡ Sprint 1 — Foundation</div>
+          <div class="sprint-meta">Week 1–2 &nbsp;|&nbsp; 10 working days &nbsp;|&nbsp; Stories #1–#16</div>
+          <div class="sprint-goal">🎯 <strong>Sprint Goal:</strong> The platform has a working foundation — any user can register, log in, be assigned a role, and land on their correct dashboard. The Super Admin can register a school and generate a panel license key. The IFP panel can boot and connect to the backend.</div>
+          <div class="sprint-demo">📺 <strong>Demo checkpoints:</strong>
+            <span class="demo-badge demo-w1">Week 1 Demo — Login working for all 3 roles (Admin, Teacher, Student)</span>
+            <span class="demo-badge demo-w2">Week 2 Demo — School registration + panel license generation + panel boots and connects</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="stories-list">
+
+        <!-- S1-1 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-auth">#1</div>
+            <div>
+              <div class="story-title">Email & OTP Login</div>
+              <span class="story-module tag-auth">Auth · M14</span>
+            </div>
+          </div>
+          <div class="story-desc">A user (teacher, student, admin) opens the app or panel and logs in using their registered email address and a one-time password (OTP) sent to their email. The system verifies the OTP, creates a session, and redirects the user to their role-specific dashboard.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>User enters email → system sends 6-digit OTP to that email within 30 seconds</li>
+            <li>OTP expires after 5 minutes — expired OTP shows a clear error with a resend option</li>
+            <li>On valid OTP → JWT access token and refresh token are issued</li>
+            <li>On invalid OTP → error message shown, user can retry up to 3 times</li>
+            <li>After 3 failed attempts → account is temporarily locked for 15 minutes</li>
+            <li>Successful login → user redirected to their role dashboard (Admin / Teacher / Student)</li>
+            <li>JWT access token expires in 15 minutes, refresh token in 7 days</li>
+          </ul>
+          <div class="flow-wrap">
+            <div class="flow-title">📊 Login Flow</div>
+            <div class="mermaid">
+flowchart TD
+    A[User enters email] --> B[Backend sends OTP to email]
+    B --> C[User enters OTP]
+    C --> D{OTP valid?}
+    D -->|Yes| E[Issue JWT + Refresh Token]
+    D -->|No| F{Attempts < 3?}
+    F -->|Yes| G[Show error — retry]
+    F -->|No| H[Lock account 15 min]
+    E --> I[Redirect to role dashboard]
+            </div>
+          </div>
+        </div>
+
+        <!-- S1-2 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-auth">#2</div>
+            <div>
+              <div class="story-title">Google SSO Login</div>
+              <span class="story-module tag-auth">Auth · M14</span>
+            </div>
+          </div>
+          <div class="story-desc">A user clicks "Sign in with Google" and is redirected to Google's OAuth consent screen. After approving, they are returned to the app and logged in automatically. If it's their first login via Google, a new account is created using their Google email.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Google OAuth button is visible on all login screens (Panel, Teacher App, Student App, Admin)</li>
+            <li>Clicking it opens Google's OAuth consent screen</li>
+            <li>On approval → backend receives Google token, verifies it, creates or fetches user record</li>
+            <li>New user created with role = pending (Super Admin assigns role after first login)</li>
+            <li>Returning user → logged in directly, redirected to dashboard</li>
+            <li>If Google auth fails → clear error message shown</li>
+          </ul>
+        </div>
+
+        <!-- S1-3 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-auth">#3</div>
+            <div>
+              <div class="story-title">Role-Based Access Control (RBAC)</div>
+              <span class="story-module tag-auth">Auth · M14</span>
+            </div>
+          </div>
+          <div class="story-desc">The system has 4 roles — Super Admin, School Admin, Teacher, Student/Parent. Each role sees only what they are allowed to see. A teacher cannot access admin pages. A student cannot access teacher pages. Role is assigned at account creation and stored in the JWT.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>4 roles defined: SUPER_ADMIN, SCHOOL_ADMIN, TEACHER, STUDENT</li>
+            <li>Role is embedded in JWT payload on login</li>
+            <li>Every API route has a role guard — unauthorized access returns 403</li>
+            <li>Frontend routes are protected — wrong role redirects to "Access Denied" page</li>
+            <li>Super Admin can view and change any user's role</li>
+            <li>Role change takes effect immediately on next login (existing session not affected)</li>
+          </ul>
+        </div>
+
+        <!-- S1-4 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-auth">#4</div>
+            <div>
+              <div class="story-title">Two-Factor Authentication (2FA)</div>
+              <span class="story-module tag-auth">Auth · M14</span>
+            </div>
+          </div>
+          <div class="story-desc">A user can optionally enable 2FA on their account. Once enabled, after entering their password/OTP, they are asked for a 6-digit TOTP code from their authenticator app (Google Authenticator, Authy). 2FA can be enabled/disabled from account settings.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>User can enable 2FA from settings — system shows QR code to scan with authenticator app</li>
+            <li>User confirms setup by entering first TOTP code — only then is 2FA activated</li>
+            <li>On login with 2FA enabled → after OTP step, user is prompted for TOTP</li>
+            <li>Valid TOTP → login succeeds. Invalid TOTP → error, user can retry</li>
+            <li>User can disable 2FA from settings by entering their current TOTP</li>
+            <li>Backup codes (8 codes) provided on 2FA setup for emergency access</li>
+          </ul>
+        </div>
+
+        <!-- S1-5 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-auth">#5</div>
+            <div>
+              <div class="story-title">QR Code Login (Panel)</div>
+              <span class="story-module tag-auth">Auth · M14 · Panel</span>
+            </div>
+          </div>
+          <div class="story-desc">A teacher walks up to the IFP panel and instead of typing their email, they open the GYOASH Teacher App on their phone, tap "Login to Panel", and scan the QR code shown on the panel screen. The panel logs them in instantly.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Panel login screen shows a QR code that refreshes every 60 seconds</li>
+            <li>Teacher App shows a QR scanner when "Login to Panel" is tapped</li>
+            <li>On successful scan → panel receives the teacher's auth token and logs them in</li>
+            <li>If QR code has expired → panel shows "QR expired — refreshing" message</li>
+            <li>QR login only works for TEACHER role — students and admins cannot use it</li>
+            <li>Panel session is tied to the teacher — logging out on the app also logs out the panel</li>
+          </ul>
+          <div class="flow-wrap">
+            <div class="flow-title">📊 QR Login Flow</div>
+            <div class="mermaid">
+flowchart LR
+    A[Panel shows QR code] --> B[Teacher scans with phone app]
+    B --> C[App sends auth token to backend]
+    C --> D{Token valid?}
+    D -->|Yes| E[Backend notifies panel via WebSocket]
+    D -->|No| F[Show error on app]
+    E --> G[Panel logs in as that teacher]
+            </div>
+          </div>
+        </div>
+
+        <!-- S1-6 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-auth">#6</div>
+            <div>
+              <div class="story-title">Audit Logs</div>
+              <span class="story-module tag-auth">Auth · M14</span>
+            </div>
+          </div>
+          <div class="story-desc">Every significant action in the system (login, logout, role change, license key generation, panel lock/unlock, content blocking change) is recorded in an audit log. Super Admin can view and filter the audit log from the admin portal.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Audit log records: action type, user ID, role, IP address, timestamp</li>
+            <li>Actions logged: login, logout, failed login, role change, school created, panel locked, license generated</li>
+            <li>Super Admin can view audit log with filter by date, user, action type</li>
+            <li>Audit logs are read-only — no one can delete or edit them</li>
+            <li>Logs are retained for minimum 90 days</li>
+          </ul>
+        </div>
+
+        <!-- S1-7 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-admin">#7</div>
+            <div>
+              <div class="story-title">Super Admin — School Registration</div>
+              <span class="story-module tag-admin">Admin · M10</span>
+            </div>
+          </div>
+          <div class="story-desc">The Super Admin (INNONSH) logs into the admin portal and registers a new school (GYOASH client). They enter school name, address, board type, contact details, and branding (logo, colour theme). The school gets a unique school code used for student self-registration.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Super Admin can fill a school registration form with: name, address, board, email, phone, logo, primary colour</li>
+            <li>On save → school is created with a unique 6-character school code (e.g. GYO001)</li>
+            <li>School code is shown to Super Admin and emailed to the school's contact email</li>
+            <li>Super Admin can view list of all registered schools</li>
+            <li>Super Admin can edit or deactivate a school</li>
+            <li>Deactivated school → all panels for that school are automatically locked</li>
+          </ul>
+        </div>
+
+        <!-- S1-8 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-admin">#8</div>
+            <div>
+              <div class="story-title">Branch Registration & Classroom Mapping</div>
+              <span class="story-module tag-admin">Admin · M10</span>
+            </div>
+          </div>
+          <div class="story-desc">A school may have multiple branches (campuses). Each branch has classrooms. Each classroom has one IFP panel. Super Admin or School Admin can create branches under a school, create classrooms under a branch, and map a panel to each classroom.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Super Admin or School Admin can create branches under a school</li>
+            <li>Branch has: name, address, contact person</li>
+            <li>Classrooms can be created under each branch with a room name/number</li>
+            <li>Each classroom can be mapped to exactly one panel license key</li>
+            <li>A panel license key cannot be assigned to more than one classroom</li>
+            <li>Admin can view all branches → classrooms → panels in a tree view</li>
+          </ul>
+        </div>
+
+        <!-- S1-9 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-admin">#9</div>
+            <div>
+              <div class="story-title">License Key Generation & Management</div>
+              <span class="story-module tag-admin">Admin · M10</span>
+            </div>
+          </div>
+          <div class="story-desc">Each IFP panel needs a unique license key to activate the GYOASH software. Super Admin generates license keys — one per panel. The key has an expiry date. Keys can be extended. Invalid or expired keys cause the panel software to show a "License expired" screen.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Super Admin can generate a license key for a specific school + classroom</li>
+            <li>Key format: GYSH-XXXX-XXXX-XXXX (16 chars with dashes)</li>
+            <li>Key has expiry date set at generation (default 1 year)</li>
+            <li>Super Admin can extend key validity by entering new expiry date</li>
+            <li>Panel software checks key validity on every startup and every 24 hours</li>
+            <li>Expired key → panel shows "License expired. Contact your administrator." and locks</li>
+            <li>Super Admin dashboard shows keys expiring in next 30 days as a warning</li>
+          </ul>
+        </div>
+
+        <!-- S1-10 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-admin">#10</div>
+            <div>
+              <div class="story-title">School Admin — Branding & Setup</div>
+              <span class="story-module tag-admin">Admin · M10</span>
+            </div>
+          </div>
+          <div class="story-desc">After a school is registered by Super Admin, the School Admin (principal or IT admin of the school) logs in and customises the platform with their school's branding — logo, colour theme, school name. This branding appears on the panel, teacher app, and student app for that school.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>School Admin can upload school logo (PNG/JPG, max 2MB)</li>
+            <li>School Admin can set primary colour theme (colour picker)</li>
+            <li>School Admin can set school name as it should appear in the apps</li>
+            <li>Changes reflect across all surfaces (panel, teacher app, student app) within 5 minutes</li>
+            <li>Super Admin can override branding settings if needed</li>
+          </ul>
+        </div>
+
+        <!-- S1-11 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-admin">#11</div>
+            <div>
+              <div class="story-title">Teacher Registration by School Admin</div>
+              <span class="story-module tag-admin">Admin · M10</span>
+            </div>
+          </div>
+          <div class="story-desc">School Admin registers teachers by entering their name, email, subjects, and assigned classes. The teacher receives a welcome email with a temporary password and login instructions. School Admin can view, edit, and deactivate teacher accounts.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>School Admin can add a teacher: name, email, phone, subjects, assigned classes</li>
+            <li>System sends welcome email with temporary password to teacher's email</li>
+            <li>Teacher must change password on first login</li>
+            <li>School Admin can view all teachers in a list with their assigned classes</li>
+            <li>School Admin can deactivate a teacher — deactivated teacher cannot log in</li>
+            <li>School Admin can reassign classes to a different teacher</li>
+          </ul>
+        </div>
+
+        <!-- S1-12 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-admin">#12</div>
+            <div>
+              <div class="story-title">Student Self-Registration</div>
+              <span class="story-module tag-admin">Admin · M10</span>
+            </div>
+          </div>
+          <div class="story-desc">Parents register their child on the Student App by entering the school code, parent email, student name, class, and section. The system creates a student account linked to that school. School Admin approves or auto-approves student registrations based on school settings.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Student App registration form requires: school code, parent name, parent email, student name, class, section</li>
+            <li>Invalid school code → clear error "School not found. Check your school code."</li>
+            <li>On valid registration → student account created with status = pending (if manual approval) or active (if auto-approve)</li>
+            <li>Parent receives confirmation email with login credentials</li>
+            <li>School Admin can toggle between manual and auto-approve for student registrations</li>
+            <li>School Admin sees list of pending registrations and can approve/reject each</li>
+          </ul>
+        </div>
+
+        <!-- S1-13 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-panel">#13</div>
+            <div>
+              <div class="story-title">Panel App — Boot & License Validation</div>
+              <span class="story-module tag-panel">Panel · M13</span>
+            </div>
+          </div>
+          <div class="story-desc">When the IFP panel starts up, the GYOASH app launches automatically and validates its license key against the backend server. If valid, the panel proceeds to the login screen. If invalid or expired, it shows a lock screen with contact information.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Panel app auto-launches on Android boot via a boot receiver</li>
+            <li>On launch → panel sends its license key to backend for validation</li>
+            <li>Valid key → proceed to login screen</li>
+            <li>Expired key → lock screen: "License expired. Contact your administrator at [email]."</li>
+            <li>No internet → show "Unable to validate license. Retrying in 60 seconds."</li>
+            <li>License is re-validated every 24 hours in the background without interrupting the session</li>
+            <li>Panel stores school branding locally so it shows correct logo even before login</li>
+          </ul>
+        </div>
+
+        <!-- S1-14 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-admin">#14</div>
+            <div>
+              <div class="story-title">School Admin — Language Mapping</div>
+              <span class="story-module tag-admin">Admin · M14</span>
+            </div>
+          </div>
+          <div class="story-desc">School Admin sets the default language for their school. This affects the interface language for teachers and students in that school. Supported languages include English, Hindi, Marathi and other regional languages.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>School Admin can select default language from dropdown (English, Hindi, Marathi, Gujarati, Tamil, Telugu)</li>
+            <li>All users in that school see the interface in the selected language by default</li>
+            <li>Individual users can override the language in their own settings</li>
+            <li>Language change takes effect on next app load — no restart needed</li>
+          </ul>
+        </div>
+
+        <!-- S1-15 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-admin">#15</div>
+            <div>
+              <div class="story-title">Remote Device Lock / Unlock</div>
+              <span class="story-module tag-admin">Admin · M10</span>
+            </div>
+          </div>
+          <div class="story-desc">Super Admin or School Admin can remotely lock a specific IFP panel from the admin portal. A locked panel shows a lock screen and cannot be used until unlocked. This is used for maintenance, license issues, or misuse.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Admin portal shows a list of all panels with their current status (online/offline/locked)</li>
+            <li>Admin can click "Lock" on any panel — panel receives the command via WebSocket within 5 seconds</li>
+            <li>Locked panel immediately shows lock screen even mid-session</li>
+            <li>Admin can click "Unlock" — panel returns to login screen</li>
+            <li>Lock/unlock actions are recorded in the audit log</li>
+            <li>If panel is offline when locked → it applies the lock on next connection</li>
+          </ul>
+        </div>
+
+        <!-- S1-16 -->
+        <div class="story-card">
+          <div class="story-top">
+            <div class="story-num num-admin">#16</div>
+            <div>
+              <div class="story-title">Device Health Monitoring</div>
+              <span class="story-module tag-admin">Admin · M10</span>
+            </div>
+          </div>
+          <div class="story-desc">Each IFP panel periodically sends health data to the backend — battery level, storage, RAM usage, app version, last active time, and connection status. Admin portal shows this data per panel so the IT admin can spot issues before they affect teaching.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Panel sends health ping to backend every 5 minutes with: storage used, RAM used, app version, IP address, online status</li>
+            <li>Admin portal shows a health card per panel with colour-coded status (green/yellow/red)</li>
+            <li>Red alert if storage > 90% or RAM > 85% or panel has been offline > 1 hour during school hours</li>
+            <li>Admin can see last 7 days of health history per panel</li>
+            <li>Admin can export health report as CSV</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- SPRINT 2 -->
+  <section id="s2">
+    <div class="sprint-block s2">
+      <div class="sprint-header">
+        <div style="flex:1;">
+          <div class="sprint-title" style="color:#0891b2;">🖊️ Sprint 2 — Whiteboard Core</div>
+          <div class="sprint-meta">Week 3–4 &nbsp;|&nbsp; 10 working days &nbsp;|&nbsp; Stories #17–#32</div>
+          <div class="sprint-goal">🎯 <strong>Sprint Goal:</strong> A teacher can log into the panel and use a fully functional whiteboard — draw, annotate over documents, use all writing tools, and save their work to the cloud. The canvas is the core product and must feel polished at this sprint's demo.</div>
+          <div class="sprint-demo">📺 <strong>Demo checkpoints:</strong>
+            <span class="demo-badge demo-w1">Week 3 Demo — Infinite canvas with pen, shapes, undo/redo, multi-page working</span>
+            <span class="demo-badge demo-w2">Week 4 Demo — Full annotation suite + OCR + cloud save working end-to-end</span>
+          </div>
+        </div>
+      </div>
+      <div class="stories-list">
+
+        <!-- S2-17 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#17</div><div><div class="story-title">Infinite Canvas — Core Engine</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">The whiteboard canvas is the heart of the product. A teacher opens a new whiteboard and gets an infinite drawing surface. They can zoom in/out, pan in any direction, add multiple pages, switch between dark and light themes, and the canvas state is preserved on refresh.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Canvas loads within 2 seconds on the IFP panel</li>
+            <li>Pinch-to-zoom works from 10% to 500% zoom level</li>
+            <li>Two-finger pan moves the canvas in any direction smoothly (60fps)</li>
+            <li>Teacher can add new pages — up to 50 pages per session</li>
+            <li>Page navigation shows thumbnail strip at the bottom</li>
+            <li>Dark mode / Light mode toggle in top bar — switches instantly</li>
+            <li>Grid mode toggle shows a grid on the canvas</li>
+            <li>Canvas state auto-saves every 30 seconds to local storage</li>
+            <li>Undo/Redo works for all actions (Ctrl+Z / Ctrl+Y, minimum 50 steps)</li>
+          </ul>
+        </div>
+
+        <!-- S2-18 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#18</div><div><div class="story-title">Writing Tools — Pen, Pencil, Marker, Highlighter, Brush</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">Teachers have a full set of writing tools available in the toolbar. Each tool has its own stroke style, adjustable size, and colour. The teacher picks a tool, picks a colour and size, and draws on the canvas with touch or stylus.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>5 tools available: Pen (smooth), Pencil (textured), Marker (thick, semi-opaque), Highlighter (transparent overlay), Brush (artistic)</li>
+            <li>Each tool has a size slider (1px to 50px)</li>
+            <li>Colour picker offers: 24 preset colours + custom hex/RGB colour wheel</li>
+            <li>Active tool and colour are shown clearly in the toolbar</li>
+            <li>Stylus pressure input changes stroke width dynamically (if panel supports it)</li>
+            <li>Laser pointer tool shows a temporary red dot without drawing on canvas</li>
+            <li>All strokes render at 60fps with no visible lag on the IFP panel</li>
+          </ul>
+        </div>
+
+        <!-- S2-19 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#19</div><div><div class="story-title">Eraser & Smart Eraser</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">Teacher can erase content from the canvas using a standard eraser (erases pixels) or a smart eraser (erases entire strokes/objects). Palm rejection ensures accidental palm touches don't erase content.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Standard eraser erases a circular area around the touch point, size adjustable</li>
+            <li>Smart eraser detects and removes entire strokes that are touched</li>
+            <li>Palm rejection: large touch contact areas (&gt;3cm diameter) are ignored when a pen/stylus is active</li>
+            <li>Erased content can be recovered with Undo</li>
+            <li>Clear All button clears the entire current page (with confirmation dialog)</li>
+          </ul>
+        </div>
+
+        <!-- S2-20 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#20</div><div><div class="story-title">Shape Recognition</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">When a teacher draws a rough shape (circle, rectangle, triangle, arrow, line), the system detects it and automatically replaces it with a clean, perfect version of that shape. The teacher can choose to keep the auto-corrected shape or the original drawing.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Shapes recognised: circle, ellipse, rectangle, square, triangle, line, arrow, star, diamond</li>
+            <li>Shape recognition triggers 0.5 seconds after the user lifts their finger/stylus</li>
+            <li>A small popup shows "Convert to shape?" with Yes/No — auto-converts after 2 seconds if no response</li>
+            <li>Converted shape is editable — can be resized, recoloured, moved</li>
+            <li>Shape recognition can be turned off in settings for free-form drawing sessions</li>
+          </ul>
+        </div>
+
+        <!-- S2-21 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#21</div><div><div class="story-title">Mathematical Tools — Compass, Ruler, Protractor</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">The whiteboard includes interactive mathematical tools that teachers can drag onto the canvas. The compass draws perfect arcs and circles. The ruler draws straight lines. The protractor measures and draws angles. These are essential for math and science teaching on the IFP.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Compass: drag onto canvas, drag one end to set radius, tap to draw arc/circle — radius shown in cm</li>
+            <li>Ruler: drag onto canvas, rotate by dragging ends, draw line along edge — length shown</li>
+            <li>Protractor: drag onto canvas, rotate, tap to mark angle — angle displayed in degrees</li>
+            <li>All tools support multi-touch for positioning and rotation</li>
+            <li>Tools can be removed from canvas by dragging to toolbar</li>
+            <li>Graph paper mode adds a standard grid background to the canvas</li>
+          </ul>
+        </div>
+
+        <!-- S2-22 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#22</div><div><div class="story-title">Annotate over PDF & PPT</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">A teacher can open a PDF or PowerPoint file on the whiteboard and draw directly on top of it — circle things, underline, add notes. The original document is not modified. Annotations are saved as a separate layer on top of the document.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher can open PDF or PPT from local storage or cloud (Google Drive, OneDrive)</li>
+            <li>Document renders page-by-page as a background layer on the canvas</li>
+            <li>Teacher draws on top of the document — all drawing tools work normally</li>
+            <li>Annotations are on a separate layer — original document is never modified</li>
+            <li>Teacher can navigate document pages using swipe or page buttons</li>
+            <li>Annotated document can be exported as PDF (original + annotations merged)</li>
+            <li>PPT files render as individual slides — teacher advances slides with a tap</li>
+          </ul>
+        </div>
+
+        <!-- S2-23 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#23</div><div><div class="story-title">Annotate over Images, Videos & Browser</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">Teacher can insert an image, play a video, or open a website on the canvas — and draw annotations directly on top of it. This allows live annotation during video playback or while showing a website, making explanations much more visual.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher can insert image from local storage or Google Image Search</li>
+            <li>Teacher can insert video from local storage or YouTube — video plays inline</li>
+            <li>Teacher can open a URL in a built-in browser panel on the canvas</li>
+            <li>All drawing tools work on top of the image/video/browser layer</li>
+            <li>Video continues playing while teacher annotates on top</li>
+            <li>Annotations over browser are a transparent overlay — the page is still scrollable/clickable underneath</li>
+            <li>Spotlight tool highlights a circular area and dims the rest of the canvas</li>
+            <li>Screen Shade tool covers the canvas from top or bottom — teacher reveals content progressively</li>
+            <li>Magnifier tool shows a zoomed-in view of any part of the canvas</li>
+          </ul>
+        </div>
+
+        <!-- S2-24 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#24</div><div><div class="story-title">OCR — Handwriting to Text</div><span class="story-module tag-panel">Panel · M1 · AI</span></div></div>
+          <div class="story-desc">A teacher writes text on the canvas by hand. They select the handwritten text and tap "Convert to Text". The system uses OCR to recognise the handwriting and converts it into clean, editable typed text on the canvas. This works for English and Indian languages.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher selects handwritten content using the lasso/select tool</li>
+            <li>Tap "Convert to Text" → OCR processes in under 3 seconds</li>
+            <li>Converted text appears in an editable text box on the canvas</li>
+            <li>OCR accuracy &gt;90% for clear handwriting in English, Hindi, Marathi</li>
+            <li>If OCR confidence is low → shows result with a warning "Low confidence — please check"</li>
+            <li>Original handwriting is removed after successful conversion (with undo available)</li>
+          </ul>
+        </div>
+
+        <!-- S2-25 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#25</div><div><div class="story-title">OCR — Equations to Digital Format</div><span class="story-module tag-panel">Panel · M1 · AI</span></div></div>
+          <div class="story-desc">A teacher writes a mathematical equation on the canvas (e.g. x² + 2x - 5 = 0). They select it and tap "Convert Equation". The system recognises the equation and converts it to a properly formatted digital equation that can be rendered cleanly and passed to the AI Formula Solver.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher selects handwritten equation using select tool</li>
+            <li>Tap "Convert Equation" → system recognises equation using Vision API</li>
+            <li>Converted equation shown in LaTeX/MathML format rendered beautifully</li>
+            <li>Supported: basic arithmetic, algebra, fractions, powers, square roots, integrals, Greek letters</li>
+            <li>"Solve this" button passes the converted equation directly to AI Formula Solver (Story #47)</li>
+            <li>Conversion takes under 4 seconds</li>
+          </ul>
+        </div>
+
+        <!-- S2-26 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#26</div><div><div class="story-title">Whiteboard Templates</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">Instead of starting from a blank canvas, a teacher can choose from pre-built templates — lined paper, graph paper, KWL chart, Venn diagram template, table template, mind map skeleton, etc. Templates load as a background layer on the canvas.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Template library shows at least 15 templates categorised by subject (Maths, Science, English, General)</li>
+            <li>Teacher can preview each template before applying</li>
+            <li>Template loads as a background layer — drawing goes on top</li>
+            <li>Template can be removed from a page at any time</li>
+            <li>Templates work across all page sizes and zoom levels</li>
+          </ul>
+        </div>
+
+        <!-- S2-27 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#27</div><div><div class="story-title">Insert Images & Google Image Search</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">Teacher can insert images onto the canvas from local storage, Google Image Search, or by dragging from the content library. Images can be resized, moved, rotated, and layered. This is used to add diagrams, photos, or illustrations to the lesson.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Insert Image button opens a picker with 3 options: local file, Google Image Search, content library</li>
+            <li>Google Image Search: teacher types query, results shown as thumbnails, tap to insert</li>
+            <li>Inserted image can be resized (drag corners), moved (drag), and rotated (rotate handle)</li>
+            <li>Image layering: teacher can send image to back or bring to front</li>
+            <li>Max image size: 10MB — larger files show an error</li>
+            <li>Images are saved as part of the whiteboard session</li>
+          </ul>
+        </div>
+
+        <!-- S2-28 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#28</div><div><div class="story-title">Insert Videos & YouTube Search</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">Teacher can embed a YouTube video directly into the canvas by searching for it or pasting a URL. The video plays inline on the canvas — no need to switch apps. Teacher can pause, seek, and annotate over it.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>YouTube Search: teacher types query, video results shown with thumbnails, tap to embed</li>
+            <li>Paste URL: teacher pastes a YouTube URL, video embeds instantly</li>
+            <li>Video plays inline on canvas — full play/pause/seek controls</li>
+            <li>Teacher can draw on top of the video while it plays</li>
+            <li>Video can be resized and moved on the canvas</li>
+            <li>Videos do not auto-play — teacher must tap play</li>
+          </ul>
+        </div>
+
+        <!-- S2-29 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#29</div><div><div class="story-title">Classroom Utilities — Timer, Stopwatch, Calculator</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">Quick-access utility tools available on the whiteboard: a countdown timer, a stopwatch, and a calculator. These are commonly needed during class — for timed activities, experiments, or calculations. They appear as floating panels on the canvas.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Timer: teacher sets minutes/seconds, starts countdown, plays an audio alert when done</li>
+            <li>Stopwatch: start/stop/reset, displays MM:SS.ms</li>
+            <li>Calculator: standard calculator with basic arithmetic + scientific functions</li>
+            <li>All 3 appear as draggable floating panels — teacher positions them anywhere</li>
+            <li>Timer and stopwatch are visible to students via screen share/panel display</li>
+            <li>Interactive Periodic Table available as a separate floating panel</li>
+          </ul>
+        </div>
+
+        <!-- S2-30 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#30</div><div><div class="story-title">Export Whiteboard — PDF, Image, IWB</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">After a lesson, a teacher can export the whiteboard content. Export options include PDF (all pages merged), image (per page as PNG/JPG), and IWB format (for re-opening in GYOASH later). Exported files can be saved locally, to cloud storage, or shared directly.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Export menu shows options: PDF, Image (PNG), IWB format</li>
+            <li>PDF export: all pages in one PDF, annotations and content included</li>
+            <li>Image export: each page as a separate PNG file in a ZIP</li>
+            <li>IWB export: proprietary format that re-opens in GYOASH with all layers intact</li>
+            <li>Export destination: local download, Google Drive, OneDrive, or Dropbox</li>
+            <li>Export completes within 10 seconds for a 10-page whiteboard</li>
+          </ul>
+        </div>
+
+        <!-- S2-31 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#31</div><div><div class="story-title">Split Screen (up to 6)</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">Teacher can split the canvas into 2, 3, 4, or up to 6 panels. Each panel can show a different content — one panel has the whiteboard, another shows a video, another shows a PDF. This is useful for comparing content side by side on the large IFP screen.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Split screen button in toolbar — teacher selects 2, 3, 4, or 6 panels</li>
+            <li>Each panel is independent — different content, different tools</li>
+            <li>Panels can be resized by dragging the dividers</li>
+            <li>Each panel supports: whiteboard drawing, PDF/PPT viewer, video player, browser</li>
+            <li>Teacher can close split screen and return to full canvas at any time</li>
+            <li>Split screen state is saved with the session</li>
+          </ul>
+        </div>
+
+        <!-- S2-32 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-backend">#32</div><div><div class="story-title">Cloud Save — Google Drive, OneDrive, Dropbox</div><span class="story-module tag-backend">Backend · M11</span></div></div>
+          <div class="story-desc">The whiteboard session is automatically saved to the teacher's connected cloud storage every 2 minutes. Teachers can also manually save, open previous sessions, and view version history. Sessions saved to the cloud can be opened on any panel they log into.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher can connect Google Drive, OneDrive, or Dropbox from settings (OAuth flow)</li>
+            <li>Auto-save runs every 2 minutes — a small save indicator shows in the corner</li>
+            <li>Manual save button available — saves immediately</li>
+            <li>Teacher can open previous sessions from a session history list (last 30 days)</li>
+            <li>Version history shows a timeline of saves — teacher can restore any version</li>
+            <li>Offline mode: sessions save to local storage when offline, sync to cloud when reconnected</li>
+            <li>Sessions opened on a different panel retain all content and annotations</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- SPRINT 3 -->
+  <section id="s3">
+    <div class="sprint-block s3">
+      <div class="sprint-header">
+        <div style="flex:1;">
+          <div class="sprint-title" style="color:#7c3aed;">🤖 Sprint 3 — AI Teacher Panel</div>
+          <div class="sprint-meta">Week 5–6 &nbsp;|&nbsp; 10 working days &nbsp;|&nbsp; Stories #33–#48</div>
+          <div class="sprint-goal">🎯 <strong>Sprint Goal:</strong> A teacher at the IFP panel can use all 11 AI tools — generate a lesson plan, create a quiz, produce a PPT, get an explanation, translate content, and use their voice to control the board. This is the biggest selling point of GYOASH and must demo perfectly.</div>
+          <div class="sprint-demo">📺 <strong>Demo checkpoints:</strong>
+            <span class="demo-badge demo-w1">Week 5 Demo — AI Lesson Planner, Quiz Generator, PPT Generator, and AI Explain working on panel</span>
+            <span class="demo-badge demo-w2">Week 6 Demo — All 11 AI tools complete including Voice Assistant, Translator, Formula Solver, Diagrams</span>
+          </div>
+        </div>
+      </div>
+      <div class="stories-list">
+
+        <!-- S3-33 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#33</div><div><div class="story-title">FastAPI — AI Gateway Setup</div><span class="story-module tag-ai">AI Backend · M2</span></div></div>
+          <div class="story-desc">Before any AI tool can work, the FastAPI backend needs to be set up with the LLM gateway. This includes OpenAI and Gemini API integrations, a rate limiter to track token usage per school, a fallback mechanism (if OpenAI fails, use Gemini), and the internal proxy from Node.js to FastAPI.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>FastAPI server runs on port 8000, accessible from Node.js backend via internal network</li>
+            <li>All requests to /ai/* require the internal FASTAPI_INTERNAL_SECRET header — unauthorized requests return 401</li>
+            <li>OpenAI GPT-4o is the default model. If OpenAI returns an error or timeout, automatically retry with Gemini</li>
+            <li>Token usage per school is tracked in the database (ai_logs table)</li>
+            <li>If a school exceeds their monthly token limit → return 429 with "AI quota exceeded" message</li>
+            <li>All AI endpoints have a 30-second timeout — return 408 if exceeded</li>
+            <li>GET /ai/health returns 200 — used by Node.js to check FastAPI is alive</li>
+          </ul>
+          <div class="flow-wrap">
+            <div class="flow-title">📊 AI Request Flow</div>
+            <div class="mermaid">
+flowchart LR
+    A[Panel App] -->|POST /api/ai/quiz| B[Node.js Backend]
+    B -->|Validates JWT + checks AI plan| C{School has quota?}
+    C -->|No| D[Return 429 — quota exceeded]
+    C -->|Yes| E[POST to FastAPI /ai/quiz]
+    E -->|Try OpenAI| F{OpenAI OK?}
+    F -->|Yes| G[Return response to Node.js]
+    F -->|No| H[Retry with Gemini]
+    H --> G
+    G -->|Log token usage| I[Return to Panel App]
+            </div>
+          </div>
+        </div>
+
+        <!-- S3-34 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#34</div><div><div class="story-title">AI Lesson Planner</div><span class="story-module tag-ai">AI · M2 · Panel</span></div></div>
+          <div class="story-desc">A teacher types a topic (e.g. "Photosynthesis, Class 8, CBSE") into the AI panel and taps "Generate Lesson Plan". Within seconds, the AI generates a complete, structured lesson plan with objectives, teaching flow, classroom activities, homework suggestions, and assessment ideas. The teacher can edit it before saving.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Input fields: topic, class/grade, board (CBSE/ICSE/State), duration (in minutes)</li>
+            <li>Response includes: Learning Objectives, Teaching Flow (step by step), Classroom Activities, Homework, Assessment Ideas, Expected Learning Outcomes</li>
+            <li>Response time under 8 seconds</li>
+            <li>Teacher can edit any section of the generated plan</li>
+            <li>Teacher can save the lesson plan to their content repository</li>
+            <li>Teacher can regenerate any section independently (e.g. "regenerate activities only")</li>
+            <li>Lesson plan is formatted clearly — not a wall of text</li>
+          </ul>
+        </div>
+
+        <!-- S3-35 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#35</div><div><div class="story-title">AI Quiz Generator</div><span class="story-module tag-ai">AI · M2 · Panel</span></div></div>
+          <div class="story-desc">Teacher types a topic and selects question type (MCQ, True/False, Fill in the Blanks, HOTS, Descriptive) and difficulty level (Easy, Medium, Hard, Expert). The AI generates a quiz that the teacher can use on the whiteboard with students or save for later.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Inputs: topic, class, board, question type(s), difficulty, number of questions (1–50)</li>
+            <li>MCQ: each question has 4 options with one correct answer highlighted</li>
+            <li>T/F: statement with True/False answer</li>
+            <li>Fill in the Blanks: sentence with blank and the correct fill word</li>
+            <li>HOTS: higher-order thinking questions with detailed model answers</li>
+            <li>Response time under 10 seconds for 10 questions</li>
+            <li>Teacher can edit, delete, or add individual questions</li>
+            <li>Teacher can push the quiz to students via the Interactive Classroom module (used in Sprint 4)</li>
+            <li>Quiz can be exported as PDF worksheet</li>
+          </ul>
+        </div>
+
+        <!-- S3-36 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#36</div><div><div class="story-title">AI PPT Generator</div><span class="story-module tag-ai">AI · M2 · Panel</span></div></div>
+          <div class="story-desc">Teacher types a topic and the AI generates a complete, editable PowerPoint presentation with a title slide, content slides, and a summary slide. The presentation is downloaded as a .pptx file and can also be opened directly in the whiteboard canvas as a background for annotation.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Inputs: topic, class, number of slides (5–20), include images (yes/no), style (professional/colourful/minimal)</li>
+            <li>Each slide has a title and 3–5 bullet points of content relevant to the topic</li>
+            <li>Output is a valid .pptx file — opens correctly in Microsoft PowerPoint and Google Slides</li>
+            <li>File downloads to the panel within 15 seconds</li>
+            <li>Teacher can also click "Open on Whiteboard" — loads the PPT directly onto the canvas for annotation</li>
+            <li>PDF export option also available</li>
+          </ul>
+        </div>
+
+        <!-- S3-37 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#37</div><div><div class="story-title">AI Explain</div><span class="story-module tag-ai">AI · M2 · Panel</span></div></div>
+          <div class="story-desc">Teacher types a concept or topic and selects an explanation level — Beginner, Standard, or Advanced. The AI generates an explanation tailored to that level, with examples, an analogy, a real-world application, and a short story to make it memorable.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Inputs: concept/topic, level (Beginner / Standard / Advanced)</li>
+            <li>Response includes: Plain explanation, 2 examples, 1 analogy, 1 real-world application, optional short story</li>
+            <li>Beginner level uses simple vocabulary, short sentences — as if explaining to a 10-year-old</li>
+            <li>Advanced level uses technical terms and assumes subject knowledge</li>
+            <li>Response time under 6 seconds</li>
+            <li>Teacher can copy any section to the whiteboard canvas as a text block</li>
+          </ul>
+        </div>
+
+        <!-- S3-38 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#38</div><div><div class="story-title">AI Worksheet Generator</div><span class="story-module tag-ai">AI · M2 · Panel</span></div></div>
+          <div class="story-desc">Teacher generates a printable worksheet on any topic — a practice paper for students to complete in class or as homework. The worksheet includes a mix of question types, has a student name/date field, and can be exported as a print-ready PDF.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Inputs: topic, class, board, question types, number of questions, marks per question</li>
+            <li>Output includes: school name at top, student name/date/class fields, instructions, questions with answer space</li>
+            <li>Answer key generated separately (teacher version)</li>
+            <li>Export as print-ready PDF — A4 size, proper margins</li>
+            <li>Response time under 10 seconds</li>
+            <li>Teacher can save worksheet to content repository</li>
+          </ul>
+        </div>
+
+        <!-- S3-39 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#39</div><div><div class="story-title">AI Mind Maps</div><span class="story-module tag-ai">AI · M2 · Panel</span></div></div>
+          <div class="story-desc">Teacher types a central topic and the AI generates a visual mind map with connected branches, sub-topics, and relationship labels. The mind map is displayed directly on the whiteboard canvas as an editable diagram — nodes can be moved, added, deleted, and edited.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Inputs: central topic, type (mind map / concept map / flowchart / timeline)</li>
+            <li>Mind map renders on the canvas as an SVG diagram — not an image</li>
+            <li>Each node is clickable and editable — teacher can rename nodes</li>
+            <li>Teacher can add or delete branches directly on the canvas</li>
+            <li>Flowchart type supports directional arrows between nodes</li>
+            <li>Timeline type shows events in chronological order with dates</li>
+            <li>Export as PNG or PDF</li>
+          </ul>
+        </div>
+
+        <!-- S3-40 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#40</div><div><div class="story-title">AI Diagram Generator</div><span class="story-module tag-ai">AI · M2 · Panel</span></div></div>
+          <div class="story-desc">Teacher types "Digestive System" or "Water Cycle" or "Photosynthesis process" and the AI generates a labeled diagram of that topic. The diagram appears on the whiteboard as an editable SVG — labels can be moved, colours changed, and parts can be highlighted during explanation.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Input: topic/concept name (free text)</li>
+            <li>AI generates a relevant labeled diagram for known scientific/educational topics</li>
+            <li>Diagram renders as SVG on the canvas — not a static image</li>
+            <li>Labels are editable text — teacher can change or hide them</li>
+            <li>Teacher can highlight/colour individual parts of the diagram</li>
+            <li>For unknown topics — AI generates a flow diagram from the concept description</li>
+            <li>Response time under 12 seconds</li>
+          </ul>
+        </div>
+
+        <!-- S3-41 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#41</div><div><div class="story-title">AI Formula Solver</div><span class="story-module tag-ai">AI · M2 · Panel</span></div></div>
+          <div class="story-desc">Teacher writes or types a mathematical equation or formula. The AI solves it step by step, explains each step in plain English, and plots a graph if applicable. This is used to demonstrate problem-solving on the panel during class.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Input: equation as text (e.g. "x² + 2x - 5 = 0") or passed directly from OCR equation conversion</li>
+            <li>Output includes: Solution, Step-by-step working (numbered steps), Plain English explanation of each step</li>
+            <li>For functions (e.g. y = x²) — generates an interactive graph plotted on a grid</li>
+            <li>Supports: algebra, quadratics, simultaneous equations, trigonometry, calculus (basic), statistics</li>
+            <li>Each step can be expanded or collapsed on the panel</li>
+            <li>Solution and steps can be placed on the whiteboard canvas as a text block</li>
+            <li>Response time under 8 seconds</li>
+          </ul>
+        </div>
+
+        <!-- S3-42 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#42</div><div><div class="story-title">AI Summarizer & Flash Cards</div><span class="story-module tag-ai">AI · M2 · Panel</span></div></div>
+          <div class="story-desc">After teaching a topic, teacher taps "Summarize" and the AI generates revision notes, flash cards, a formula sheet, and exam notes for that topic. Students can receive these directly on their Student App as a post-class resource.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Input: topic or paste text from the whiteboard session</li>
+            <li>Output options: Revision Notes, Flash Cards (Q&A format), Formula Sheet, Exam Notes (key points only)</li>
+            <li>Flash cards show question on front, answer on back (flip animation in the UI)</li>
+            <li>Teacher can push any of these outputs to students via the Student App (share to class)</li>
+            <li>Outputs can also be exported as PDF or saved to content repository</li>
+            <li>Response time under 10 seconds</li>
+          </ul>
+        </div>
+
+        <!-- S3-43 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#43</div><div><div class="story-title">AI Translator — 10+ Indian Languages</div><span class="story-module tag-ai">AI · M2 · Panel</span></div></div>
+          <div class="story-desc">Teacher selects any text on the whiteboard or types content and translates it instantly to Hindi, Marathi, Gujarati, Tamil, Telugu, Kannada, Malayalam, Bengali, Punjabi, or Urdu. This helps teachers explain concepts to students in their native language alongside English.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Translate button in toolbar — opens a language selector</li>
+            <li>Supported languages: Hindi, Marathi, Gujarati, Tamil, Telugu, Kannada, Malayalam, Bengali, Punjabi, Urdu</li>
+            <li>Translation appears as a side panel next to the original text on canvas</li>
+            <li>Real-time translation: teacher types in English, translation appears as they type (with 1 second debounce)</li>
+            <li>Teacher can replace original text with translation or keep both side by side</li>
+            <li>Translation is context-aware — educational terms are translated correctly, not literally</li>
+            <li>Response time under 3 seconds per translation</li>
+          </ul>
+        </div>
+
+        <!-- S3-44 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#44</div><div><div class="story-title">AI Voice Assistant</div><span class="story-module tag-ai">AI · M2 · Panel</span></div></div>
+          <div class="story-desc">Teacher says "Hey GYOASH" and then speaks a command. The system listens, understands the intent, and performs the action. Common commands: "Create quiz on fractions", "Next slide", "Translate to Hindi", "Generate homework", "Explain photosynthesis". Teacher's hands stay free for drawing.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Wake word "Hey GYOASH" activates listening mode — panel shows a listening indicator</li>
+            <li>Audio captured via panel microphone → sent to Whisper for speech-to-text</li>
+            <li>Transcribed text → intent detection → action executed</li>
+            <li>Supported intents: create quiz, next slide, previous slide, translate, generate homework, explain topic, open content library, clear canvas, save session</li>
+            <li>If intent is unclear → system asks for clarification: "Did you mean [X] or [Y]?"</li>
+            <li>Voice response (TTS) confirms action: "Quiz on fractions created. 10 questions ready."</li>
+            <li>Wake word detection works while teacher is speaking/drawing — background listening</li>
+            <li>Works in English and Hindi</li>
+          </ul>
+          <div class="flow-wrap">
+            <div class="flow-title">📊 Voice Assistant Flow</div>
+            <div class="mermaid">
+flowchart TD
+    A[Teacher says Hey GYOASH] --> B[Panel activates listening mode]
+    B --> C[Audio captured via microphone]
+    C --> D[Whisper converts speech to text]
+    D --> E[Intent detection — what does teacher want?]
+    E --> F{Intent clear?}
+    F -->|Yes| G[Execute action]
+    F -->|No| H[Ask for clarification via TTS]
+    G --> I[TTS confirms action to teacher]
+            </div>
+          </div>
+        </div>
+
+        <!-- S3-45 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#45</div><div><div class="story-title">AI Panel — UI Shell on Whiteboard</div><span class="story-module tag-panel">Panel · M2</span></div></div>
+          <div class="story-desc">All AI tools are accessed through a collapsible AI side panel on the right side of the whiteboard. The teacher taps the AI icon to open it, selects a tool, enters inputs, and sees results — all without leaving the whiteboard. The panel is non-intrusive and can be docked or floating.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>AI side panel is accessible via a floating button on the right edge of the canvas</li>
+            <li>Panel shows all 11 AI tools as clearly labelled cards with icons</li>
+            <li>Each tool opens an input form within the panel — no separate screen/modal</li>
+            <li>Results appear in the panel — teacher can push results to canvas with one tap</li>
+            <li>Panel can be collapsed back to a small icon when not in use</li>
+            <li>Panel does not interfere with drawing or canvas interaction when collapsed</li>
+            <li>Loading state (spinner + "Generating...") shown while AI is processing</li>
+          </ul>
+        </div>
+
+        <!-- S3-46 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#46</div><div><div class="story-title">AI Plan Mapping & Token Management per School</div><span class="story-module tag-ai">Backend · M2</span></div></div>
+          <div class="story-desc">Each school has an AI plan with a monthly token limit. When tokens are used up, AI tools stop working until the plan renews. Super Admin can view and manage AI plans per school, see usage, and upgrade limits. Schools approaching their limit get an email warning.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Each school has an ai_plan record with monthly_token_limit and used_tokens</li>
+            <li>Every AI request deducts tokens from the school's balance</li>
+            <li>When used_tokens reaches 80% of limit → email warning sent to School Admin</li>
+            <li>When used_tokens reaches 100% → AI endpoints return 429 for that school</li>
+            <li>Tokens reset on the 1st of each month</li>
+            <li>Super Admin can view token usage per school in the admin portal</li>
+            <li>Super Admin can manually increase a school's token limit</li>
+          </ul>
+        </div>
+
+        <!-- S3-47 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#47</div><div><div class="story-title">OCR — Image to Text</div><span class="story-module tag-ai">AI · M1</span></div></div>
+          <div class="story-desc">Teacher inserts an image on the canvas (e.g. a photo of a textbook page or a diagram with labels). They select the image and tap "Extract Text". The system extracts all text from the image and places it as an editable text block on the canvas.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher selects an image on canvas and taps "Extract Text"</li>
+            <li>OCR processes the image via Vision API and returns extracted text</li>
+            <li>Extracted text appears as an editable text block next to the image</li>
+            <li>Works for printed text, handwritten text, and text in diagrams</li>
+            <li>Supports extraction in English, Hindi, Marathi</li>
+            <li>Processing time under 5 seconds for a standard textbook page image</li>
+          </ul>
+        </div>
+
+        <!-- S3-48 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-ai">#48</div><div><div class="story-title">PDF to Editable Text (OCR)</div><span class="story-module tag-ai">AI · M1</span></div></div>
+          <div class="story-desc">Teacher opens a scanned PDF on the whiteboard. The PDF is a scanned document (images, not text). Teacher taps "Make Editable" and the system runs OCR on all pages, converting the scanned images to searchable, selectable, editable text — transforming a dead scan into a live document.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher can open any PDF on the whiteboard canvas</li>
+            <li>If PDF is scanned (image-based) — "Make Editable" button appears</li>
+            <li>OCR processes all pages — progress bar shown per page</li>
+            <li>Resulting text is searchable and selectable within the PDF viewer</li>
+            <li>Teacher can copy text from the PDF to the canvas or to the AI tools</li>
+            <li>Processing time: approx 3 seconds per page — shown as progress</li>
+            <li>Large PDFs (&gt;20 pages) processed in background — notification when done</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- SPRINT 4 -->
+  <section id="s4">
+    <div class="sprint-block s4">
+      <div class="sprint-header">
+        <div style="flex:1;">
+          <div class="sprint-title" style="color:#059669;">🎓 Sprint 4 — Interactive Classroom + Mobile Apps</div>
+          <div class="sprint-meta">Week 7–8 &nbsp;|&nbsp; 10 working days &nbsp;|&nbsp; Stories #49–#66</div>
+          <div class="sprint-goal">🎯 <strong>Sprint Goal:</strong> A live class is now possible end-to-end. Teacher starts a class on the panel, students join on their phones, participate in polls and quizzes, raise hands, and draw on their own canvases. Teacher App and Student App have all their core screens working.</div>
+          <div class="sprint-demo">📺 <strong>Demo checkpoints:</strong>
+            <span class="demo-badge demo-w1">Week 7 Demo — Live class with 5 students joining on phone, polls working, raise hand working</span>
+            <span class="demo-badge demo-w2">Week 8 Demo — Full Teacher App + Student App core screens — attendance, homework, assessments all working</span>
+          </div>
+        </div>
+      </div>
+      <div class="stories-list">
+
+        <!-- S4-49 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#49</div><div><div class="story-title">Live Class — Start & Student Join</div><span class="story-module tag-panel">Panel + Student App · M3</span></div></div>
+          <div class="story-desc">Teacher taps "Start Class" on the panel. A class session is created and a join link/code is pushed to all students in that class via the Student App. Students tap "Join Class" on their app and are connected to the live session. The panel shows who has joined.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher taps "Start Class" → session created in backend, join notification sent to all students in that class</li>
+            <li>Students receive push notification with "Class Started — Join Now"</li>
+            <li>Student taps join → connected to the live session via WebSocket</li>
+            <li>Panel shows a real-time roster of joined students (names + avatars)</li>
+            <li>Students who join late are added to the roster dynamically</li>
+            <li>Teacher can end class — all students are disconnected and notified "Class ended"</li>
+            <li>Maximum 40 students in one session — 41st student gets "Class is full" message</li>
+          </ul>
+          <div class="flow-wrap">
+            <div class="flow-title">📊 Live Class Join Flow</div>
+            <div class="mermaid">
+flowchart TD
+    A[Teacher taps Start Class on Panel] --> B[Backend creates session]
+    B --> C[Push notification to all students in class]
+    C --> D[Student taps Join on app]
+    D --> E[Student WebSocket connects to session room]
+    E --> F[Panel roster updates in real-time]
+            </div>
+          </div>
+        </div>
+
+        <!-- S4-50 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#50</div><div><div class="story-title">Live Poll</div><span class="story-module tag-panel">Panel + Student App · M3</span></div></div>
+          <div class="story-desc">During a live class, teacher creates a poll question directly on the panel (typed or from whiteboard). All students see the poll appear on their phones and vote. Results update in real-time on the panel as a bar chart or pie chart — the whole class can see who voted for what.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher taps "Poll" → types a question and up to 4 answer options</li>
+            <li>Poll pushed to all connected students via WebSocket — appears on their screen instantly</li>
+            <li>Students tap their answer — only one vote per student</li>
+            <li>Results show as a live bar chart on the panel, updating every second</li>
+            <li>Teacher can see vote count per option and total responses</li>
+            <li>Teacher can close the poll — no more votes accepted</li>
+            <li>After closing, final results displayed with correct answer highlighted (if teacher set one)</li>
+          </ul>
+        </div>
+
+        <!-- S4-51 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#51</div><div><div class="story-title">Raise Hand Queue</div><span class="story-module tag-panel">Panel + Student App · M3</span></div></div>
+          <div class="story-desc">During class, a student taps "Raise Hand" on their app. Their name appears in a queue on the teacher's panel in the order hands were raised. Teacher calls on the first student, removes them from the queue, and moves to the next.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Student taps Raise Hand → appears at the bottom of the queue on panel within 1 second</li>
+            <li>Queue shows student name and time since they raised hand</li>
+            <li>Teacher taps a student in the queue → they are moved to "Called" status and removed from queue</li>
+            <li>Student receives notification: "You've been called on — please answer"</li>
+            <li>Teacher can lower a student's hand without calling them (with reason: "Not now")</li>
+            <li>A student can lower their own hand by tapping Raise Hand again</li>
+          </ul>
+        </div>
+
+        <!-- S4-52 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#52</div><div><div class="story-title">Student Whiteboard</div><span class="story-module tag-panel">Panel + Student App · M3</span></div></div>
+          <div class="story-desc">Teacher asks "Everyone solve this problem on your canvas." Each student gets their own mini-whiteboard on their phone. They draw/write their answer. Teacher can view all student canvases simultaneously on the panel — like looking at all their notebooks at once.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher taps "Open Student Whiteboards" → all students get a drawing canvas on their app</li>
+            <li>Student can draw, write, and use basic tools (pen, eraser, colours)</li>
+            <li>Teacher sees a grid of all student canvases on the panel — updates in near real-time</li>
+            <li>Teacher can tap on any student's canvas to view it full screen</li>
+            <li>Teacher can add a comment on a student's canvas (typed text)</li>
+            <li>Teacher can broadcast one student's canvas to the main panel for class discussion</li>
+          </ul>
+        </div>
+
+        <!-- S4-53 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#53</div><div><div class="story-title">Random Student Picker & Emoji Reactions</div><span class="story-module tag-panel">Panel + Student App · M3</span></div></div>
+          <div class="story-desc">Teacher taps "Pick a Student" — the panel randomly selects a student from the class list with a fun animation. Also, students can send emoji reactions (👏 🤔 😊 ❓) during class that float up on the panel screen, making class more engaging.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Random picker shows all student names spinning, then lands on one — animated</li>
+            <li>Picker ensures fairness — tracks who has been picked and deprioritises them in next round</li>
+            <li>Picked student is highlighted on panel roster and notified on their app</li>
+            <li>Emoji reactions: students tap an emoji → it appears as a floating animation on the panel for 3 seconds</li>
+            <li>Reactions are rate-limited — student can send max 1 reaction per 5 seconds</li>
+            <li>Teacher can disable emoji reactions if class is getting too noisy</li>
+          </ul>
+        </div>
+
+        <!-- S4-54 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#54</div><div><div class="story-title">Collaborative Drawing — Whole Class Canvas</div><span class="story-module tag-panel">Panel + Student App · M3</span></div></div>
+          <div class="story-desc">Teacher opens a shared canvas that all students can draw on simultaneously from their phones. This is used for collaborative activities — brainstorming, group diagrams, mind maps. Each student's strokes appear in a different colour so contributions are identifiable.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher taps "Collaborative Canvas" → shared canvas opened for all students</li>
+            <li>Each student is assigned a unique colour for their strokes</li>
+            <li>All strokes from all students appear on the panel canvas in real-time</li>
+            <li>Panel shows a legend: which colour belongs to which student</li>
+            <li>Teacher can lock/unlock individual students from drawing</li>
+            <li>Teacher can clear the shared canvas</li>
+            <li>Maximum 40 simultaneous drawers — no performance degradation</li>
+          </ul>
+        </div>
+
+        <!-- S4-55 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#55</div><div><div class="story-title">Attendance via Panel</div><span class="story-module tag-panel">Panel · M3</span></div></div>
+          <div class="story-desc">At the start of class, attendance is automatically marked for students who joined the live session. Teacher can manually mark students who are physically present but don't have devices. Attendance data syncs to the Teacher App and is visible in analytics.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Students who join the live session are automatically marked Present</li>
+            <li>Teacher sees the full class list on panel — can mark individual students as Present/Absent/Late</li>
+            <li>Manual override available — teacher can change any auto-marked status</li>
+            <li>Attendance saved to database when teacher ends the class</li>
+            <li>Attendance is visible in Teacher App under Attendance section</li>
+            <li>Teacher can edit attendance up to 24 hours after the class</li>
+          </ul>
+        </div>
+
+        <!-- S4-56 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#56</div><div><div class="story-title">Teacher App — Dashboard & Navigation</div><span class="story-module tag-mobile">Teacher App · Annex C</span></div></div>
+          <div class="story-desc">Teacher opens the app and lands on a dashboard showing today's schedule, pending homework to review, upcoming assessments, and unread notifications. Bottom navigation gives quick access to all main sections. The app is fast, simple, and never intimidating.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Dashboard loads within 2 seconds after login</li>
+            <li>Today's timetable shows classes with subject, time, and classroom</li>
+            <li>Pending homework count badge shows how many submissions need review</li>
+            <li>Upcoming assessments shows next 3 scheduled tests</li>
+            <li>Unread notifications count shown on bell icon</li>
+            <li>Bottom navigation: Dashboard, Classes, Attendance, Homework, More</li>
+            <li>Pull-to-refresh updates all dashboard data</li>
+          </ul>
+        </div>
+
+        <!-- S4-57 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#57</div><div><div class="story-title">Teacher App — Attendance Management</div><span class="story-module tag-mobile">Teacher App · Annex C S3</span></div></div>
+          <div class="story-desc">Teacher marks attendance for a class from their phone — either during the live class (synced from panel) or manually from the app. Teacher can view attendance history, generate absence reports, and track students with low attendance.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher selects class and date → sees full student list for that class</li>
+            <li>One-tap marking: Present (green) / Absent (red) / Late (orange) per student</li>
+            <li>Bulk mark all present with one tap, then mark exceptions</li>
+            <li>Attendance synced from panel session is pre-filled — teacher edits if needed</li>
+            <li>Teacher can view attendance history by student — calendar view showing P/A/L per day</li>
+            <li>Students below 75% attendance flagged in red</li>
+            <li>Attendance report exportable as PDF or Excel</li>
+          </ul>
+        </div>
+
+        <!-- S4-58 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#58</div><div><div class="story-title">Teacher App — Homework Management</div><span class="story-module tag-mobile">Teacher App · Annex C S4</span></div></div>
+          <div class="story-desc">Teacher creates homework assignments from their phone — sets the topic, instructions, due date, and attaches files if needed. Students receive a notification. Teacher can view who submitted, review submissions, add remarks, and mark complete.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher creates homework: title, description, due date, attach files (PDF, image, link), assign to one or multiple classes</li>
+            <li>Students receive push notification when homework is assigned</li>
+            <li>Teacher sees submission status: Submitted / Pending / Late per student</li>
+            <li>Teacher can open each submission and view student's uploaded files</li>
+            <li>Teacher adds remarks (text) to a submission and marks it as Reviewed</li>
+            <li>Student receives notification when their submission is reviewed</li>
+            <li>Teacher can extend due date after assignment is created</li>
+          </ul>
+        </div>
+
+        <!-- S4-59 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#59</div><div><div class="story-title">Teacher App — Assessments & Results</div><span class="story-module tag-mobile">Teacher App · Annex C S5</span></div></div>
+          <div class="story-desc">Teacher creates tests and exams from the app — defines the assessment name, subject, total marks, and date. After the assessment, teacher enters marks for each student. Results are automatically calculated and published to the Student App.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher creates assessment: name, subject, class, date, total marks, type (Unit Test / Exam / Quiz)</li>
+            <li>Assessment appears on students' calendar and upcoming exams list</li>
+            <li>Teacher enters marks per student after the assessment — marks entry screen shows full class list</li>
+            <li>Teacher can upload answer key as a PDF attachment</li>
+            <li>Teacher taps "Publish Results" → students receive notification with their marks</li>
+            <li>Average marks and class performance summary shown to teacher</li>
+            <li>Teacher can view and edit marks up to 48 hours after publishing</li>
+          </ul>
+        </div>
+
+        <!-- S4-60 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#60</div><div><div class="story-title">Teacher App — Communication (Announcements & Messages)</div><span class="story-module tag-mobile">Teacher App · Annex C S9</span></div></div>
+          <div class="story-desc">Teacher can send announcements to an entire class or individual students/parents from the app. Messages appear in the Student App under Announcements. Teacher can also send direct messages to parents about a specific student.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Teacher can create an announcement: title, message body, attach file (optional), select recipients (whole class / specific students / parents)</li>
+            <li>Recipients receive push notification with the announcement</li>
+            <li>Announcement visible in Student App Announcements section</li>
+            <li>Teacher can send a direct message to a parent — parent sees it in the app</li>
+            <li>Teacher can see read receipts — how many recipients viewed the announcement</li>
+            <li>Announcements can be scheduled for a future date/time</li>
+          </ul>
+        </div>
+
+        <!-- S4-61 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#61</div><div><div class="story-title">Student App — Dashboard & Navigation</div><span class="story-module tag-mobile">Student App · Annex D S2</span></div></div>
+          <div class="story-desc">Student/parent logs in and sees a personalised dashboard — today's timetable, upcoming classes, homework due today, pending assignments, upcoming exams, recent announcements, and attendance summary. Clean, colourful, and immediately useful.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Dashboard loads within 2 seconds</li>
+            <li>Today's timetable shows all periods with subject and teacher name</li>
+            <li>Homework due today listed with due time and subject</li>
+            <li>Attendance summary shows percentage for current month</li>
+            <li>Latest announcements shown as cards</li>
+            <li>Bottom navigation: Dashboard, Classes, Homework, Performance, More</li>
+            <li>Parent can switch between multiple children using a child selector at the top</li>
+          </ul>
+        </div>
+
+        <!-- S4-62 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#62</div><div><div class="story-title">Student App — Live Class Participation</div><span class="story-module tag-mobile">Student App · Annex D S3</span></div></div>
+          <div class="story-desc">Student joins a live class from the app. They can see the teacher's panel screen (screen share), participate in polls and quizzes, raise their hand, send emoji reactions, chat with the class, and draw on their individual canvas when asked.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Join Class button on dashboard when a live session is active for that student's class</li>
+            <li>Student sees teacher's panel screen in a viewer (read-only)</li>
+            <li>Student can raise hand, vote in polls, answer quizzes from the app</li>
+            <li>Chat: student can type messages — visible to teacher only (teacher can choose to show to class)</li>
+            <li>Emoji reactions button sends emoji to the panel</li>
+            <li>Teacher controls (mute student, disable chat) work — student sees their controls disabled</li>
+            <li>Student receives voice question permission from teacher — can unmute and speak</li>
+          </ul>
+        </div>
+
+        <!-- S4-63 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#63</div><div><div class="story-title">Student App — Homework Submission</div><span class="story-module tag-mobile">Student App · Annex D S5</span></div></div>
+          <div class="story-desc">Student views assigned homework with all details — instructions, attachments from teacher, due date. They submit their work by uploading photos, PDFs, Word files, audio recordings, or videos. They can track submission status and see teacher feedback once reviewed.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Homework list shows: subject, title, due date, status (Pending/Submitted/Reviewed)</li>
+            <li>Overdue homework highlighted in red</li>
+            <li>Student uploads submission: photos (camera or gallery), PDF, Word doc, audio, video</li>
+            <li>Multiple files allowed per submission</li>
+            <li>Draft save — student can save incomplete submission and finish later</li>
+            <li>After submission — status changes to "Submitted" with timestamp</li>
+            <li>When reviewed by teacher — status changes to "Reviewed" and student sees teacher remarks and marks</li>
+          </ul>
+        </div>
+
+        <!-- S4-64 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#64</div><div><div class="story-title">Student App — Online Assessments</div><span class="story-module tag-mobile">Student App · Annex D S7</span></div></div>
+          <div class="story-desc">Student takes online tests on their app — MCQ, True/False, Fill in the Blanks, Short Answer, Match the Following. Tests are time-limited. After submission, marks are calculated automatically for objective questions and sent to the teacher for review of subjective answers.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Student sees upcoming tests with subject, date, and duration</li>
+            <li>Test starts when student taps "Begin" within the allowed time window</li>
+            <li>Timer counts down from the set duration — auto-submits when time runs out</li>
+            <li>MCQ/T/F/Fill Blanks: auto-graded — marks calculated instantly on submission</li>
+            <li>Descriptive/Short Answer: submitted to teacher for manual grading</li>
+            <li>Student cannot go back to a previous question after answering (optional — configurable by teacher)</li>
+            <li>Results shown to student after teacher publishes them</li>
+          </ul>
+        </div>
+
+        <!-- S4-65 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#65</div><div><div class="story-title">Student App — Academic Performance</div><span class="story-module tag-mobile">Student App · Annex D S13</span></div></div>
+          <div class="story-desc">Student and parent can view a complete academic performance dashboard — test results, assignment marks, subject-wise performance, progress over time, and teacher feedback. Charts make it easy to spot strengths and weak areas.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Performance dashboard shows: subject-wise average marks, last 5 test results, attendance summary</li>
+            <li>Line chart showing performance trend over the academic year</li>
+            <li>Subject performance bar chart — each subject with marks vs average</li>
+            <li>Teacher feedback visible under each reviewed assignment</li>
+            <li>Parent can view the same data when logged in with their child's account</li>
+            <li>Data updates within 5 minutes of teacher publishing results</li>
+          </ul>
+        </div>
+
+        <!-- S4-66 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#66</div><div><div class="story-title">Push Notifications — Teacher App & Student App</div><span class="story-module tag-mobile">Both Apps · M14</span></div></div>
+          <div class="story-desc">Both the Teacher App and Student App send and receive push notifications for key events — class started, homework assigned, submission reviewed, exam reminder, new announcement. Notifications work even when the app is closed.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Firebase Cloud Messaging (FCM) used for all push notifications</li>
+            <li>Teacher receives: homework submitted, new student message, low attendance alert</li>
+            <li>Student receives: class started, homework assigned, result published, announcement, exam reminder (24 hours before)</li>
+            <li>Notifications work on Android and iOS when app is in foreground, background, and closed</li>
+            <li>Tapping a notification opens the relevant screen in the app</li>
+            <li>Users can manage notification preferences in Settings (enable/disable per type)</li>
+            <li>Notification history visible in app for last 30 days</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- SPRINT 5 -->
+  <section id="s5">
+    <div class="sprint-block s5">
+      <div class="sprint-header">
+        <div style="flex:1;">
+          <div class="sprint-title" style="color:#d97706;">📚 Sprint 5 — Content, Labs, Recording & Analytics</div>
+          <div class="sprint-meta">Week 9–10 &nbsp;|&nbsp; 10 working days &nbsp;|&nbsp; Stories #67–#82</div>
+          <div class="sprint-goal">🎯 <strong>Sprint Goal:</strong> Teachers and students can access the content library, explore 3D models and virtual labs, record classes for later viewing, and School Admins can view analytics dashboards. The platform now feels complete for daily classroom use.</div>
+          <div class="sprint-demo">📺 <strong>Demo checkpoints:</strong>
+            <span class="demo-badge demo-w1">Week 9 Demo — Content library search working + 3D Solar System model interactive + Virtual Lab demo</span>
+            <span class="demo-badge demo-w2">Week 10 Demo — Class recording + student playback working + Analytics dashboards live</span>
+          </div>
+        </div>
+      </div>
+      <div class="stories-list">
+
+        <!-- S5-67 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-content">#67</div><div><div class="story-title">Content Library — Search & Filter</div><span class="story-module tag-content">Panel + Student App · M4</span></div></div>
+          <div class="story-desc">Teacher searches the content library from the panel to find images, videos, diagrams, animations, worksheets, and question banks. They can filter by board (CBSE/ICSE/State/IB), class, subject, chapter, and content type. Results load quickly and can be inserted into the whiteboard directly.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Search bar with full-text search across all content items</li>
+            <li>Filters: Board, Class (1–12), Subject, Chapter, Type (image/video/worksheet/simulation)</li>
+            <li>Search results show thumbnails with title, type, and board tag</li>
+            <li>Teacher can tap any result to preview it in full screen</li>
+            <li>Teacher can insert content directly onto the whiteboard canvas with one tap</li>
+            <li>Results load within 2 seconds — pagination for large result sets</li>
+            <li>Offline mode: previously accessed content cached and available without internet</li>
+          </ul>
+        </div>
+
+        <!-- S5-68 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-content">#68</div><div><div class="story-title">Content Library — Ingestion Pipeline (Admin)</div><span class="story-module tag-content">Admin · M4</span></div></div>
+          <div class="story-desc">GYOASH provides their content library data (images, videos, worksheets, question banks mapped to boards and chapters). Admin portal has a content management section where GYOASH's team uploads and maps content. School admins can also restrict which content types their school can see.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Super Admin can upload content items in bulk via CSV + file upload</li>
+            <li>Each item has metadata: title, type, board, class, subject, chapter, language, file URL</li>
+            <li>Content is indexed for full-text search after upload</li>
+            <li>School Admin can block specific content types for their school (e.g. block adult-adjacent content)</li>
+            <li>Class-wise content blocking: Class 5 students cannot see Class 9 content</li>
+            <li>Content items can be updated or removed from the admin portal</li>
+          </ul>
+        </div>
+
+        <!-- S5-69 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-content">#69</div><div><div class="story-title">Virtual Labs — Physics, Chemistry, Biology</div><span class="story-module tag-content">Panel · M5</span></div></div>
+          <div class="story-desc">Teacher opens a virtual lab from the content library and runs simulations with students. For example — a Physics pendulum lab where students can change the length and mass and observe the period. Or a Chemistry titration lab. Labs are interactive and built with Three.js/simulation engine.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>At least 5 labs available at launch: Pendulum (Physics), Titration (Chemistry), Onion Cell (Biology), Logic Gates (CS), Ohm's Law (Physics)</li>
+            <li>Each lab has: instructions panel, interactive simulation area, observation recording table</li>
+            <li>Students can change variables and observe effects in real-time</li>
+            <li>Lab results can be recorded by students in a digital observation table</li>
+            <li>Teacher can project the simulation on the panel for class explanation</li>
+            <li>Labs load within 5 seconds — no installation required</li>
+          </ul>
+        </div>
+
+        <!-- S5-70 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-content">#70</div><div><div class="story-title">3D Interactive Models</div><span class="story-module tag-content">Panel · M5</span></div></div>
+          <div class="story-desc">Teacher opens a 3D model — Solar System, Human Body, DNA double helix, or a Chemistry molecule. The model can be rotated, zoomed, and individual parts labelled or highlighted. This is used to explain spatial concepts that are hard to show on a flat board.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Models available at launch: Solar System, Human Body (organ systems), DNA, Water Molecule, Heart</li>
+            <li>Multi-touch rotate and pinch-zoom work smoothly on the IFP panel</li>
+            <li>Individual parts can be tapped to show a label and brief description</li>
+            <li>Teacher can hide/show labels for a quiz activity</li>
+            <li>Animation mode: Solar System planets orbit, Heart pumps, DNA replicates</li>
+            <li>Models render at 30fps minimum on the panel hardware</li>
+          </ul>
+        </div>
+
+        <!-- S5-71 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-content">#71</div><div><div class="story-title">Gamification — Quizzes, Flash Cards, Puzzles</div><span class="story-module tag-content">Panel + Student App · M5</span></div></div>
+          <div class="story-desc">Teachers can run gamified learning activities — flash card drills, crossword puzzles, word searches, spin-the-wheel for random question picking, and leaderboard-based quiz games. Students earn points and badges. Makes revision sessions competitive and fun.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Flash Cards: teacher creates a deck, students flip through on their app — Q on front, A on back</li>
+            <li>Spin Wheel: teacher adds student names or topic names, spins to randomly pick one</li>
+            <li>Leaderboard: live ranking of students by points during a quiz game, shown on panel</li>
+            <li>Badges: students earn badges for milestones (first correct answer, full marks, streak of 5 correct)</li>
+            <li>Points system: each correct answer = points, wrong = no deduction (no negative marking in game mode)</li>
+            <li>Crossword and word search generated from a list of terms teacher provides</li>
+          </ul>
+        </div>
+
+        <!-- S5-72 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-backend">#72</div><div><div class="story-title">Classroom Recording — Record & Upload</div><span class="story-module tag-backend">Panel + Backend · M7</span></div></div>
+          <div class="story-desc">Teacher taps "Record" on the panel to start recording the class — capturing the whiteboard canvas, screen content, and teacher's microphone audio. Recording is automatically chunked and uploaded to cloud storage in the background. Teacher taps "Stop" to end the recording.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Record button in panel toolbar — red dot indicator while recording is active</li>
+            <li>Recording captures: whiteboard canvas (with all annotations), teacher audio via panel microphone</li>
+            <li>Recording is chunked into 5-minute segments and uploaded to S3/Azure in the background</li>
+            <li>If internet drops during recording — chunks saved locally, uploaded when reconnected</li>
+            <li>Teacher taps Stop → final segment uploaded, recording assembled into one MP4 file</li>
+            <li>Processing status shown to teacher: "Processing recording... (2 min)"</li>
+            <li>Teacher receives notification when recording is ready for students to view</li>
+            <li>Max recording duration: 3 hours</li>
+          </ul>
+          <div class="flow-wrap">
+            <div class="flow-title">📊 Recording Flow</div>
+            <div class="mermaid">
+flowchart TD
+    A[Teacher taps Record] --> B[Canvas + audio capture begins]
+    B --> C[Every 5 min — chunk uploaded to S3]
+    C --> D{Internet available?}
+    D -->|Yes| E[Chunk uploaded immediately]
+    D -->|No| F[Chunk saved locally]
+    F --> G[Uploaded when reconnected]
+    E --> H[Teacher taps Stop]
+    G --> H
+    H --> I[All chunks assembled into MP4]
+    I --> J[Notification to teacher — recording ready]
+            </div>
+          </div>
+        </div>
+
+        <!-- S5-73 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#73</div><div><div class="story-title">Student App — Recorded Classes Playback</div><span class="story-module tag-mobile">Student App · Annex D S4</span></div></div>
+          <div class="story-desc">Students can watch recorded classes on the Student App — organised by subject, chapter, and date. They can resume from where they left off, control playback speed, bookmark important moments, and download recordings for offline viewing.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Recordings listed under each subject — sorted by date, newest first</li>
+            <li>Student can search recordings by subject, chapter, or date</li>
+            <li>Video player with: play/pause, seek bar, playback speed (0.5x, 1x, 1.25x, 1.5x, 2x)</li>
+            <li>Resume: player remembers last position — "Continue from 14:32?" prompt on open</li>
+            <li>Bookmark: student taps bookmark icon at any point — saved to a bookmarks list</li>
+            <li>Download: student can download recording for offline viewing (if school permits)</li>
+            <li>Downloaded recordings stored locally — viewable without internet</li>
+          </ul>
+        </div>
+
+        <!-- S5-74 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-backend">#74</div><div><div class="story-title">Analytics — Teacher Dashboard</div><span class="story-module tag-backend">Teacher App + Admin · M8</span></div></div>
+          <div class="story-desc">Teacher opens the Analytics section in their app and sees a dashboard showing their teaching activity — total lessons delivered, topics covered, average quiz scores by class, student participation rates, and attendance trends. Data is visualised as clean charts.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Dashboard shows: Total classes taken (this month), Average attendance %, Topics covered, Average quiz score per class</li>
+            <li>Attendance trend: line chart showing class-wise attendance over last 30 days</li>
+            <li>Quiz performance: bar chart showing average score per quiz conducted</li>
+            <li>Student participation: % of students who actively participated (polls, raised hands, quiz answers) per session</li>
+            <li>Date range filter: last 7 days / 30 days / this term / custom range</li>
+            <li>Export as PDF report</li>
+          </ul>
+        </div>
+
+        <!-- S5-75 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-backend">#75</div><div><div class="story-title">Analytics — School Dashboard</div><span class="story-module tag-backend">Admin Portal · M8</span></div></div>
+          <div class="story-desc">School Admin views a school-level analytics dashboard — how many panels are active, which teachers are using the platform, classroom utilisation rates, overall attendance summary, and learning activity reports. This gives the principal visibility into how the platform is being used.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>School-level stats: Active panels, Active teachers this week, Total classes conducted this month</li>
+            <li>Classroom utilisation: heatmap showing which classrooms are used most/least</li>
+            <li>Teacher activity: table showing each teacher's sessions, AI tool usage, homework given count</li>
+            <li>School-wide attendance rate: monthly trend chart</li>
+            <li>AI usage by tool: bar chart showing which AI tools are used most (Lesson Planner, Quiz, PPT, etc.)</li>
+            <li>Export full school report as PDF or Excel</li>
+          </ul>
+        </div>
+
+        <!-- S5-76 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#76</div><div><div class="story-title">Student App — Quiz, Puzzles & Gamification</div><span class="story-module tag-mobile">Student App · Annex D S8</span></div></div>
+          <div class="story-desc">Students can take on-demand quizzes, play brain games, solve crosswords and word searches, and earn points, badges, and streaks. A class leaderboard keeps it competitive. This keeps students engaged outside of live class hours.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>On-demand quizzes: student selects subject and chapter → quiz generated from content bank</li>
+            <li>Games available: Crossword, Word Search, Match the Pairs, Memory Game</li>
+            <li>Points awarded per correct answer — displayed after each question</li>
+            <li>Badges: "First Quiz", "5 in a Row", "Speed Star" (answered in &lt;5s), "Perfect Score"</li>
+            <li>Streak counter: consecutive days with quiz activity</li>
+            <li>Class leaderboard: top 10 students by points this week — visible to all in the class</li>
+            <li>Achievement levels: Bronze → Silver → Gold → Platinum based on cumulative points</li>
+          </ul>
+        </div>
+
+        <!-- S5-77 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#77</div><div><div class="story-title">Student App — Learning Resources</div><span class="story-module tag-mobile">Student App · Annex D S9</span></div></div>
+          <div class="story-desc">Students can access a library of learning resources — class notes shared by teachers, PDF textbooks, PPTs, videos, worksheets, and previous year question papers. Resources are organised by subject and chapter, and can be downloaded for offline use.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Resources organised by subject → chapter → type (notes/PDF/video/worksheet)</li>
+            <li>Search by subject, chapter, or keyword</li>
+            <li>Teacher-shared resources (notes, worksheets) appear here automatically when shared</li>
+            <li>Previous year papers section with board-wise papers</li>
+            <li>Download for offline: star icon to save locally — available without internet</li>
+            <li>Newly added resources highlighted with a "New" badge for 3 days</li>
+          </ul>
+        </div>
+
+        <!-- S5-78 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#78</div><div><div class="story-title">Teacher App — Student Profiles</div><span class="story-module tag-mobile">Teacher App · Annex C S8</span></div></div>
+          <div class="story-desc">Teacher can view a profile for each student in their class — attendance history, marks, assignment completion status, behaviour notes, and parent contact information. This helps teachers keep track of individual student progress.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Student list for each class — tap to open profile</li>
+            <li>Profile shows: attendance % and last 30 days calendar, last 5 test marks, pending homework count</li>
+            <li>Teacher can add a behaviour note (private — only visible to teachers)</li>
+            <li>Parent contact details visible (phone, email) with one-tap call/message</li>
+            <li>Profile shows which subjects the student is performing well/poorly in</li>
+            <li>Data updates in real-time — no need to refresh</li>
+          </ul>
+        </div>
+
+        <!-- S5-79 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#79</div><div><div class="story-title">Teacher App — Content Repository</div><span class="story-module tag-mobile">Teacher App · Annex C S7</span></div></div>
+          <div class="story-desc">Teacher has their own content repository in the app — lesson plans they've created, worksheets, question papers, and resources they've saved. They can search, organise by subject/class/chapter, and share items directly to a class or the school content library.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Repository shows all content created or saved by that teacher</li>
+            <li>Filter by subject, class, type, and date created</li>
+            <li>Teacher can upload a file from their phone to the repository</li>
+            <li>Teacher can share any item to a class — it appears in student Learning Resources</li>
+            <li>Teacher can mark items as favourites for quick access</li>
+            <li>Content created via AI tools (lesson plans, quizzes) auto-saved here</li>
+          </ul>
+        </div>
+
+        <!-- S5-80 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#80</div><div><div class="story-title">Teacher App — Timetable & Calendar</div><span class="story-module tag-mobile">Teacher App · Annex C S10-S11</span></div></div>
+          <div class="story-desc">Teacher can view their weekly timetable and school calendar. The calendar shows all school events, exam dates, holidays, PTM schedules, and teacher meetings. Timetable shows daily periods with subject, class, and room allocation including substitute classes.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Daily timetable view: shows all periods for today with time, subject, class, room</li>
+            <li>Weekly timetable: 5-day grid view</li>
+            <li>Substitute class indicator: highlighted differently when teacher is covering another class</li>
+            <li>Calendar: monthly view with events marked — tap event for details</li>
+            <li>Exam dates, holidays, PTM shown in different colours</li>
+            <li>Teacher can add personal reminders to their calendar (visible only to them)</li>
+          </ul>
+        </div>
+
+        <!-- S5-81 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#81</div><div><div class="story-title">Student App — Timetable, Calendar & Announcements</div><span class="story-module tag-mobile">Student App · Annex D S14-S16</span></div></div>
+          <div class="story-desc">Student can view their daily and weekly timetable with all periods, teacher names, and online class links. School announcements from the principal and teachers appear in a feed. Calendar shows exam schedule, holidays, events, and assignment deadlines all in one place.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Daily timetable: all periods with teacher name, subject, room or online link</li>
+            <li>Weekly timetable: 5-day grid with same detail</li>
+            <li>Calendar: monthly view — exams in red, holidays in green, events in blue, assignment deadlines in orange</li>
+            <li>Announcements feed: school notices, teacher announcements, sorted by date</li>
+            <li>Unread announcements shown with a bold indicator</li>
+            <li>Student can share an announcement via WhatsApp/email</li>
+          </ul>
+        </div>
+
+        <!-- S5-82 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-backend">#82</div><div><div class="story-title">Teacher App — Reports Export</div><span class="story-module tag-mobile">Teacher App · Annex C S13</span></div></div>
+          <div class="story-desc">Teacher can generate and export reports from the app — attendance reports per class or student, homework completion summary, assessment performance summary. Reports can be exported as PDF or Excel and shared via email or WhatsApp.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Report types: Attendance Report, Homework Completion Report, Assessment Report, Student Progress Report</li>
+            <li>Each report has a date range selector</li>
+            <li>Reports show data in a clean tabular format with charts where applicable</li>
+            <li>Export as PDF (formatted for printing) or Excel (raw data)</li>
+            <li>Share via email, WhatsApp, or save to phone storage</li>
+            <li>Report generation takes under 10 seconds</li>
+            <li>School Admin also has access to class-level and school-level versions of these reports</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- SPRINT 6 -->
+  <section id="s6">
+    <div class="sprint-block s6">
+      <div class="sprint-header">
+        <div style="flex:1;">
+          <div class="sprint-title" style="color:#dc2626;">🔧 Sprint 6 — Integrations, Device & Polish</div>
+          <div class="sprint-meta">Week 11–12 &nbsp;|&nbsp; 10 working days &nbsp;|&nbsp; Stories #83–#98</div>
+          <div class="sprint-goal">🎯 <strong>Sprint Goal:</strong> The platform is complete and production-ready. Cloud sync, wireless casting, hardware APIs, and device management all work. Security is hardened. The product is polished, stable, and ready for GYOASH to demo to their first schools.</div>
+          <div class="sprint-demo">📺 <strong>Demo checkpoints:</strong>
+            <span class="demo-badge demo-w1">Week 11 Demo — Wireless casting working + cloud sync across devices + profanity filter + hardware touch/stylus verified</span>
+            <span class="demo-badge demo-w2">Week 12 Demo — Full end-to-end demo of the complete platform — all modules working together</span>
+          </div>
+        </div>
+      </div>
+      <div class="stories-list">
+
+        <!-- S6-83 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#83</div><div><div class="story-title">Wireless Casting — Android & iOS to Panel</div><span class="story-module tag-panel">Panel · M6</span></div></div>
+          <div class="story-desc">A teacher or student can wirelessly cast their phone or laptop screen to the IFP panel. They either scan a QR code on the panel or enter a PIN. Once connected, their screen appears on the panel in real-time. The teacher can then annotate over the cast screen.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Panel shows a "Cast to Panel" screen with a QR code and a 4-digit PIN</li>
+            <li>Android device: open GYOASH app → tap Cast → scan QR or enter PIN → screen mirrors on panel within 3 seconds</li>
+            <li>iOS device: same flow using GYOASH app</li>
+            <li>Windows: GYOASH desktop app or browser-based WebRTC cast</li>
+            <li>Cast latency under 300ms on local WiFi</li>
+            <li>Teacher can annotate over the cast screen using whiteboard tools</li>
+            <li>Casting device can stop sharing at any time — panel returns to whiteboard</li>
+            <li>Multiple devices can take turns casting — only one at a time is live</li>
+          </ul>
+        </div>
+
+        <!-- S6-84 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-backend">#84</div><div><div class="story-title">Cloud Sync — Offline Mode & Version History</div><span class="story-module tag-backend">Backend + Panel · M11</span></div></div>
+          <div class="story-desc">When the panel loses internet connection, the teacher can continue working — all changes are saved locally. When the connection is restored, changes sync to the cloud automatically. Teachers can also browse version history and restore a previous version of any session.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Offline indicator shown when internet is unavailable — teacher can still draw and use whiteboard fully</li>
+            <li>All changes during offline mode saved to IndexedDB / local SQLite</li>
+            <li>On reconnection — local changes synced to cloud within 30 seconds, conflict resolved by last-write-wins per stroke</li>
+            <li>Version history shows a list of auto-save checkpoints for the last 30 days</li>
+            <li>Teacher can preview and restore any checkpoint with one tap</li>
+            <li>Version history accessible from cloud save menu</li>
+          </ul>
+        </div>
+
+        <!-- S6-85 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#85</div><div><div class="story-title">Hardware APIs — Touch & Stylus</div><span class="story-module tag-panel">Panel · M13</span></div></div>
+          <div class="story-desc">The panel software correctly handles all touch inputs from the IFP's 40-point infrared touch frame. Stylus input is detected separately from finger touch, enabling pressure-sensitive drawing. Palm rejection ensures the side of the hand resting on the screen doesn't create accidental marks.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Up to 40 simultaneous touch points recognised correctly</li>
+            <li>Stylus detected via pointer type API — gets pen-specific tools and pressure input</li>
+            <li>Palm rejection: contact area larger than 3cm² filtered out when stylus is active</li>
+            <li>Pinch gesture (2 fingers) → zoom canvas</li>
+            <li>3-finger swipe → navigate pages</li>
+            <li>4-finger tap → toggle AI panel</li>
+            <li>Touch accuracy within ±1mm as specified by panel hardware (Annex A)</li>
+          </ul>
+        </div>
+
+        <!-- S6-86 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#86</div><div><div class="story-title">Hardware APIs — Camera & Microphone</div><span class="story-module tag-panel">Panel · M13</span></div></div>
+          <div class="story-desc">The panel software correctly accesses the panel's built-in camera and microphone, and also pairs with Bluetooth cameras and microphones. Camera is used for live class broadcasting and recording. Microphone is used for the voice assistant and class audio recording.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Built-in camera accessible via Android camera API — shows preview in recording/broadcast mode</li>
+            <li>Built-in microphone works for voice assistant (Hey GYOASH) and recording</li>
+            <li>Bluetooth microphone pairing — panel settings shows available Bluetooth audio devices</li>
+            <li>Bluetooth camera pairing supported via Android Bluetooth API</li>
+            <li>Audio input source can be switched between built-in and Bluetooth mic from settings</li>
+            <li>Camera preview shows correct orientation — no upside down or mirrored issues</li>
+          </ul>
+        </div>
+
+        <!-- S6-87 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-panel">#87</div><div><div class="story-title">Annotate over Live Camera & Screen Share</div><span class="story-module tag-panel">Panel · M1</span></div></div>
+          <div class="story-desc">Teacher activates the live camera feed on the whiteboard canvas — the camera shows what's in front of the panel (e.g. a physical experiment or object). Teacher draws annotations on top of the live feed. Also, when a student or teacher casts their screen to the panel, the teacher can annotate over the live cast.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Camera feed activated via toolbar — shows as a live layer on the canvas</li>
+            <li>All drawing tools work on top of the camera feed</li>
+            <li>Annotations are on a separate layer — removing them doesn't affect the camera feed</li>
+            <li>Camera feed and annotations can be recorded together during class recording</li>
+            <li>Screen share annotation: when casting is active, teacher can draw on the cast screen</li>
+            <li>Camera can be paused/unpaused without stopping the whiteboard session</li>
+          </ul>
+        </div>
+
+        <!-- S6-88 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-admin">#88</div><div><div class="story-title">Admin — Log Monitoring & Cost Master</div><span class="story-module tag-admin">Admin Portal · M10</span></div></div>
+          <div class="story-desc">Super Admin can view system logs — API errors, failed logins, panel connection issues. This helps debug problems remotely without needing physical access. Cost Master allows Super Admin to define pricing tiers and track revenue from license fees.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Log viewer shows: timestamp, log level (info/warn/error), source (panel/backend/AI), message</li>
+            <li>Filter by date range, log level, school, panel ID</li>
+            <li>Error logs highlighted in red — one-click to see full stack trace</li>
+            <li>Cost Master: Super Admin defines per-panel annual license fee by tier (Basic/Standard/Premium)</li>
+            <li>Cost Master shows: total active panels, total annual recurring revenue, upcoming renewals</li>
+            <li>Log data retained for 90 days — older logs auto-archived</li>
+          </ul>
+        </div>
+
+        <!-- S6-89 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-backend">#89</div><div><div class="story-title">Profanity Filters</div><span class="story-module tag-backend">Backend · M14</span></div></div>
+          <div class="story-desc">All user-generated text content — chat messages, announcements, homework, AI inputs — is filtered for profanity and inappropriate language. This keeps the platform safe for school use. The filter works in English, Hindi, and Marathi.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Profanity filter applied to: live class chat, announcements, homework text, AI tool inputs</li>
+            <li>Blocked words list covers English, Hindi, and Marathi common profanity</li>
+            <li>Message with profanity → blocked with a user-facing message: "Inappropriate content detected. Please revise."</li>
+            <li>Filter does not block legitimate educational terms that might be flagged (e.g. anatomy terms)</li>
+            <li>School Admin can add custom words to the blocked list for their school</li>
+            <li>Profanity attempts logged in audit log per user</li>
+          </ul>
+        </div>
+
+        <!-- S6-90 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-backend">#90</div><div><div class="story-title">Encrypted Sessions & Secure Communication</div><span class="story-module tag-backend">Backend · M14</span></div></div>
+          <div class="story-desc">All communication between the apps and backend is encrypted. Sensitive data (passwords, tokens) is never stored in plain text. API endpoints are protected against common attacks — SQL injection, XSS, rate limiting, and CORS.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>All API communication over HTTPS (TLS 1.2+)</li>
+            <li>WebSocket connections use WSS (secure WebSocket)</li>
+            <li>Passwords hashed with bcrypt (min 12 rounds) — never stored in plain text</li>
+            <li>JWT tokens signed with RS256 — verified on every request</li>
+            <li>Rate limiting: max 100 requests/minute per IP on auth endpoints</li>
+            <li>CORS: only whitelisted origins can make API requests</li>
+            <li>SQL injection prevented via Prisma parameterised queries (no raw SQL string concatenation)</li>
+            <li>XSS: all user input sanitised before storage and rendering</li>
+          </ul>
+        </div>
+
+        <!-- S6-91 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-admin">#91</div><div><div class="story-title">Admin — Remote App Install on Panels</div><span class="story-module tag-admin">Admin · M10</span></div></div>
+          <div class="story-desc">Super Admin can push a GYOASH app update to all panels or specific panels remotely. The panel downloads and installs the update silently in the background during non-school hours without disrupting teaching. Admin can see which panels are on which app version.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Admin portal shows app version for each panel</li>
+            <li>Super Admin can upload a new APK version to the admin portal</li>
+            <li>Super Admin can push the update to: all panels, panels in a specific school, or individual panels</li>
+            <li>Panel downloads and installs update silently — no user action needed</li>
+            <li>Update scheduled for 11pm–5am to avoid disrupting classes</li>
+            <li>Update status shown: Pending / Downloading / Installed / Failed</li>
+            <li>Failed updates auto-retry 3 times — then alert sent to Super Admin</li>
+          </ul>
+        </div>
+
+        <!-- S6-92 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#92</div><div><div class="story-title">Student App — Security & Parent Controls</div><span class="story-module tag-mobile">Student App · Annex D S20</span></div></div>
+          <div class="story-desc">Parent login controls what the student sees. Parent can set a session PIN so the student cannot switch to a different child's account. Device registration ensures the app can only be used on approved devices. All student data is encrypted in transit and at rest.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Parent can set a 4-digit app PIN — required to switch child profiles or access parent-only sections</li>
+            <li>Device registration: parent can register up to 3 devices — app warns if logging in from unregistered device</li>
+            <li>All API calls from Student App use HTTPS</li>
+            <li>Student cannot access content from other schools or other classes</li>
+            <li>Session auto-expires after 24 hours of inactivity — requires re-login</li>
+            <li>Parent can remotely log out all devices from their account settings</li>
+          </ul>
+        </div>
+
+        <!-- S6-93 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#93</div><div><div class="story-title">Teacher App — Profile & Settings</div><span class="story-module tag-mobile">Teacher App · Annex C S16-S17</span></div></div>
+          <div class="story-desc">Teacher can view and update their profile — name, photo, subjects they teach, classes assigned, and qualifications. Settings allow changing notification preferences, language, help access, and password change.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Profile shows: name, photo (uploadable), email, phone, subjects, assigned classes, qualification</li>
+            <li>Teacher can edit name and upload/change profile photo</li>
+            <li>Settings: Language selection (English/Hindi/Marathi), Notification toggles per type, Password change</li>
+            <li>Password change requires current password + new password confirmation</li>
+            <li>Help & Support section with FAQ and a contact form</li>
+            <li>Logout button — clears session and returns to login screen</li>
+          </ul>
+        </div>
+
+        <!-- S6-94 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-mobile">#94</div><div><div class="story-title">Student App — Settings & Dark Mode</div><span class="story-module tag-mobile">Student App · Annex D S19</span></div></div>
+          <div class="story-desc">Student can toggle dark mode, manage privacy settings (who can see their profile), and access help and support. Settings are simple and not overwhelming for a school-age student.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Dark mode toggle — switches app theme instantly, preference saved</li>
+            <li>Privacy: student can hide their profile photo from classmates (only teacher and admin can see)</li>
+            <li>Language preference: override school default language</li>
+            <li>Help & Support: FAQ accordion, contact support form</li>
+            <li>About section: app version, school name, terms and privacy policy links</li>
+          </ul>
+        </div>
+
+        <!-- S6-95 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-backend">#95</div><div><div class="story-title">Doubt Resolution — Manual Teacher Reply Thread</div><span class="story-module tag-mobile">Student App + Teacher App · M3</span></div></div>
+          <div class="story-desc">Student can submit a doubt — type a question, attach a photo of a problem, or record a voice query. The doubt appears in the Teacher App under a "Doubts" section. Teacher responds with text or an attachment. Student gets notified when the doubt is answered.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Student can submit a doubt: text + optional photo attachment + optional subject/chapter tag</li>
+            <li>Doubt appears in Teacher App → Doubts section, sorted by date</li>
+            <li>Teacher can reply with text and/or file attachment</li>
+            <li>Student receives push notification when doubt is answered</li>
+            <li>Thread view: student and teacher replies shown in a conversation format</li>
+            <li>Student can mark doubt as Resolved — closes the thread</li>
+            <li>Unresolved doubts older than 48 hours highlighted to teacher as requiring attention</li>
+          </ul>
+        </div>
+
+        <!-- S6-96 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-backend">#96</div><div><div class="story-title">Multi-Child Switch for Parents</div><span class="story-module tag-mobile">Student App · Annex D S1</span></div></div>
+          <div class="story-desc">A parent with multiple children in GYOASH schools can switch between child profiles from one app login. Each child's data is completely separate — different timetables, homework, performance. Switching is instant with no re-login required.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Parent can add multiple children to their account — each with school code and student details</li>
+            <li>Child selector shown at top of dashboard — tapping opens a profile switcher</li>
+            <li>Switching child profiles loads that child's data within 1 second</li>
+            <li>Notification badge per child — parent sees unread count for each</li>
+            <li>Each child's data is isolated — no cross-data leakage between profiles</li>
+            <li>Parent can remove a child profile from their account</li>
+          </ul>
+        </div>
+
+        <!-- S6-97 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-backend">#97</div><div><div class="story-title">Docker & Deployment — Staging Environment</div><span class="story-module tag-backend">DevOps · All Repos</span></div></div>
+          <div class="story-desc">All 6 repositories are containerised with Docker and deployable to a staging environment on AWS or Azure. A docker-compose file runs the full stack locally. Nginx acts as a reverse proxy. SSL certificates are configured. GYOASH has 24/7 access to staging for testing.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>Each repo has a Dockerfile — builds successfully with no errors</li>
+            <li>Root docker-compose.yml starts all 6 services + PostgreSQL + Redis with one command</li>
+            <li>Staging environment running on cloud (AWS/Azure) — accessible at a staging URL</li>
+            <li>Nginx configured as reverse proxy — routes /api → Node.js, /ai → FastAPI, / → Panel app</li>
+            <li>SSL certificate on staging domain (Let's Encrypt or AWS ACM)</li>
+            <li>Environment variables managed via .env files — no secrets hardcoded</li>
+            <li>GitHub Actions CI: on push to main → run tests → build Docker → deploy to staging automatically</li>
+          </ul>
+        </div>
+
+        <!-- S6-98 -->
+        <div class="story-card">
+          <div class="story-top"><div class="story-num num-backend">#98</div><div><div class="story-title">End-to-End Testing & Performance Validation</div><span class="story-module tag-backend">QA · All Modules</span></div></div>
+          <div class="story-desc">Before the buffer week UAT begins, the team runs a full end-to-end test covering all 6 sprints' deliverables. Performance is validated — panel loads in under 2 seconds, AI responses under 10 seconds, 40 simultaneous WebSocket connections handled without degradation.</div>
+          <div class="ac-title">Acceptance Criteria</div>
+          <ul class="ac-list">
+            <li>All 97 previous stories pass their acceptance criteria in the staging environment</li>
+            <li>Panel app loads in under 2 seconds on the actual IFP hardware (RK3576 CPU, 8GB RAM)</li>
+            <li>Canvas renders at 60fps during active drawing — verified with 5 simultaneous touch points</li>
+            <li>AI response time: Lesson Plan under 8s, Quiz under 10s, PPT under 15s — tested 10 times each</li>
+            <li>40 simultaneous WebSocket connections in a single room — no messages dropped — tested with load test tool</li>
+            <li>API response time: 95th percentile under 500ms for all non-AI endpoints</li>
+            <li>No critical (P1) bugs unresolved before buffer week begins</li>
+            <li>All known P2 bugs documented and assigned</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- BUFFER WEEK -->
+  <section id="buffer">
+    <div class="sprint-block sb">
+      <div class="sprint-header">
+        <div style="flex:1;">
+          <div class="sprint-title" style="color:#6b7280;">🛡️ Buffer Week — UAT & Handover</div>
+          <div class="sprint-meta">Week 13 &nbsp;|&nbsp; 5 working days &nbsp;|&nbsp; No new stories</div>
+          <div class="sprint-goal">🎯 <strong>Goal:</strong> GYOASH tests the complete platform in the staging environment. The team fixes any issues found. Final production deployment is prepared. Handover documentation is completed. The project is ready for go-live.</div>
+        </div>
+      </div>
+      <div class="stories-list">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;">
+          <div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;padding:16px;">
+            <div style="font-weight:700;color:#374151;margin-bottom:8px;">📋 Day 1–2 — GYOASH UAT</div>
+            <ul style="font-size:0.8rem;color:#6b7280;padding-left:14px;">
+              <li>GYOASH team tests all modules on staging</li>
+              <li>Issues logged in a bug tracker (shared sheet)</li>
+              <li>P1 bugs fixed same day</li>
+              <li>P2 bugs fixed by Day 4</li>
+            </ul>
+          </div>
+          <div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;padding:16px;">
+            <div style="font-weight:700;color:#374151;margin-bottom:8px;">🐛 Day 2–4 — Bug Fixes</div>
+            <ul style="font-size:0.8rem;color:#6b7280;padding-left:14px;">
+              <li>All P1 and P2 bugs resolved</li>
+              <li>Regression testing after fixes</li>
+              <li>Performance issues addressed</li>
+              <li>Final staging deploy with all fixes</li>
+            </ul>
+          </div>
+          <div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;padding:16px;">
+            <div style="font-weight:700;color:#374151;margin-bottom:8px;">🚀 Day 5 — Handover</div>
+            <ul style="font-size:0.8rem;color:#6b7280;padding-left:14px;">
+              <li>Production environment setup on GYOASH's cloud account</li>
+              <li>All 6 repos handed over to GYOASH</li>
+              <li>API keys and credentials transferred</li>
+              <li>Final sign-off from GYOASH</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <p>Project 2609 — GYOASH Technologies &nbsp;|&nbsp; Sprint Plan prepared by INNONSH Technologies Private Limited</p>
+  <p style="margin-top:6px;">Confidential &nbsp;|&nbsp; Phase 1 &nbsp;|&nbsp; 6 Sprints &nbsp;|&nbsp; 98 User Stories &nbsp;|&nbsp; 3 Months</p>
+</footer>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'default', themeVariables: { fontSize: '13px' } });
+</script>
+</body>
+</html>

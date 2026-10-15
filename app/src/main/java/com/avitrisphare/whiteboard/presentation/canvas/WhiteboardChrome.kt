@@ -4,6 +4,8 @@ import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.AutoFixNormal
@@ -41,6 +44,7 @@ import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.Gesture
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.HelpOutline
@@ -59,6 +63,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Architecture
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Undo
@@ -86,9 +92,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.graphics.drawscope.Stroke as ThumbStroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -97,6 +109,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.avitrisphare.whiteboard.domain.model.CanvasBackground
 import com.avitrisphare.whiteboard.domain.model.Stroke
+import com.avitrisphare.whiteboard.domain.model.StrokeType
 import kotlinx.coroutines.launch
 
 private val DockColor = Color(0xFF1C2130)
@@ -125,7 +138,14 @@ fun AvitriSphareWhiteboardChrome(
     onSpotlightRadius: (Float) -> Unit,
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
-    onFit: () -> Unit
+    onFit: () -> Unit,
+    rulerPlaced: Boolean,
+    compassPlaced: Boolean,
+    protractorPlaced: Boolean,
+    onMathDrag: (MathToolKind, Offset) -> Unit,
+    onMathDragEnd: (MathToolKind, Offset, Boolean) -> Unit,
+    onDockBounds: (Rect) -> Unit,
+    onOpenDocument: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -153,6 +173,27 @@ fun AvitriSphareWhiteboardChrome(
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onExit)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.ArrowBack,
+                        contentDescription = "Back to class",
+                        tint = Color(0xFF1F2937),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        "Class",
+                        color = Color(0xFF1F2937),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 4.dp, end = 6.dp)
+                    )
+                }
                 Text(
                     text = state.noteTitle.ifBlank { "Untitled" },
                     color = Color(0xFF1F2937),
@@ -187,6 +228,12 @@ fun AvitriSphareWhiteboardChrome(
                     onClick = { viewModel.toggleGrid() }
                 )
                 TopBarButton(
+                    icon = Icons.Default.GridOn,
+                    label = "Graph",
+                    active = state.canvasBackground == CanvasBackground.GRAPH,
+                    onClick = { viewModel.toggleGraphPaper() }
+                )
+                TopBarButton(
                     icon = if (state.isDarkCanvas) Icons.Default.LightMode else Icons.Default.DarkMode,
                     label = if (state.isDarkCanvas) "Light" else "Dark",
                     active = state.isDarkCanvas,
@@ -198,6 +245,7 @@ fun AvitriSphareWhiteboardChrome(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .onGloballyPositioned { onDockBounds(it.boundsInRoot()) }
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -218,6 +266,93 @@ fun AvitriSphareWhiteboardChrome(
                             fontSize = 12.sp
                         )
                         Spacer(Modifier.width(8.dp))
+                        PEN_COLORS.take(6).forEach { color ->
+                            Box(
+                                modifier = Modifier
+                                    .padding(end = 6.dp)
+                                    .size(18.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(color))
+                                    .clickable { viewModel.recolorSelected(color) }
+                            )
+                        }
+                        val canConvert = state.strokes.any {
+                            it.id in state.selectedStrokeIds && it.strokeType in HANDWRITING_TYPES
+                        }
+                        if (canConvert) {
+                            Text(
+                                text = if (state.smartWriteBusy) "Reading…" else "Convert to Text",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF2563EB))
+                                    .clickable(enabled = !state.smartWriteBusy) { viewModel.convertSelectionToText() }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = if (state.equationBusy) "Reading equation…" else "Convert Equation",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF4F46E5))
+                                    .clickable(enabled = !state.equationBusy) { viewModel.convertSelectionToEquation() }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        val selectedEquation = state.strokes.singleOrNull {
+                            it.id in state.selectedStrokeIds && it.strokeType == StrokeType.EQUATION
+                        }
+                        if (selectedEquation != null && state.formulaSolution?.solved != true) {
+                            Text(
+                                text = "Solve this",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF0F766E))
+                                    .clickable { viewModel.solveCurrentEquation() }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        val selectedImage = state.strokes.firstOrNull {
+                            it.id in state.selectedStrokeIds && it.strokeType == StrokeType.IMAGE
+                        }
+                        if (selectedImage != null) {
+                            Text(
+                                text = if (state.extractTextBusy) "Extracting…" else "Extract Text",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF2563EB))
+                                    .clickable(enabled = !state.extractTextBusy) { viewModel.extractTextFromSelectedImage() }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        val canEdit = state.strokes.count {
+                            it.id in state.selectedStrokeIds && it.strokeType == StrokeType.TEXT
+                        } == 1
+                        if (canEdit && state.editingTextId == null) {
+                            Text(
+                                text = "Edit text",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { viewModel.beginTextEdit() }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            )
+                        }
                         Icon(
                             Icons.Default.Delete,
                             contentDescription = "Delete selection",
@@ -274,8 +409,17 @@ fun AvitriSphareWhiteboardChrome(
                     }
                 }
                 "geometry" -> DockPopover {
-                    PopoverRow(Icons.Default.AutoFixHigh, "Draw to shape", state.isDrawToShapeEnabled) {
-                        viewModel.toggleDrawToShape(); panel = null
+                    Text(
+                        "Drag the ruler, compass, or protractor from the toolbar. Drag a tool back onto the toolbar to remove it.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF6B7280)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    PopoverRow(Icons.Default.GridOn, "Graph paper", state.canvasBackground == CanvasBackground.GRAPH) {
+                        viewModel.toggleGraphPaper(); panel = null
+                    }
+                    PopoverRow(Icons.Default.AutoFixHigh, "Shape recognition", state.isDrawToShapeEnabled) {
+                        viewModel.toggleDrawToShape()
                     }
                     PopoverRow(Icons.Default.HorizontalRule, "Line", state.currentTool == WhiteboardTool.LINE) {
                         viewModel.setTool(WhiteboardTool.LINE); panel = null
@@ -288,6 +432,7 @@ fun AvitriSphareWhiteboardChrome(
                     }
                 }
                 "media" -> DockPopover {
+                    PopoverRow(Icons.Default.Description, "PDF or PowerPoint") { panel = null; onOpenDocument() }
                     PopoverRow(Icons.Default.Image, "Image from device") { panel = null; onInsertImage() }
                     PopoverRow(Icons.Default.Search, "Google Images") { panel = null; onSearchImages() }
                     PopoverRow(Icons.Default.Videocam, "Video from device") { panel = null; onInsertVideo() }
@@ -334,6 +479,27 @@ fun AvitriSphareWhiteboardChrome(
                     PopoverRow(Icons.Default.Image, "Image") { panel = null; onInsertImage() }
                     PopoverRow(Icons.Default.Code, "Web embed") { panel = null; onWebEmbed() }
                 }
+                "split" -> DockPopover {
+                    Text("Split screen", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Each panel keeps its own ink.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF6B7280)
+                    )
+                    listOf(2, 3, 4, 6).forEach { count ->
+                        PopoverRow(Icons.Default.Dashboard, "$count panels", state.splitCount == count) {
+                            viewModel.setSplit(count)
+                            panel = null
+                        }
+                    }
+                    if (state.splitCount > 1) {
+                        PopoverRow(Icons.Default.CropFree, "Full canvas") {
+                            viewModel.closeSplit()
+                            panel = null
+                        }
+                    }
+                }
                 "more" -> DockPopover {
                     PopoverRow(Icons.Default.PanTool, "Hand", state.currentTool == WhiteboardTool.HAND) {
                         viewModel.setTool(WhiteboardTool.HAND); panel = null
@@ -350,6 +516,9 @@ fun AvitriSphareWhiteboardChrome(
                     PopoverRow(Icons.Default.Edit, "Stroke colour") {
                         viewModel.setTool(state.inkTool)
                         panel = "ink"
+                    }
+                    PopoverRow(Icons.Default.AutoFixHigh, "Shape recognition", state.isDrawToShapeEnabled) {
+                        viewModel.toggleDrawToShape()
                     }
                     PopoverRow(Icons.Default.GridOn, "Background") { panel = "background" }
                     PopoverRow(Icons.Default.IosShare, "Export image") { panel = null; onExport() }
@@ -403,6 +572,7 @@ fun AvitriSphareWhiteboardChrome(
                             CanvasBackground.DOTTED,
                             CanvasBackground.WHITE,
                             CanvasBackground.GRID,
+                            CanvasBackground.GRAPH,
                             CanvasBackground.LINED,
                             CanvasBackground.DARK
                         ).forEach { type ->
@@ -430,7 +600,10 @@ fun AvitriSphareWhiteboardChrome(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val count = state.pageCount.coerceAtLeast(1)
-                for (index in 0 until count) {
+                val documentOpen = state.document != null
+                val firstThumb = if (documentOpen) (state.pageIndex - 2).coerceAtLeast(0) else 0
+                val lastThumb = if (documentOpen) (state.pageIndex + 3).coerceAtMost(count - 1) else count - 1
+                for (index in firstThumb..lastThumb) {
                     val strokes = if (index == state.pageIndex) {
                         state.strokes
                     } else {
@@ -444,7 +617,7 @@ fun AvitriSphareWhiteboardChrome(
                         onClick = { viewModel.selectPage(index) }
                     )
                 }
-                if (state.pageCount < 50) {
+                if (state.document == null && state.pageCount < 50) {
                     Box(
                         modifier = Modifier
                             .size(width = 72.dp, height = 52.dp)
@@ -514,10 +687,27 @@ fun AvitriSphareWhiteboardChrome(
                             "Geometry",
                             state.isDrawToShapeEnabled || state.currentTool == WhiteboardTool.FRAME || panel == "geometry"
                         ) { toggle("geometry") }
-                        DockItem(Icons.Default.Straighten, "Ruler", state.currentTool == WhiteboardTool.RULER) {
-                            panel = null
-                            viewModel.setTool(WhiteboardTool.RULER)
-                        }
+                        DraggableDockItem(
+                            icon = Icons.Default.Straighten,
+                            label = "Ruler",
+                            active = rulerPlaced || state.currentTool == WhiteboardTool.RULER,
+                            onDrag = { onMathDrag(MathToolKind.RULER, it) },
+                            onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.RULER, at, moved) }
+                        )
+                        DraggableDockItem(
+                            icon = Icons.Default.Architecture,
+                            label = "Compass",
+                            active = compassPlaced || state.currentTool == WhiteboardTool.COMPASS,
+                            onDrag = { onMathDrag(MathToolKind.COMPASS, it) },
+                            onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.COMPASS, at, moved) }
+                        )
+                        DraggableDockItem(
+                            icon = Icons.Default.Speed,
+                            label = "Protractor",
+                            active = protractorPlaced || state.currentTool == WhiteboardTool.PROTRACTOR,
+                            onDrag = { onMathDrag(MathToolKind.PROTRACTOR, it) },
+                            onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.PROTRACTOR, at, moved) }
+                        )
                         DockItem(
                             Icons.Default.Videocam,
                             "Media",
@@ -537,6 +727,9 @@ fun AvitriSphareWhiteboardChrome(
                                 viewModel.saveNow()
                                 Toast.makeText(context, "Saved", Toast.LENGTH_SHORT).show()
                             }
+                        }
+                        DockItem(Icons.Default.Dashboard, "Split", state.splitCount > 1 || panel == "split") {
+                            toggle("split")
                         }
                         DockItem(Icons.Default.MoreHoriz, "More", panel == "more" || panel == "color" || panel == "background") {
                             toggle("more")
@@ -660,6 +853,61 @@ private fun DockItem(
             fontSize = 9.sp,
             maxLines = 1
         )
+    }
+}
+
+@Composable
+private fun DraggableDockItem(
+    icon: ImageVector,
+    label: String,
+    active: Boolean,
+    onDrag: (Offset) -> Unit,
+    onDragEnd: (Offset, Boolean) -> Unit
+) {
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    Column(
+        modifier = Modifier
+            .onGloballyPositioned { origin = it.positionInRoot() }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    down.consume()
+                    var moved = 0f
+                    var previous = down.position
+                    var root = origin + down.position
+                    onDrag(root)
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) {
+                            onDragEnd(root, moved > 12f)
+                            break
+                        }
+                        val delta = change.position - previous
+                        moved += delta.getDistance()
+                        previous = change.position
+                        root = origin + change.position
+                        onDrag(root)
+                        change.consume()
+                    }
+                }
+            }
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(
+                    if (active) Brush.linearGradient(PenGradient)
+                    else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(16.dp))
+        }
+        Text(text = label, color = DockLabel, fontSize = 9.sp, maxLines = 1)
     }
 }
 

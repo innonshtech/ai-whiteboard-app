@@ -128,5 +128,13 @@ class CanvasViewModelTest {
         val state = viewModel.state.value
         assertTrue(state.scale > 0f)
     }
+
+    @Test
+    fun `extractTextFromSelectedImage does nothing if no image is selected`() {
+        val initialStrokes = viewModel.state.value.strokes.size
+        viewModel.extractTextFromSelectedImage()
+        assertEquals(initialStrokes, viewModel.state.value.strokes.size)
+        assertFalse(viewModel.state.value.extractTextBusy)
+    }
 }
 

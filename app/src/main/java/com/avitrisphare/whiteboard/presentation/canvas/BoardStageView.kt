@@ -15,11 +15,15 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ImageView
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import com.avitrisphare.whiteboard.domain.model.CanvasBackground
@@ -37,6 +41,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
     private val grid = LayerView(context)
     private val media = FrameLayout(context)
     private val ink = LayerView(context)
+    private val live = LiveLayer(context)
     private val density = Density(
         resources.displayMetrics.density,
         resources.configuration.fontScale
@@ -58,6 +63,33 @@ class BoardStageView(context: Context) : FrameLayout(context) {
     private var gridDirty = true
     private var inkDirty = true
     private var activeLive: LiveInk? = null
+    private var documentBitmap: Bitmap? = null
+    private var documentWidth = 0
+    private var documentHeight = 0
+    private var resizing = false
+    private var previewing = false
+    private var paintScale = 1f
+    private var paintOffsetX = 0f
+    private var paintOffsetY = 0f
+    private var marquee: android.graphics.RectF? = null
+    private val marqueePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x738A8870
+        style = android.graphics.Paint.Style.FILL
+    }
+    private val marqueeOverlay = object : View(context) {
+        init {
+            setWillNotDraw(false)
+        }
+
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            val box = marquee ?: return
+            val left = offsetX + box.left * scale
+            val top = offsetY + box.top * scale
+            val right = offsetX + box.right * scale
+            val bottom = offsetY + box.bottom * scale
+            canvas.drawRoundRect(left, top, right, bottom, 16f, 16f, marqueePaint)
+        }
+    }
 
     init {
         setBackgroundColor(android.graphics.Color.WHITE)
@@ -66,9 +98,13 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         val fill = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         addView(grid, fill)
         addView(media, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(marqueeOverlay, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(ink, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(live, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         grid.isClickable = false
         ink.isClickable = false
+        live.isClickable = false
+        live.setBackgroundColor(android.graphics.Color.TRANSPARENT)
         isClickable = false
         ink.setBackgroundColor(android.graphics.Color.TRANSPARENT)
     }
@@ -85,6 +121,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         offsetY: Float,
         selected: Set<String>
     ) {
+        if (previewing) return
         val pageChanged = background != this.pageBackground || showGrid != this.showGrid || dark != this.dark
         val moved = scale != this.scale || offsetX != this.offsetX || offsetY != this.offsetY
         val inkChanged = this.strokes !== strokes || this.selected !== selected
@@ -96,15 +133,90 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         this.offsetY = offsetY
         this.selected = selected
         if (gestureStrokes == null) this.strokes = strokes
-        if (pageChanged || moved) gridDirty = true
-        if (pageChanged || moved || inkChanged) inkDirty = true
-        bindMedia(if (gestureStrokes == null) strokes else this.strokes)
+        if (inkChanged || pageChanged) {
+            bindMedia(if (gestureStrokes == null) strokes else this.strokes)
+        }
+        if (pageChanged || moved) {
+            gridDirty = true
+            grid.invalidate()
+        }
+        if (pageChanged || moved || inkChanged) {
+            inkDirty = true
+            ink.invalidate()
+        }
+        if (moved) live.invalidate()
+    }
+
+    fun viewScale(): Float = scale
+    fun viewOffsetX(): Float = offsetX
+    fun viewOffsetY(): Float = offsetY
+
+    fun toWorld(x: Float, y: Float): Offset {
+        return CanvasTransform.screenToWorld(Offset(x, y), scale, Offset(offsetX, offsetY))
+    }
+
+    fun setMarquee(start: Offset?, end: Offset?) {
+        if (start == null || end == null) {
+            if (marquee == null) return
+            marquee = null
+            marqueeOverlay.invalidate()
+            return
+        }
+        marquee = android.graphics.RectF(
+            minOf(start.x, end.x),
+            minOf(start.y, end.y),
+            maxOf(start.x, end.x),
+            maxOf(start.y, end.y)
+        )
+        marqueeOverlay.invalidate()
+    }
+
+    fun panBy(dx: Float, dy: Float) {
+        setTransform(scale, offsetX + dx, offsetY + dy)
+    }
+
+    /**
+     * Pinch zoom draws the existing page bitmap with a matrix. The full page is
+     * rebuilt once, when the fingers lift.
+     */
+    fun previewTransform(scale: Float, offsetX: Float, offsetY: Float) {
+        if (previewing && this.scale == scale && this.offsetX == offsetX && this.offsetY == offsetY) return
+        this.scale = scale
+        this.offsetX = offsetX
+        this.offsetY = offsetY
+        previewing = true
         grid.invalidate()
         ink.invalidate()
+        live.invalidate()
+    }
+
+    fun commitPreview() {
+        if (!previewing) return
+        previewing = false
+        gridDirty = true
+        inkDirty = true
+        layoutMedia()
+        grid.invalidate()
+        ink.invalidate()
+        live.invalidate()
+    }
+
+    /** While a divider is moving, scale the existing bitmap instead of allocating a new one. */
+    fun setResizing(value: Boolean) {
+        if (resizing == value) return
+        resizing = value
+        if (!value) {
+            gridDirty = true
+            inkDirty = true
+            grid.invalidate()
+            ink.invalidate()
+            live.invalidate()
+        }
     }
 
     fun setTransform(scale: Float, offsetX: Float, offsetY: Float) {
-        if (this.scale == scale && this.offsetX == offsetX && this.offsetY == offsetY) return
+        if (!previewing && this.scale == scale && this.offsetX == offsetX && this.offsetY == offsetY) return
+        previewing = false
         this.scale = scale
         this.offsetX = offsetX
         this.offsetY = offsetY
@@ -113,11 +225,27 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         layoutMedia()
         grid.invalidate()
         ink.invalidate()
+        live.invalidate()
+    }
+
+    /**
+     * The document is part of the background layer. Updating it does not
+     * repaint the ink overlay, so annotation stays as light as a blank page.
+     */
+    fun setDocumentPage(bitmap: Bitmap?, pageWidth: Float, pageHeight: Float) {
+        val width = pageWidth.toInt()
+        val height = pageHeight.toInt()
+        if (documentBitmap === bitmap && documentWidth == width && documentHeight == height) return
+        documentBitmap = bitmap
+        documentWidth = width
+        documentHeight = height
+        gridDirty = true
+        grid.invalidate()
     }
 
     fun setLiveInk(ink: LiveInk?) {
         activeLive = ink
-        this.ink.invalidate()
+        live.invalidate()
     }
 
     fun showGestureStrokes(strokes: List<Stroke>) {
@@ -361,8 +489,26 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         override fun onDraw(canvas: android.graphics.Canvas) {
             val width = width.coerceAtLeast(1)
             val height = height.coerceAtLeast(1)
+            val existing = bitmap
+            if (previewing && existing != null && !existing.isRecycled) {
+                val ratio = if (paintScale == 0f) 1f else scale / paintScale
+                canvas.save()
+                canvas.translate(offsetX, offsetY)
+                canvas.scale(ratio, ratio)
+                canvas.translate(-paintOffsetX, -paintOffsetY)
+                canvas.drawBitmap(existing, 0f, 0f, null)
+                canvas.restore()
+                return
+            }
+            if (resizing && existing != null && !existing.isRecycled) {
+                canvas.drawBitmap(existing, null, android.graphics.Rect(0, 0, width, height), null)
+                return
+            }
             val dirty = if (this === grid) gridDirty else inkDirty
-            if (dirty || bitmap == null || bitmap?.width != width || bitmap?.height != height) {
+            if (dirty || existing == null || existing.width != width || existing.height != height) {
+                paintScale = scale
+                paintOffsetX = offsetX
+                paintOffsetY = offsetY
                 val next = if (bitmap != null && bitmap?.width == width && bitmap?.height == height) {
                     bitmap!!
                 } else {
@@ -378,82 +524,98 @@ class BoardStageView(context: Context) : FrameLayout(context) {
                 if (this === grid) gridDirty = false else inkDirty = false
             }
             canvas.drawBitmap(bitmap!!, 0f, 0f, null)
-            if (this === ink) {
-                drawLive(canvas)
-            }
         }
 
         private fun DrawScope.paintLayer() {
             if (this@LayerView === grid) {
                 drawPageGrid(pageBackground, showGrid, dark, scale, offsetX, offsetY)
+                val page = documentBitmap
+                if (page != null && !page.isRecycled && documentWidth > 0 && documentHeight > 0) {
+                    withTransform({
+                        translate(offsetX, offsetY)
+                        scale(scale, scale, pivot = Offset.Zero)
+                    }) {
+                        drawImage(
+                            image = page.asImageBitmap(),
+                            dstOffset = IntOffset.Zero,
+                            dstSize = IntSize(documentWidth, documentHeight)
+                        )
+                    }
+                }
             } else {
                 drawVectorInk(context, strokes, scale, offsetX, offsetY, selected)
             }
         }
 
-        private val livePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+    }
+
+    /**
+     * In-progress ink only. Committed strokes stay on the ink bitmap, so a pen
+     * sample does not upload that bitmap again.
+     */
+    private inner class LiveLayer(context: Context) : View(context) {
+        private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             style = android.graphics.Paint.Style.STROKE
             strokeCap = android.graphics.Paint.Cap.ROUND
             strokeJoin = android.graphics.Paint.Join.ROUND
         }
+        private val path = android.graphics.Path()
 
-        private fun drawLive(canvas: android.graphics.Canvas) {
-            val live = activeLive?.stroke
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            val stroke = activeLive?.stroke
             val active = currentStroke
-            if (live == null && (active == null || active.points.isEmpty())) return
+            if ((stroke == null || stroke.points.isEmpty()) && (active == null || active.points.isEmpty())) return
             canvas.save()
             canvas.translate(offsetX, offsetY)
             canvas.scale(scale, scale)
-            if (live != null && live.points.isNotEmpty()) drawInkPath(canvas, live)
-            if (active != null && active.points.isNotEmpty()) drawInkPath(canvas, active)
+            if (stroke != null && stroke.points.isNotEmpty()) drawStroke(canvas, stroke)
+            if (active != null && active !== stroke && active.points.isNotEmpty()) drawStroke(canvas, active)
             canvas.restore()
         }
 
-        private fun drawInkPath(canvas: android.graphics.Canvas, stroke: Stroke) {
+        private fun drawStroke(canvas: android.graphics.Canvas, stroke: Stroke) {
             val points = stroke.points
-            if (points.size >= 2 && stroke.strokeType == StrokeType.RECTANGLE ||
-                points.size >= 2 && stroke.strokeType == StrokeType.FRAME ||
-                points.size >= 2 && stroke.strokeType == StrokeType.CIRCLE
+            paint.color = stroke.colorValue
+            paint.strokeWidth = fittedStrokeWidth(stroke)
+            if (points.size >= 2 && (
+                    stroke.strokeType == StrokeType.RECTANGLE ||
+                        stroke.strokeType == StrokeType.FRAME ||
+                        stroke.strokeType == StrokeType.CIRCLE
+                    )
             ) {
+                paint.alpha = 255
                 val a = points.first()
                 val b = points.last()
-                val left = minOf(a.x, b.x)
-                val top = minOf(a.y, b.y)
-                val right = maxOf(a.x, b.x)
-                val bottom = maxOf(a.y, b.y)
-                livePaint.color = stroke.colorValue
-                livePaint.alpha = 255
-                livePaint.strokeWidth = fittedStrokeWidth(stroke)
                 if (stroke.strokeType == StrokeType.CIRCLE) {
-                    canvas.drawOval(left, top, right, bottom, livePaint)
+                    canvas.drawOval(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y), paint)
                 } else {
-                    canvas.drawRect(left, top, right, bottom, livePaint)
+                    canvas.drawRect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y), paint)
                 }
                 return
             }
-            livePaint.color = stroke.colorValue
-            livePaint.alpha = if (stroke.strokeType == StrokeType.HIGHLIGHTER || stroke.isHighlighter) 102 else 255
-            livePaint.strokeWidth = fittedStrokeWidth(stroke)
+            paint.alpha = if (stroke.strokeType == StrokeType.HIGHLIGHTER || stroke.isHighlighter) 102 else 255
             if (points.size == 1) {
-                val previous = livePaint.style
-                livePaint.style = android.graphics.Paint.Style.FILL
-                canvas.drawCircle(points[0].x, points[0].y, livePaint.strokeWidth / 2f, livePaint)
-                livePaint.style = previous
+                val previous = paint.style
+                paint.style = android.graphics.Paint.Style.FILL
+                canvas.drawCircle(points[0].x, points[0].y, paint.strokeWidth / 2f, paint)
+                paint.style = previous
                 return
             }
-            val path = android.graphics.Path()
+            canvas.drawPath(strokePath(points), paint)
+        }
+
+        private fun strokePath(points: List<Offset>): android.graphics.Path {
+            path.reset()
             path.moveTo(points[0].x, points[0].y)
             for (index in 1 until points.size - 1) {
                 val midX = (points[index].x + points[index + 1].x) / 2f
                 val midY = (points[index].y + points[index + 1].y) / 2f
                 path.quadTo(points[index].x, points[index].y, midX, midY)
             }
-            val last = points.last()
-            path.lineTo(last.x, last.y)
-            canvas.drawPath(path, livePaint)
+            path.lineTo(points.last().x, points.last().y)
+            return path
         }
 
-        /** Matches the saved stroke. The canvas scale is already applied, so the width is divided back out. */
         private fun fittedStrokeWidth(stroke: Stroke): Float {
             val safe = scale.coerceAtLeast(0.001f)
             val multiplier = when (stroke.strokeType) {
@@ -468,7 +630,8 @@ class BoardStageView(context: Context) : FrameLayout(context) {
 
     var currentStroke: Stroke? = null
         set(value) {
+            if (field === value) return
             field = value
-            ink.invalidate()
+            live.invalidate()
         }
 }

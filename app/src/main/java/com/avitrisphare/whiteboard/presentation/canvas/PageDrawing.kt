@@ -1,7 +1,9 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
 import android.content.Context
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -19,7 +21,11 @@ fun DrawScope.drawPageGrid(
     offsetX: Float,
     offsetY: Float
 ) {
-    val bgColor = if (background == CanvasBackground.DARK) Color(0xFF171717) else Color.White
+    val bgColor = when (background) {
+        CanvasBackground.DARK -> Color(0xFF171717)
+        CanvasBackground.GRAPH -> Color(0xFFF7FBFF)
+        else -> Color.White
+    }
     drawRect(bgColor, size = size)
     val viewport = CanvasTransform.calculateViewportWorldBounds(
         viewportSize = size,
@@ -36,9 +42,16 @@ fun DrawScope.drawPageGrid(
                 verticalLines(viewport, spacing, gridColor, scale)
                 horizontalLines(viewport, spacing, gridColor, scale)
             }
+            CanvasBackground.GRAPH -> {
+                val minor = spacing / 5f
+                verticalLines(viewport, minor, Color(0xFFD3E3F4), scale)
+                horizontalLines(viewport, minor, Color(0xFFD3E3F4), scale)
+                verticalLines(viewport, spacing, Color(0xFF6B93C0), scale, thicknessScale = 1.8f)
+                horizontalLines(viewport, spacing, Color(0xFF6B93C0), scale, thicknessScale = 1.8f)
+            }
             else -> Unit
         }
-        if (showGrid && background != CanvasBackground.GRID) {
+        if (showGrid && background != CanvasBackground.GRID && background != CanvasBackground.GRAPH) {
             val overlay = if (dark) Color(0xFF3A3A3A) else Color(0xFFC5C8D0)
             verticalLines(viewport, spacing, overlay, scale)
             horizontalLines(viewport, spacing, overlay, scale)
@@ -60,17 +73,46 @@ fun DrawScope.drawVectorInk(
         offset = Offset(offsetX, offsetY)
     )
     inPageSpace(offsetX, offsetY, scale) {
+        val selectedStrokes = ArrayList<Stroke>()
         for (stroke in strokes) {
-            if (stroke.isPlacedMedia()) {
-                if (stroke.id in selectedIds) {
-                    renderStroke(context, stroke, scale, true)
-                }
-                continue
+            if (stroke.isPlacedMedia()) continue
+            if (stroke.id in selectedIds) {
+                selectedStrokes.add(stroke)
+            } else if (stroke.bounds.overlaps(viewport)) {
+                renderStroke(context, stroke, scale, false)
             }
-            if (!stroke.bounds.overlaps(viewport)) continue
-            renderStroke(context, stroke, scale, stroke.id in selectedIds)
+        }
+        if (selectedStrokes.isNotEmpty()) drawSelectionBox(selectedStrokes)
+        for (stroke in selectedStrokes) {
+            renderStroke(context, stroke, scale, isEditableShape(stroke.strokeType))
+        }
+        for (stroke in strokes) {
+            if (stroke.isPlacedMedia() && stroke.id in selectedIds) {
+                renderStroke(context, stroke, scale, true)
+            }
         }
     }
+}
+
+private fun DrawScope.drawSelectionBox(strokes: List<Stroke>) {
+    var left = Float.POSITIVE_INFINITY
+    var top = Float.POSITIVE_INFINITY
+    var right = Float.NEGATIVE_INFINITY
+    var bottom = Float.NEGATIVE_INFINITY
+    strokes.forEach { stroke ->
+        val bounds = strokeSelectionBounds(stroke)
+        left = minOf(left, bounds.left)
+        top = minOf(top, bounds.top)
+        right = maxOf(right, bounds.right)
+        bottom = maxOf(bottom, bounds.bottom)
+    }
+    val pad = 16f
+    drawRoundRect(
+        color = Color(0x738A8870),
+        topLeft = Offset(left - pad, top - pad),
+        size = Size(right - left + pad * 2f, bottom - top + pad * 2f),
+        cornerRadius = CornerRadius(12f, 12f)
+    )
 }
 
 private fun DrawScope.inPageSpace(
@@ -89,11 +131,12 @@ private fun DrawScope.horizontalLines(
     viewport: androidx.compose.ui.geometry.Rect,
     spacing: Float,
     color: Color,
-    scale: Float
+    scale: Float,
+    thicknessScale: Float = 1f
 ) {
     val startY = floor(viewport.top / spacing) * spacing
     val endY = ceil(viewport.bottom / spacing) * spacing
-    val thickness = 1f / scale.coerceAtLeast(0.5f)
+    val thickness = thicknessScale / scale.coerceAtLeast(0.5f)
     var y = startY
     while (y <= endY) {
         drawLine(color, Offset(viewport.left, y), Offset(viewport.right, y), thickness)
@@ -105,11 +148,12 @@ private fun DrawScope.verticalLines(
     viewport: androidx.compose.ui.geometry.Rect,
     spacing: Float,
     color: Color,
-    scale: Float
+    scale: Float,
+    thicknessScale: Float = 1f
 ) {
     val startX = floor(viewport.left / spacing) * spacing
     val endX = ceil(viewport.right / spacing) * spacing
-    val thickness = 1f / scale.coerceAtLeast(0.5f)
+    val thickness = thicknessScale / scale.coerceAtLeast(0.5f)
     var x = startX
     while (x <= endX) {
         drawLine(color, Offset(x, viewport.top), Offset(x, viewport.bottom), thickness)

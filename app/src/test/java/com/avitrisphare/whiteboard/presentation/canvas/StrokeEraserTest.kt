@@ -75,12 +75,12 @@ class StrokeEraserTest {
     }
 
     @Test
-    fun `palm wider than 3cm is ignored only while a stylus is active`() {
+    fun `palm larger than 3 square centimetres is ignored only while a stylus is active`() {
         val xdpi = 160f
-        val limit = palmDiameterLimitPx(xdpi)
-        assertTrue(isPalmContact(limit + 1f, xdpi, stylusActive = true, isStylus = false))
-        assertTrue(!isPalmContact(limit - 1f, xdpi, stylusActive = true, isStylus = false))
-        assertTrue(!isPalmContact(limit + 20f, xdpi, stylusActive = false, isStylus = false))
-        assertTrue(!isPalmContact(limit + 20f, xdpi, stylusActive = true, isStylus = true))
+        assertTrue(isPalmContact(124f, xdpi, stylusActive = true, isStylus = false))
+        assertTrue(!isPalmContact(100f, xdpi, stylusActive = true, isStylus = false))
+        assertTrue(!isPalmContact(0f, xdpi, stylusActive = true, isStylus = false))
+        assertTrue(!isPalmContact(400f, xdpi, stylusActive = false, isStylus = false))
+        assertTrue(!isPalmContact(400f, xdpi, stylusActive = true, isStylus = true))
     }
 }

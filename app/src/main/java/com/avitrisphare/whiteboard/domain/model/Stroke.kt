@@ -20,17 +20,21 @@ data class Stroke(
     val bounds: Rect by lazy {
         if (points.isEmpty()) {
             Rect.Zero
-        } else if (strokeType == StrokeType.STICKY_NOTE || strokeType == StrokeType.TEXT) {
+        } else if (strokeType == StrokeType.STICKY_NOTE) {
             val origin = points.first()
-            val w = when (strokeType) {
-                StrokeType.STICKY_NOTE -> 220f
-                else -> (text.length * 12f).coerceIn(120f, 400f)
-            }
-            val h = when (strokeType) {
-                StrokeType.STICKY_NOTE -> 180f
-                else -> 60f
-            }
-            Rect(origin.x, origin.y, origin.x + w, origin.y + h)
+            Rect(origin.x, origin.y, origin.x + 220f, origin.y + 180f)
+        } else if (strokeType == StrokeType.EQUATION && points.size >= 2) {
+            val p1 = points.first()
+            val p2 = points.last()
+            Rect(minOf(p1.x, p2.x), minOf(p1.y, p2.y), maxOf(p1.x, p2.x), maxOf(p1.y, p2.y))
+        } else if (strokeType == StrokeType.TEXT) {
+            val origin = points.first()
+            val size = if (strokeWidth >= 12f) strokeWidth else 20f
+            val lines = text.ifBlank { " " }.split("\n")
+            val widest = lines.maxOf { it.length }.coerceAtLeast(1)
+            val width = (widest * size * 0.62f).coerceAtLeast(size * 2f)
+            val height = lines.size * size * 1.3f
+            Rect(origin.x, origin.y, origin.x + width, origin.y + height)
         } else if ((strokeType == StrokeType.IMAGE || strokeType == StrokeType.VIDEO || strokeType == StrokeType.WEB_EMBED) && points.size >= 2) {
             val p1 = points.first()
             val p2 = points.last()
@@ -83,5 +87,10 @@ enum class StrokeType {
     FRAME,
     WEB_EMBED,
     IMAGE,
-    VIDEO
+    VIDEO,
+    ELLIPSE,
+    SQUARE,
+    TRIANGLE,
+    STAR,
+    EQUATION
 }

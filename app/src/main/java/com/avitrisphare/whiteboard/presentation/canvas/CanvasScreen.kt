@@ -30,6 +30,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateRotation
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -42,15 +43,23 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -135,6 +144,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
@@ -155,7 +165,9 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
@@ -174,12 +186,14 @@ import com.avitrisphare.whiteboard.core.theme.LocalAvitriSphareColors
 import com.avitrisphare.whiteboard.domain.model.CanvasBackground
 import com.avitrisphare.whiteboard.domain.model.Stroke
 import com.avitrisphare.whiteboard.domain.model.StrokeType
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.InputStream
 import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 private class EraserSession {
@@ -221,7 +235,7 @@ fun DrawScope.renderStroke(
     val strokeColor = if (stroke.isHighlighter) Color(stroke.colorValue).copy(alpha = 0.4f) else Color(stroke.colorValue)
 
     when (stroke.strokeType) {
-        StrokeType.CIRCLE -> {
+        StrokeType.CIRCLE, StrokeType.ELLIPSE -> {
             if (pointsList.size >= 2) {
                 val p1 = pointsList.first()
                 val p2 = pointsList.last()
@@ -244,7 +258,7 @@ fun DrawScope.renderStroke(
                 )
             }
         }
-        StrokeType.RECTANGLE -> {
+        StrokeType.RECTANGLE, StrokeType.SQUARE -> {
             if (pointsList.size >= 2) {
                 val p1 = pointsList.first()
                 val p2 = pointsList.last()
@@ -331,6 +345,23 @@ fun DrawScope.renderStroke(
                 }
             }
         }
+        StrokeType.TRIANGLE -> {
+            if (pointsList.size >= 3) {
+                val triangle = Path().apply {
+                    moveTo(pointsList[0].x, pointsList[0].y)
+                    lineTo(pointsList[1].x, pointsList[1].y)
+                    lineTo(pointsList[2].x, pointsList[2].y)
+                    close()
+                }
+                drawPath(triangle, strokeColor, style = DrawStroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+        }
+        StrokeType.STAR -> {
+            if (pointsList.size >= 2) {
+                val star = regularStarPath(pointsList.first(), pointsList.last())
+                drawPath(star, strokeColor, style = DrawStroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+        }
         StrokeType.LINE -> {
             if (pointsList.size >= 2) {
                 drawLine(
@@ -414,12 +445,24 @@ fun DrawScope.renderStroke(
                 }
             }
         }
+        StrokeType.EQUATION -> {
+            val origin = pointsList.first()
+            val size = stroke.strokeWidth.coerceAtLeast(28f)
+            drawContext.canvas.nativeCanvas.let { native ->
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stroke.colorValue
+                    typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+                }
+                val pad = formulaPadding(size)
+                drawFormula(native, parseFormula(stroke.text), origin.x + pad, origin.y + pad, size, paint)
+            }
+        }
         StrokeType.TEXT -> {
             val origin = pointsList.first()
             drawContext.canvas.nativeCanvas.apply {
                 val paint = Paint().apply {
                     color = stroke.colorValue
-                    textSize = 20f
+                    textSize = if (stroke.strokeWidth >= 12f) stroke.strokeWidth else 20f
                     isAntiAlias = true
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 }
@@ -462,181 +505,6 @@ fun DrawScope.renderStroke(
             drawCircle(color = Color.White, radius = handleRadius, center = pt)
             drawCircle(color = selColor, radius = handleRadius, center = pt, style = DrawStroke(1.5f / safeScale))
         }
-    }
-}
-
-// --- Ruler tool: screen-space overlay independent of canvas pan/zoom ---
-
-private const val RULER_THICKNESS = 64f
-private const val RULER_MIN_LENGTH = 140f
-private const val RULER_MAX_LENGTH = 1400f
-private const val RULER_HANDLE_RADIUS = 26f
-private const val RULER_EDGE_INSET = 18f
-private val RAD_TO_DEG = 180f / kotlin.math.PI.toFloat()
-
-private enum class RulerZone { NONE, MOVE, ROTATE, RESIZE_LEFT, RESIZE_RIGHT }
-
-/** Unit vector pointing along the ruler's long axis, consistent with Compose's clockwise [rotate]. */
-private fun rulerDirection(rotationDeg: Float): Offset {
-    val rad = rotationDeg / RAD_TO_DEG
-    return Offset(cos(rad), sin(rad))
-}
-
-/** Unit vector perpendicular to the ruler's long axis (its short/thickness axis). */
-private fun rulerPerp(rotationDeg: Float): Offset {
-    val rad = rotationDeg / RAD_TO_DEG
-    return Offset(-sin(rad), cos(rad))
-}
-
-/**
- * Projects a screen point into the ruler's local (unrotated) coordinate frame and
- * classifies which interactive zone, if any, it lands in.
- */
-private fun hitTestRuler(
-    point: Offset,
-    center: Offset,
-    rotationDeg: Float,
-    length: Float,
-    thickness: Float
-): RulerZone {
-    val dir = rulerDirection(rotationDeg)
-    val perp = rulerPerp(rotationDeg)
-    val relX = point.x - center.x
-    val relY = point.y - center.y
-    val localX = relX * dir.x + relY * dir.y
-    val localY = relX * perp.x + relY * perp.y
-
-    fun near(ax: Float, ay: Float, bx: Float, by: Float, radius: Float): Boolean {
-        val dx = ax - bx
-        val dy = ay - by
-        return dx * dx + dy * dy <= radius * radius
-    }
-
-    val rotateHandleLocalY = -(thickness / 2f + 34f)
-    if (near(localX, localY, length / 2f, rotateHandleLocalY, RULER_HANDLE_RADIUS)) {
-        return RulerZone.ROTATE
-    }
-    if (near(localX, localY, length / 2f, 0f, RULER_HANDLE_RADIUS)) {
-        return RulerZone.RESIZE_RIGHT
-    }
-    if (near(localX, localY, -length / 2f, 0f, RULER_HANDLE_RADIUS)) {
-        return RulerZone.RESIZE_LEFT
-    }
-    if (kotlin.math.abs(localX) <= length / 2f && kotlin.math.abs(localY) <= thickness / 2f - RULER_EDGE_INSET) {
-        return RulerZone.MOVE
-    }
-    return RulerZone.NONE
-}
-
-/** Draws the ruler body, tick marks, angle readout, and drag handles in screen space. */
-private fun DrawScope.drawRuler(
-    center: Offset,
-    rotationDeg: Float,
-    length: Float,
-    thickness: Float,
-    isDark: Boolean,
-    pxPerCm: Float
-) {
-    rotate(degrees = rotationDeg, pivot = center) {
-        val left = center.x - length / 2f
-        val top = center.y - thickness / 2f
-        val bodyColor = if (isDark) Color(0xE62A2F3A) else Color(0xE6FFFFFF)
-        val borderColor = if (isDark) Color(0xFF4B5563) else Color(0xFF9CA3AF)
-        val tickColor = if (isDark) 0xFFD1D5DB.toInt() else 0xFF374151.toInt()
-        val handleColor = Color(0xFF6366F1)
-
-        drawRoundRect(
-            color = bodyColor,
-            topLeft = Offset(left, top),
-            size = Size(length, thickness),
-            cornerRadius = CornerRadius(10f, 10f)
-        )
-        drawRoundRect(
-            color = borderColor,
-            topLeft = Offset(left, top),
-            size = Size(length, thickness),
-            cornerRadius = CornerRadius(10f, 10f),
-            style = DrawStroke(width = 1.5f)
-        )
-
-        // One tick per millimetre so the printed scale is physically accurate (1 cm = 10 ticks).
-        val mmSpacing = (pxPerCm / 10f).coerceAtLeast(1.5f)
-        var i = 0
-        var x = left + 6f
-        val usableRight = left + length - 6f
-        while (x <= usableRight) {
-            val isCm = i % 10 == 0
-            val isHalfCm = i % 5 == 0
-            val tickHeight = when {
-                isCm -> thickness * 0.42f
-                isHalfCm -> thickness * 0.28f
-                else -> thickness * 0.16f
-            }
-            val tickStrokeWidth = if (isCm) 2f else 1f
-            drawLine(
-                color = Color(tickColor),
-                start = Offset(x, top + 4f),
-                end = Offset(x, top + 4f + tickHeight),
-                strokeWidth = tickStrokeWidth
-            )
-            drawLine(
-                color = Color(tickColor),
-                start = Offset(x, top + thickness - 4f),
-                end = Offset(x, top + thickness - 4f - tickHeight),
-                strokeWidth = tickStrokeWidth
-            )
-            if (isCm && i > 0) {
-                drawContext.canvas.nativeCanvas.apply {
-                    val paint = Paint().apply {
-                        color = tickColor
-                        textSize = 11f
-                        isAntiAlias = true
-                        textAlign = Paint.Align.CENTER
-                    }
-                    drawText("${i / 10}", x, top + thickness / 2f + 4f, paint)
-                }
-            }
-            i++
-            x += mmSpacing
-        }
-
-        drawContext.canvas.nativeCanvas.apply {
-            val paint = Paint().apply {
-                color = tickColor
-                textSize = 13f
-                isAntiAlias = true
-                textAlign = Paint.Align.CENTER
-            }
-            val normalizedAngle = ((rotationDeg % 360f) + 360f) % 360f
-            drawText("${normalizedAngle.toInt()}°", center.x, top - 14f, paint)
-        }
-
-        val leftEnd = Offset(left, center.y)
-        val rightEnd = Offset(left + length, center.y)
-        listOf(leftEnd, rightEnd).forEach { handle ->
-            drawCircle(color = Color.White, radius = RULER_HANDLE_RADIUS * 0.8f, center = handle)
-            drawCircle(
-                color = handleColor,
-                radius = RULER_HANDLE_RADIUS * 0.8f,
-                center = handle,
-                style = DrawStroke(width = 2.5f)
-            )
-        }
-
-        val rotateHandleCenter = Offset(center.x + length / 2f, center.y - (thickness / 2f + 34f))
-        drawLine(
-            color = handleColor,
-            start = Offset(center.x + length / 2f, top),
-            end = rotateHandleCenter,
-            strokeWidth = 1.5f
-        )
-        drawCircle(color = Color.White, radius = RULER_HANDLE_RADIUS * 0.7f, center = rotateHandleCenter)
-        drawCircle(
-            color = handleColor,
-            radius = RULER_HANDLE_RADIUS * 0.7f,
-            center = rotateHandleCenter,
-            style = DrawStroke(width = 2.5f)
-        )
     }
 }
 
@@ -807,6 +675,13 @@ fun BackgroundSwatch(type: CanvasBackground, isSelected: Boolean, onClick: () ->
                     for (h in 0..size.width.toInt() step 8)
                         drawLine(Color(0xFF2E2E2E), Offset(h.toFloat(), 0f), Offset(h.toFloat(), size.height), 1f)
                 }
+                CanvasBackground.GRAPH -> {
+                    drawRect(Color(0xFFF7FBFF))
+                    for (v in 0..size.height.toInt() step 6)
+                        drawLine(Color(0xFFD3E3F4), Offset(0f, v.toFloat()), Offset(size.width, v.toFloat()), 1f)
+                    for (h in 0..size.width.toInt() step 6)
+                        drawLine(Color(0xFFD3E3F4), Offset(h.toFloat(), 0f), Offset(h.toFloat(), size.height), 1f)
+                }
             }
         }
     }
@@ -825,10 +700,12 @@ fun CanvasScreen(
     }
 
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val pageBitmap by viewModel.pageBitmap.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val focusRequester = remember { FocusRequester() }
 
     var showSidebar by remember { mutableStateOf(false) }
+    var showAiPanel by remember { mutableStateOf(false) }
     var showLiveCollabDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
@@ -867,22 +744,107 @@ fun CanvasScreen(
         val metrics = context.resources.displayMetrics
         if (metrics.xdpi > 50f) metrics.xdpi else metrics.densityDpi.toFloat()
     }
+    val ydpi = remember {
+        val metrics = context.resources.displayMetrics
+        if (metrics.ydpi > 50f) metrics.ydpi else xdpi
+    }
     var canvasOffsetX by remember { mutableFloatStateOf(0f) }
     var canvasOffsetY by remember { mutableFloatStateOf(0f) }
     var canvasSize by remember { mutableStateOf(Size.Zero) }
+    var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
+    var dockBounds by remember { mutableStateOf<Rect?>(null) }
 
-    // Ruler tool: ephemeral screen-space overlay, not persisted with note content.
-    var rulerCenter by remember { mutableStateOf<Offset?>(null) }
-    var rulerRotationDeg by remember { mutableFloatStateOf(0f) }
-    var rulerLength by remember { mutableFloatStateOf(360f) }
-    val rulerPxPerCm = remember(xdpi) { xdpi / 2.54f }
+    // Math instruments live in screen space so centimetre marks stay physical size.
+    var mathTools by remember { mutableStateOf(listOf<PlacedMathTool>()) }
+    var mathGhost by remember { mutableStateOf<PlacedMathTool?>(null) }
+    var mathReadout by remember { mutableStateOf<Pair<String, Offset>?>(null) }
+    var shapePrompt by remember { mutableStateOf<ShapePrompt?>(null) }
+    var shapePromptVisible by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.currentTool, canvasSize) {
-        if (state.currentTool == WhiteboardTool.RULER && rulerCenter == null) {
-            val cx = if (canvasSize.width > 0) canvasSize.width / 2f else 400f
-            val cy = if (canvasSize.height > 0) canvasSize.height / 2f else 500f
-            rulerCenter = Offset(cx, cy)
+    LaunchedEffect(shapePrompt?.strokeId) {
+        val prompt = shapePrompt
+        if (prompt == null) {
+            shapePromptVisible = false
+            return@LaunchedEffect
         }
+        shapePromptVisible = false
+        delay(SHAPE_PROMPT_DELAY_MS)
+        if (shapePrompt?.strokeId != prompt.strokeId) return@LaunchedEffect
+        shapePromptVisible = true
+        delay(SHAPE_AUTO_CONVERT_MS)
+        if (shapePrompt?.strokeId == prompt.strokeId) {
+            viewModel.replaceStroke(prompt.replacement)
+            shapePrompt = null
+            shapePromptVisible = false
+        }
+    }
+    val pxPerCm = remember(xdpi) { xdpi / 2.54f }
+
+    fun canvasCenter(): Offset {
+        val cx = if (canvasSize.width > 0) canvasSize.width / 2f else 400f
+        val cy = if (canvasSize.height > 0) canvasSize.height / 2f else 500f
+        return Offset(cx, cy)
+    }
+
+    fun replaceMathTool(updated: PlacedMathTool) {
+        mathTools = mathTools.map { if (it.id == updated.id) updated else it }
+    }
+
+    fun placeMathTool(kind: MathToolKind, center: Offset) {
+        val existing = mathTools.indexOfFirst { it.kind == kind }
+        if (existing >= 0) {
+            mathTools = mathTools.toMutableList().also { it[existing] = mathTools[existing].copy(center = center) }
+        } else {
+            mathTools = mathTools + newMathTool(kind, center)
+        }
+        val tool = when (kind) {
+            MathToolKind.RULER -> WhiteboardTool.RULER
+            MathToolKind.COMPASS -> WhiteboardTool.COMPASS
+            MathToolKind.PROTRACTOR -> WhiteboardTool.PROTRACTOR
+        }
+        viewModel.setTool(tool)
+    }
+
+    fun removeMathTool(id: String) {
+        val removed = mathTools.find { it.id == id } ?: return
+        mathTools = mathTools.filter { it.id != id }
+        val active = when (removed.kind) {
+            MathToolKind.RULER -> WhiteboardTool.RULER
+            MathToolKind.COMPASS -> WhiteboardTool.COMPASS
+            MathToolKind.PROTRACTOR -> WhiteboardTool.PROTRACTOR
+        }
+        if (viewModel.state.value.currentTool == active) {
+            viewModel.setTool(WhiteboardTool.SELECT)
+        }
+    }
+
+    fun rootToCanvas(root: Offset): Offset = root - canvasOrigin
+
+    var panePickIndex by remember { mutableIntStateOf(-1) }
+    var paneWebIndex by remember { mutableIntStateOf(-1) }
+    var paneWebAddress by remember { mutableStateOf("https://") }
+
+    val paneDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        val index = panePickIndex
+        if (uri == null || index < 0) return@rememberLauncherForActivityResult
+        viewModel.openPaneDocument(index, uri)
+    }
+
+    val paneVideoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        val index = panePickIndex
+        if (uri == null || index < 0) return@rememberLauncherForActivityResult
+        viewModel.openPaneVideo(index, uri)
+    }
+
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        viewModel.openDocument(uri, canvasSize.width, canvasSize.height)
     }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -927,6 +889,28 @@ fun CanvasScreen(
         focusRequester.requestFocus()
     }
 
+    LaunchedEffect(state.paneRequest) {
+        val request = state.paneRequest ?: return@LaunchedEffect
+        val kind = request.substringBefore(':')
+        val index = request.substringAfter(':').toIntOrNull() ?: return@LaunchedEffect
+        viewModel.clearPaneRequest()
+        panePickIndex = index
+        when (kind) {
+            PaneKind.PDF.name -> paneDocumentLauncher.launch(
+                arrayOf(
+                    "application/pdf",
+                    "application/vnd.ms-powerpoint",
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                )
+            )
+            PaneKind.VIDEO.name -> paneVideoLauncher.launch(arrayOf("video/*"))
+            PaneKind.WEB.name -> {
+                paneWebAddress = "https://"
+                paneWebIndex = index
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -950,11 +934,22 @@ fun CanvasScreen(
                 }
             }
     ) {
+        if (state.splitCount > 1) {
+            SplitCanvas(
+                state = state,
+                viewModel = viewModel,
+                onToggleAi = { showAiPanel = !showAiPanel }
+            )
+        } else {
         // 1. Full-bleed Infinite Whiteboard Canvas Viewport
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .onSizeChanged { canvasSize = Size(it.width.toFloat(), it.height.toFloat()) }
+                .onSizeChanged {
+                    canvasSize = Size(it.width.toFloat(), it.height.toFloat())
+                    viewModel.updateViewport(canvasSize.width, canvasSize.height)
+                }
+                .onGloballyPositioned { canvasOrigin = it.positionInRoot() }
                 .pointerInteropFilter { event ->
                     touchContacts.record(event)
                     val stage = boardStage
@@ -990,17 +985,22 @@ fun CanvasScreen(
                     state.isDrawToShapeEnabled
                 ) {
                     awaitEachGesture {
-                        fun PointerInputChange.rejectedPalm(): Boolean {
+                        fun PointerInputChange.isStylusPointer(): Boolean {
                             val tool = touchContacts.toolType(id)
-                            val stylus = tool == MotionEvent.TOOL_TYPE_STYLUS ||
+                            return tool == MotionEvent.TOOL_TYPE_STYLUS ||
                                 tool == MotionEvent.TOOL_TYPE_ERASER ||
                                 type == PointerType.Stylus ||
                                 type == PointerType.Eraser
+                        }
+                        fun PointerInputChange.rejectedPalm(): Boolean {
+                            val stylus = isStylusPointer()
                             return isPalmContact(
                                 touchMajorPx = touchContacts.majorPx(id),
                                 xdpi = xdpi,
                                 stylusActive = touchContacts.stylusActive || stylus,
-                                isStylus = stylus
+                                isStylus = stylus,
+                                touchMinorPx = touchContacts.minorPx(id),
+                                ydpi = ydpi
                             )
                         }
                         var down = awaitFirstDown(requireUnconsumed = false)
@@ -1021,22 +1021,45 @@ fun CanvasScreen(
                         )
                         var prevPosition = down.position
                         var shapePoints = listOf(downWorld)
+                        val stylusDraw = down.isStylusPointer()
+                        val activeTool = if (stylusDraw) {
+                            val toolType = touchContacts.toolType(down.id)
+                            if (toolType == MotionEvent.TOOL_TYPE_ERASER || down.type == PointerType.Eraser) {
+                                WhiteboardTool.ERASER
+                            } else {
+                                state.inkTool
+                            }
+                        } else {
+                            state.currentTool
+                        }
                         val inkPoints = ArrayList<Offset>(256)
                         val inkPressures = ArrayList<Float>(256)
                         inkPoints.add(downWorld)
-                        inkPressures.add(down.inkPressure())
-                        if (state.currentTool in WRITING_TOOLS) liveInk.begin(downWorld)
+                        inkPressures.add(if (stylusDraw) stylusPressure(down.pressure) else down.inkPressure())
+                        if (activeTool in WRITING_TOOLS) {
+                            liveInk.begin(downWorld)
+                            shapePrompt = null
+                            shapePromptVisible = false
+                        }
                         var wasMultiTouch = false
                         var transformMoved = false
-                        val writingNow = state.currentTool in WRITING_TOOLS
+                        var fingerPeak = 1
+                        var gestureStart: Offset? = null
+                        var gestureEnd = Offset.Zero
+                        var gestureTravel = 0f
+                        var gestureScale = canvasScale
+                        var gestureOffsetX = canvasOffsetX
+                        var gestureOffsetY = canvasOffsetY
+                        val fingerScratch = ArrayList<androidx.compose.ui.input.pointer.PointerInputChange>(8)
+                        val writingNow = activeTool in WRITING_TOOLS
                         val inkTemplate = if (writingNow) {
                             Stroke(
                                 points = inkPoints,
                                 pointPressures = inkPressures,
                                 colorValue = state.selectedColor,
                                 strokeWidth = state.strokeWidth,
-                                isHighlighter = state.currentTool == WhiteboardTool.HIGHLIGHTER,
-                                strokeType = state.currentTool.toStrokeType()
+                                isHighlighter = activeTool == WhiteboardTool.HIGHLIGHTER,
+                                strokeType = activeTool.toStrokeType()
                             )
                         } else {
                             null
@@ -1052,7 +1075,16 @@ fun CanvasScreen(
                                 val safeScale = canvasScale.coerceAtLeast(0.001f)
                                 Offset(last.x + dx / safeScale, last.y + dy / safeScale)
                             }
-                            liveInk.stroke = template
+                            liveInk.stroke = if (stylusDraw) {
+                                template.copy(
+                                    strokeWidth = stylusPressureWidth(
+                                        state.strokeWidth,
+                                        inkPressures.lastOrNull() ?: 1f
+                                    )
+                                )
+                            } else {
+                                template
+                            }
                             liveInkTick.intValue = liveInkTick.intValue + 1
                             boardStage?.setLiveInk(liveInk)
                         }
@@ -1066,7 +1098,8 @@ fun CanvasScreen(
                             if (last != null) {
                                 val dx = (world.x - last.x) * canvasScale
                                 val dy = (world.y - last.y) * canvasScale
-                                if (dx * dx + dy * dy < 1.5625f) return
+                                val gap = INK_SAMPLE_GAP_PX
+                                if (dx * dx + dy * dy < gap * gap) return
                             }
                             inkPoints.add(world)
                             inkPressures.add(pressure)
@@ -1095,20 +1128,81 @@ fun CanvasScreen(
                             boardStage?.showGestureStrokes(eraserSession.strokes)
                         }
                         var isDraggingSelection = false
-                        var rulerZone = RulerZone.NONE
-                        var rulerFixedEnd = Offset.Zero
-                        var rulerStartPointerAngle = 0f
-                        var rulerStartRotation = 0f
-                        var rulerDrawDir = Offset(1f, 0f)
+                        var selectingBox = false
+                        var strokeHit = false
+                        var resizeStrokeId: String? = null
+                        var resizeHandle: ShapeHandleHit? = null
+                        val mathGesture = MathGesture()
+                        val mathHit = hitTestPlacedTools(mathTools, down.position)
+                        val straightedge = if (mathHit != null) {
+                            null
+                        } else if (activeTool == WhiteboardTool.RULER) {
+                            mathTools.lastOrNull { it.kind == MathToolKind.RULER }
+                                ?.takeIf { distanceToRulerEdge(it, down.position) <= RULER_EDGE_SLOP }
+                        } else if (activeTool in WRITING_TOOLS || activeTool == WhiteboardTool.LINE) {
+                            rulerForStraightedge(mathTools, down.position)
+                        } else {
+                            null
+                        }
+                        if (mathHit != null || straightedge != null) {
+                            liveInk.stroke = null
+                            liveInkTick.intValue = liveInkTick.intValue + 1
+                            boardStage?.setLiveInk(null)
+                        }
+                        if (mathHit != null) {
+                            val tool = mathHit.tool
+                            mathGesture.toolId = tool.id
+                            mathGesture.zone = mathHit.zone
+                            mathGesture.draggingPositiveEnd = mathHit.zone == MathToolZone.ROTATE_POSITIVE
+                            if (mathHit.zone == MathToolZone.ROTATE_POSITIVE || mathHit.zone == MathToolZone.ROTATE_NEGATIVE) {
+                                mathGesture.pivot = endPoint(tool, positive = !mathGesture.draggingPositiveEnd)
+                            }
+                            if (mathHit.zone == MathToolZone.PENCIL) {
+                                mathGesture.startSpan = tool.span
+                                mathGesture.startAngleDeg = tool.rotationDeg
+                                mathGesture.lastAngleDeg = tool.rotationDeg
+                            }
+                            if (mathHit.zone == MathToolZone.SCALE) {
+                                val angle = protractorAngle(tool, down.position)
+                                if (angle != null) replaceMathTool(tool.copy(markedAngleDeg = angle))
+                            }
+                        } else if (straightedge != null) {
+                            mathGesture.rulerDrawing = true
+                            mathGesture.drawDir = direction(straightedge.rotationDeg)
+                            val newStroke = Stroke(
+                                points = listOf(downWorld, downWorld),
+                                colorValue = state.selectedColor,
+                                strokeWidth = state.strokeWidth,
+                                strokeType = StrokeType.LINE
+                            )
+                            shapePoints = newStroke.points
+                            viewModel.startStroke(newStroke)
+                        }
 
-                        when (state.currentTool) {
+                        if (mathHit == null && straightedge == null) when (activeTool) {
                             WhiteboardTool.HAND -> {
                                 // Hand pan mode
                             }
                             WhiteboardTool.SELECT -> {
-                                val hit = viewModel.selectStrokeAt(downWorld)
-                                if (hit) {
-                                    isDraggingSelection = true
+                                val slop = 28f / canvasScale.coerceAtLeast(0.001f)
+                                val selectedHandle = viewModel.state.value.strokes.firstNotNullOfOrNull { stroke ->
+                                    if (stroke.id !in state.selectedStrokeIds) {
+                                        null
+                                    } else {
+                                        hitShapeHandle(stroke, downWorld, slop)?.let { stroke.id to it }
+                                    }
+                                }
+                                if (selectedHandle != null) {
+                                    resizeStrokeId = selectedHandle.first
+                                    resizeHandle = selectedHandle.second
+                                } else {
+                                    val hit = viewModel.strokeAt(downWorld)
+                                    strokeHit = hit != null
+                                    if (hit != null && hit.id in state.selectedStrokeIds) {
+                                        isDraggingSelection = true
+                                    } else {
+                                        selectingBox = true
+                                    }
                                 }
                             }
                             WhiteboardTool.BUCKET_FILL -> {
@@ -1148,7 +1242,7 @@ fun CanvasScreen(
                             WhiteboardTool.ARROW,
                             WhiteboardTool.LINE,
                             WhiteboardTool.FRAME -> {
-                                val sType = when (state.currentTool) {
+                                val sType = when (activeTool) {
                                     WhiteboardTool.RECTANGLE -> StrokeType.RECTANGLE
                                     WhiteboardTool.DIAMOND -> StrokeType.DIAMOND
                                     WhiteboardTool.CIRCLE -> StrokeType.CIRCLE
@@ -1166,50 +1260,6 @@ fun CanvasScreen(
                                 shapePoints = newStroke.points
                                 viewModel.startStroke(newStroke)
                             }
-                            WhiteboardTool.RULER -> {
-                                val center = rulerCenter
-                                rulerZone = if (center != null) {
-                                    hitTestRuler(down.position, center, rulerRotationDeg, rulerLength, RULER_THICKNESS)
-                                } else {
-                                    RulerZone.NONE
-                                }
-                                val dir = rulerDirection(rulerRotationDeg)
-                                when (rulerZone) {
-                                    RulerZone.ROTATE -> {
-                                        rulerStartPointerAngle = atan2(
-                                            down.position.y - center!!.y,
-                                            down.position.x - center.x
-                                        )
-                                        rulerStartRotation = rulerRotationDeg
-                                    }
-                                    RulerZone.RESIZE_LEFT -> {
-                                        rulerFixedEnd = Offset(
-                                            center!!.x + dir.x * (rulerLength / 2f),
-                                            center.y + dir.y * (rulerLength / 2f)
-                                        )
-                                    }
-                                    RulerZone.RESIZE_RIGHT -> {
-                                        rulerFixedEnd = Offset(
-                                            center!!.x - dir.x * (rulerLength / 2f),
-                                            center.y - dir.y * (rulerLength / 2f)
-                                        )
-                                    }
-                                    RulerZone.MOVE -> {
-                                        // Translated via screen-position delta in the drag loop.
-                                    }
-                                    RulerZone.NONE -> {
-                                        rulerDrawDir = dir
-                                        val newStroke = Stroke(
-                                            points = listOf(downWorld, downWorld),
-                                            colorValue = state.selectedColor,
-                                            strokeWidth = state.strokeWidth,
-                                            strokeType = StrokeType.LINE
-                                        )
-                                        shapePoints = newStroke.points
-                                        viewModel.startStroke(newStroke)
-                                    }
-                                }
-                            }
                             else -> {}
                         }
 
@@ -1224,40 +1274,95 @@ fun CanvasScreen(
                                     true
                                 }
                             }
-                            val pinch = !touchContacts.stylusActive && pressed.size > 1 && realPressed.size > 1
-                            if (pinch) {
-                                wasMultiTouch = true
+                            fingerScratch.clear()
+                            for (change in realPressed) {
+                                if (!change.isStylusPointer()) fingerScratch.add(change)
+                            }
+                            if (fingerScratch.size > fingerPeak) fingerPeak = fingerScratch.size
+                            val drawsImmediately = activeTool == WhiteboardTool.PENCIL ||
+                                activeTool == WhiteboardTool.ERASER
+                            val multiFingers = !drawsImmediately &&
+                                !touchContacts.stylusActive &&
+                                fingerScratch.size >= 2
+                            if (multiFingers) {
+                                if (!wasMultiTouch) {
+                                    wasMultiTouch = true
+                                    liveInk.stroke = null
+                                    liveInk.predicted = null
+                                    boardStage?.setLiveInk(null)
+                                    viewModel.cancelCurrentStroke()
+                                }
+                                var sumX = 0f
+                                var sumY = 0f
+                                for (finger in fingerScratch) {
+                                    sumX += finger.position.x
+                                    sumY += finger.position.y
+                                }
+                                val fingerCenter = Offset(sumX / fingerScratch.size, sumY / fingerScratch.size)
+                                val origin = gestureStart ?: fingerCenter
+                                gestureStart = origin
+                                gestureEnd = fingerCenter
+                                val travel = centroidTravel(origin.x, origin.y, fingerCenter.x, fingerCenter.y)
+                                if (travel > gestureTravel) gestureTravel = travel
+                                val centroid = event.calculateCentroid(useCurrent = true)
+                                val pinchedTool = if (fingerScratch.size != 2) {
+                                    null
+                                } else {
+                                    mathGesture.toolId?.let { id -> mathTools.find { it.id == id } }
+                                        ?: hitTestPlacedTools(mathTools, centroid)?.tool
+                                }
+                                if (pinchedTool != null) {
+                                    mathGesture.twoFinger = true
+                                    mathGesture.rulerDrawing = false
+                                    mathGesture.arcMode = false
+                                    viewModel.cancelCurrentStroke()
+                                    mathReadout = null
+                                    replaceMathTool(
+                                        translateAndRotate(
+                                            pinchedTool,
+                                            event.calculatePan(),
+                                            event.calculateRotation()
+                                        )
+                                    )
+                                    event.changes.forEach { it.consume() }
+                                } else if (fingerScratch.size == 2) {
                                 val zoomChange = event.calculateZoom()
                                 val panChange = event.calculatePan()
-                                val centroid = event.calculateCentroid(useCurrent = false)
 
                                 if (zoomChange != 1f || panChange != Offset.Zero) {
-                                    val newScale = (canvasScale * zoomChange).coerceIn(
+                                    val newScale = (gestureScale * zoomChange).coerceIn(
                                         CanvasTransform.MIN_SCALE,
                                         CanvasTransform.MAX_SCALE
                                     )
                                     val newOffset = CanvasTransform.calculatePivotZoomOffset(
-                                        oldScale = canvasScale,
+                                        oldScale = gestureScale,
                                         newScale = newScale,
-                                        oldOffset = Offset(canvasOffsetX, canvasOffsetY),
+                                        oldOffset = Offset(gestureOffsetX, gestureOffsetY),
                                         centroid = centroid,
                                         panDelta = panChange
                                     )
-                                    canvasScale = newScale
-                                    canvasOffsetX = newOffset.x
-                                    canvasOffsetY = newOffset.y
+                                    gestureScale = newScale
+                                    gestureOffsetX = newOffset.x
+                                    gestureOffsetY = newOffset.y
                                     transformMoved = true
-                                    boardStage?.setTransform(canvasScale, canvasOffsetX, canvasOffsetY)
+                                    boardStage?.previewTransform(gestureScale, gestureOffsetX, gestureOffsetY)
                                 }
                                 event.changes.forEach { it.consume() }
+                                } else {
+                                    event.changes.forEach { it.consume() }
+                                }
                             } else {
-                                val change = realPressed.firstOrNull { pointer ->
-                                    val tool = touchContacts.toolType(pointer.id)
-                                    tool == MotionEvent.TOOL_TYPE_STYLUS ||
-                                        tool == MotionEvent.TOOL_TYPE_ERASER ||
-                                        pointer.type == PointerType.Stylus ||
-                                        pointer.type == PointerType.Eraser
-                                } ?: realPressed.firstOrNull()
+                                val change = if (drawsImmediately) {
+                                    realPressed.firstOrNull { it.id == down.id }
+                                } else {
+                                    realPressed.firstOrNull { pointer ->
+                                        val tool = touchContacts.toolType(pointer.id)
+                                        tool == MotionEvent.TOOL_TYPE_STYLUS ||
+                                            tool == MotionEvent.TOOL_TYPE_ERASER ||
+                                            pointer.type == PointerType.Stylus ||
+                                            pointer.type == PointerType.Eraser
+                                    } ?: realPressed.firstOrNull()
+                                }
                                 if (change != null) {
                                     val curWorld = CanvasTransform.screenToWorld(
                                         screenPoint = change.position,
@@ -1265,14 +1370,73 @@ fun CanvasScreen(
                                         offset = Offset(canvasOffsetX, canvasOffsetY)
                                     )
 
-                                    if (state.currentTool == WhiteboardTool.HAND) {
+                                    if (mathGesture.toolId != null && !mathGesture.rulerDrawing) {
+                                        val tool = mathTools.find { it.id == mathGesture.toolId }
+                                        if (tool != null) {
+                                            val dx = change.position.x - prevPosition.x
+                                            val dy = change.position.y - prevPosition.y
+                                            mathGesture.movedPx += Offset(dx, dy).getDistance()
+                                            when (mathGesture.zone) {
+                                                MathToolZone.MOVE -> replaceMathTool(tool.copy(center = Offset(tool.center.x + dx, tool.center.y + dy)))
+                                                MathToolZone.ROTATE_POSITIVE, MathToolZone.ROTATE_NEGATIVE -> {
+                                                    replaceMathTool(
+                                                        rotateToolByEnd(tool, change.position, mathGesture.draggingPositiveEnd)
+                                                    )
+                                                }
+                                                MathToolZone.PENCIL -> {
+                                                    val next = dragCompassPencil(tool, change.position, mathGesture)
+                                                    replaceMathTool(next)
+                                                    if (mathGesture.arcMode) {
+                                                        val worldPts = screenPointsToWorld(
+                                                            compassArcScreenPoints(next, mathGesture.startAngleDeg, mathGesture.sweepDeg),
+                                                            canvasScale,
+                                                            Offset(canvasOffsetX, canvasOffsetY)
+                                                        )
+                                                        val arc = arcStroke(worldPts, state.selectedColor, state.strokeWidth)
+                                                        if (viewModel.state.value.currentStroke == null) {
+                                                            viewModel.startStroke(arc)
+                                                        } else {
+                                                            viewModel.updateStroke(worldPts)
+                                                        }
+                                                    }
+                                                }
+                                                MathToolZone.SCALE -> {
+                                                    val angle = protractorAngle(tool, change.position)
+                                                    if (angle != null) replaceMathTool(tool.copy(markedAngleDeg = angle))
+                                                }
+                                                MathToolZone.NONE -> Unit
+                                            }
+                                        }
+                                    } else if (mathGesture.rulerDrawing) {
+                                        val endWorld = projectOntoRuler(downWorld, curWorld, mathGesture.drawDir, canvasScale)
+                                        shapePoints = listOf(downWorld, endWorld)
+                                        viewModel.updateStroke(shapePoints)
+                                        val endScreen = CanvasTransform.worldToScreen(
+                                            endWorld,
+                                            canvasScale,
+                                            Offset(canvasOffsetX, canvasOffsetY)
+                                        )
+                                        val mid = Offset(
+                                            (down.position.x + endScreen.x) / 2f,
+                                            (down.position.y + endScreen.y) / 2f - 28f
+                                        )
+                                        mathReadout = formatCentimetres(
+                                            screenLengthPx(downWorld, endWorld, canvasScale),
+                                            pxPerCm
+                                        ) to mid
+                                    } else if (activeTool == WhiteboardTool.HAND) {
                                         val panX = change.position.x - prevPosition.x
                                         val panY = change.position.y - prevPosition.y
                                         canvasOffsetX += panX
                                         canvasOffsetY += panY
                                         transformMoved = true
                                         boardStage?.setTransform(canvasScale, canvasOffsetX, canvasOffsetY)
-                                    } else if (state.currentTool == WhiteboardTool.SELECT && isDraggingSelection) {
+                                    } else if (resizeStrokeId != null && resizeHandle != null) {
+                                        viewModel.beginSelectionMove()
+                                        viewModel.resizeStroke(resizeStrokeId, resizeHandle, curWorld)
+                                    } else if (activeTool == WhiteboardTool.SELECT && selectingBox) {
+                                        boardStage?.setMarquee(downWorld, curWorld)
+                                    } else if (activeTool == WhiteboardTool.SELECT && isDraggingSelection) {
                                         val prevWorld = CanvasTransform.screenToWorld(
                                             screenPoint = prevPosition,
                                             scale = canvasScale,
@@ -1281,24 +1445,32 @@ fun CanvasScreen(
                                         val delta = Offset(curWorld.x - prevWorld.x, curWorld.y - prevWorld.y)
                                         viewModel.beginSelectionMove()
                                         viewModel.moveSelectedStrokes(delta)
-                                    } else if (state.currentTool == WhiteboardTool.LASER) {
+                                    } else if (activeTool == WhiteboardTool.LASER) {
                                         viewModel.addLaserPoint(curWorld)
-                                    } else if (state.currentTool == WhiteboardTool.LASSO) {
+                                    } else if (activeTool == WhiteboardTool.LASSO) {
                                         lassoPoints = lassoPoints + curWorld
-                                    } else if (state.currentTool == WhiteboardTool.ERASER) {
+                                    } else if (activeTool == WhiteboardTool.ERASER) {
                                         eraseSample(curWorld, change.position)
-                                    } else if (state.currentTool == WhiteboardTool.SPOTLIGHT) {
+                                    } else if (activeTool == WhiteboardTool.SPOTLIGHT) {
                                         spotlightCenter = change.position
-                                    } else if (state.currentTool == WhiteboardTool.SHADE) {
+                                    } else if (activeTool == WhiteboardTool.SHADE) {
                                         val height = canvasSize.height.coerceAtLeast(1f)
                                         shadeEdge = (change.position.y / height).coerceIn(0.05f, 0.95f)
-                                    } else if (state.currentTool == WhiteboardTool.MAGNIFIER) {
+                                    } else if (activeTool == WhiteboardTool.MAGNIFIER) {
                                         boardStage?.showMagnifier(change.position.x, change.position.y)
                                     } else if (writingNow) {
-                                        change.pastPositions().forEach { appendInk(it, change.inkPressure()) }
-                                        appendInk(change.position, change.inkPressure())
+                                        if (stylusDraw) {
+                                            val pressure = stylusPressure(change.pressure)
+                                            change.historical.forEach { sample ->
+                                                appendInk(sample.position, pressure)
+                                            }
+                                            appendInk(change.position, pressure)
+                                        } else {
+                                            change.pastPositions().forEach { appendInk(it, change.inkPressure()) }
+                                            appendInk(change.position, change.inkPressure())
+                                        }
                                         publishInk()
-                                    } else if (state.currentTool in listOf(
+                                    } else if (activeTool in listOf(
                                             WhiteboardTool.RECTANGLE,
                                             WhiteboardTool.DIAMOND,
                                             WhiteboardTool.CIRCLE,
@@ -1309,51 +1481,6 @@ fun CanvasScreen(
                                     ) {
                                         shapePoints = listOf(downWorld, curWorld)
                                         viewModel.updateStroke(shapePoints)
-                                    } else if (state.currentTool == WhiteboardTool.RULER) {
-                                        when (rulerZone) {
-                                            RulerZone.MOVE -> {
-                                                val dx = change.position.x - prevPosition.x
-                                                val dy = change.position.y - prevPosition.y
-                                                rulerCenter = rulerCenter?.let { Offset(it.x + dx, it.y + dy) }
-                                            }
-                                            RulerZone.ROTATE -> {
-                                                val center = rulerCenter
-                                                if (center != null) {
-                                                    val currentAngle = atan2(
-                                                        change.position.y - center.y,
-                                                        change.position.x - center.x
-                                                    )
-                                                    rulerRotationDeg = rulerStartRotation +
-                                                        (currentAngle - rulerStartPointerAngle) * RAD_TO_DEG
-                                                }
-                                            }
-                                            RulerZone.RESIZE_LEFT, RulerZone.RESIZE_RIGHT -> {
-                                                val dir = rulerDirection(rulerRotationDeg)
-                                                val relX = change.position.x - rulerFixedEnd.x
-                                                val relY = change.position.y - rulerFixedEnd.y
-                                                val proj = relX * dir.x + relY * dir.y
-                                                val newLength = kotlin.math.abs(proj)
-                                                    .coerceIn(RULER_MIN_LENGTH, RULER_MAX_LENGTH)
-                                                val sign = if (rulerZone == RulerZone.RESIZE_RIGHT) 1f else -1f
-                                                rulerCenter = Offset(
-                                                    rulerFixedEnd.x + dir.x * (sign * newLength / 2f),
-                                                    rulerFixedEnd.y + dir.y * (sign * newLength / 2f)
-                                                )
-                                                rulerLength = newLength
-                                            }
-                                            RulerZone.NONE -> {
-                                                val startWorld = downWorld
-                                                val relWx = curWorld.x - startWorld.x
-                                                val relWy = curWorld.y - startWorld.y
-                                                val t = relWx * rulerDrawDir.x + relWy * rulerDrawDir.y
-                                                val endWorld = Offset(
-                                                    startWorld.x + rulerDrawDir.x * t,
-                                                    startWorld.y + rulerDrawDir.y * t
-                                                )
-                                                shapePoints = listOf(startWorld, endWorld)
-                                                viewModel.updateStroke(shapePoints)
-                                            }
-                                        }
                                     }
                                     prevPosition = change.position
                                     change.consume()
@@ -1361,13 +1488,64 @@ fun CanvasScreen(
                             }
                         } while (event.changes.any { it.pressed })
 
+                        if (selectingBox) {
+                            boardStage?.setMarquee(null, null)
+                            val moved = kotlin.math.hypot(
+                                (prevPosition.x - down.position.x).toDouble(),
+                                (prevPosition.y - down.position.y).toDouble()
+                            ).toFloat()
+                            if (moved < 14f) {
+                                viewModel.selectStrokeAt(downWorld)
+                            } else {
+                                val endWorld = CanvasTransform.screenToWorld(
+                                    prevPosition,
+                                    canvasScale,
+                                    Offset(canvasOffsetX, canvasOffsetY)
+                                )
+                                viewModel.selectInRect(
+                                    androidx.compose.ui.geometry.Rect(
+                                        minOf(downWorld.x, endWorld.x),
+                                        minOf(downWorld.y, endWorld.y),
+                                        maxOf(downWorld.x, endWorld.x),
+                                        maxOf(downWorld.y, endWorld.y)
+                                    )
+                                )
+                            }
+                        }
                         viewModel.endSelectionMove()
 
-                        if (state.currentTool == WhiteboardTool.MAGNIFIER) {
+                        if (activeTool == WhiteboardTool.MAGNIFIER) {
                             boardStage?.hideMagnifier()
                         }
                         if (transformMoved) {
+                            canvasScale = gestureScale
+                            canvasOffsetX = gestureOffsetX
+                            canvasOffsetY = gestureOffsetY
                             viewModel.updateTransform(canvasScale, canvasOffsetX, canvasOffsetY)
+                            boardStage?.commitPreview()
+                        }
+                        if (wasMultiTouch) {
+                            val start = gestureStart
+                            if (start != null) {
+                                val gesture = classifyPanelGesture(
+                                    fingerPeak,
+                                    gestureTravel,
+                                    gestureEnd.x - start.x,
+                                    gestureEnd.y - start.y
+                                )
+                                if (gesture == PanelGesture.AI_TAP) {
+                                    showAiPanel = !showAiPanel
+                                } else if (gesture == PanelGesture.PAGE) {
+                                    val delta = swipePageDelta(
+                                        gestureEnd.x - start.x,
+                                        gestureEnd.y - start.y,
+                                        threshold = 90f
+                                    )
+                                    val latest = viewModel.state.value
+                                    val next = pageStep(latest.pageIndex, latest.pageCount, delta)
+                                    if (delta != 0 && next != latest.pageIndex) viewModel.selectPage(next)
+                                }
+                            }
                         }
                         if (eraserSession.active) {
                             boardStage?.clearGestureStrokes()
@@ -1379,30 +1557,140 @@ fun CanvasScreen(
                         }
 
                         // Release Touch
-                        if (!wasMultiTouch) {
-                            if (state.currentTool == WhiteboardTool.LASSO) {
+                        if (!wasMultiTouch && mathGesture.rulerDrawing && shapePoints.size >= 2) {
+                            val start = shapePoints.first()
+                            val end = shapePoints.last()
+                            val lengthPx = screenLengthPx(start, end, canvasScale)
+                            if (lengthPx > 6f) {
+                                viewModel.updateStroke(shapePoints)
+                                viewModel.finishStroke()
+                                val mid = Offset((start.x + end.x) / 2f, (start.y + end.y) / 2f)
+                                val perp = Offset(-mathGesture.drawDir.y, mathGesture.drawDir.x)
+                                val labelAt = Offset(
+                                    mid.x + perp.x * (28f / canvasScale.coerceAtLeast(0.001f)),
+                                    mid.y + perp.y * (28f / canvasScale.coerceAtLeast(0.001f))
+                                )
+                                viewModel.commitStroke(
+                                    measurementLabel(
+                                        formatCentimetres(lengthPx, pxPerCm),
+                                        labelAt,
+                                        state.selectedColor
+                                    )
+                                )
+                            } else {
+                                viewModel.cancelCurrentStroke()
+                            }
+                            mathReadout = null
+                        } else if (!wasMultiTouch && mathGesture.toolId != null) {
+                            val tool = mathTools.find { it.id == mathGesture.toolId }
+                            val finger = canvasOrigin + prevPosition
+                            if (tool != null && mathGesture.movedPx > MATH_TAP_SLOP && droppedOnToolbar(finger, dockBounds)) {
+                                viewModel.cancelCurrentStroke()
+                                removeMathTool(tool.id)
+                                Toast.makeText(context, "Tool removed", Toast.LENGTH_SHORT).show()
+                            } else if (tool != null && tool.kind == MathToolKind.COMPASS && mathGesture.zone == MathToolZone.PENCIL) {
+                                val worldCenter = CanvasTransform.screenToWorld(
+                                    tool.center,
+                                    canvasScale,
+                                    Offset(canvasOffsetX, canvasOffsetY)
+                                )
+                                val worldRadius = tool.span / canvasScale.coerceAtLeast(0.001f)
+                                if (mathGesture.movedPx <= MATH_TAP_SLOP || isFullCircleSweep(mathGesture.sweepDeg)) {
+                                    viewModel.cancelCurrentStroke()
+                                    viewModel.commitStroke(
+                                        circleStroke(worldCenter, worldRadius, state.selectedColor, state.strokeWidth)
+                                    )
+                                } else if (mathGesture.arcMode) {
+                                    viewModel.finishStroke()
+                                }
+                            } else if (tool != null && tool.kind == MathToolKind.PROTRACTOR &&
+                                mathGesture.zone == MathToolZone.SCALE && tool.markedAngleDeg != null
+                            ) {
+                                val angle = tool.markedAngleDeg
+                                val rim = rimPoint(tool.center, tool.rotationDeg, angle, tool.span)
+                                val labelScreen = rimPoint(tool.center, tool.rotationDeg, angle, tool.span + 36f)
+                                val offset = Offset(canvasOffsetX, canvasOffsetY)
+                                viewModel.commitStroke(
+                                    straightStroke(
+                                        CanvasTransform.screenToWorld(tool.center, canvasScale, offset),
+                                        CanvasTransform.screenToWorld(rim, canvasScale, offset),
+                                        state.selectedColor,
+                                        state.strokeWidth
+                                    )
+                                )
+                                viewModel.commitStroke(
+                                    measurementLabel(
+                                        formatDegrees(angle),
+                                        CanvasTransform.screenToWorld(labelScreen, canvasScale, offset),
+                                        state.selectedColor
+                                    )
+                                )
+                            }
+                            mathReadout = null
+                        } else if (!wasMultiTouch) {
+                            val latest = viewModel.state.value
+                            val moved = kotlin.math.hypot(
+                                (prevPosition.x - down.position.x).toDouble(),
+                                (prevPosition.y - down.position.y).toDouble()
+                            ).toFloat()
+                            if (activeTool == WhiteboardTool.HAND && latest.document != null) {
+                                val delta = swipePageDelta(
+                                    prevPosition.x - down.position.x,
+                                    prevPosition.y - down.position.y
+                                )
+                                val next = pageStep(latest.pageIndex, latest.pageCount, delta)
+                                if (delta != 0 && next != latest.pageIndex) viewModel.selectPage(next)
+                            } else if (
+                                pptAdvancesOnTap(latest.document?.kind, moved, strokeHit) &&
+                                resizeStrokeId == null && !isDraggingSelection
+                            ) {
+                                val next = pageStep(latest.pageIndex, latest.pageCount, 1)
+                                if (next != latest.pageIndex) viewModel.selectPage(next)
+                            }
+                            if (activeTool == WhiteboardTool.LASSO) {
                                 viewModel.lassoSelect(lassoPoints)
                                 lassoPoints = emptyList()
                                 if (!state.isToolLocked) {
                                     viewModel.setTool(WhiteboardTool.SELECT)
                                 }
                             } else if (writingNow && inkPoints.isNotEmpty()) {
-                                val finished = if (state.currentTool == WhiteboardTool.PEN && state.isDrawToShapeEnabled && inkPoints.size >= 5) {
-                                    viewModel.applyShapeRecognition(inkPoints) ?: inkTemplate!!.copy(
-                                        points = ArrayList(inkPoints),
-                                        pointPressures = ArrayList(inkPressures)
+                                val finishedWidth = if (stylusDraw) {
+                                    stylusPressureWidth(
+                                        state.strokeWidth,
+                                        inkPressures.average().toFloat()
                                     )
                                 } else {
-                                    inkTemplate!!.copy(
-                                        points = ArrayList(inkPoints),
-                                        pointPressures = ArrayList(inkPressures)
-                                    )
+                                    state.strokeWidth
                                 }
+                                val finished = inkTemplate!!.copy(
+                                    points = ArrayList(inkPoints),
+                                    pointPressures = ArrayList(inkPressures),
+                                    strokeWidth = finishedWidth
+                                )
                                 liveInk.stroke = null
                                 liveInkTick.intValue = liveInkTick.intValue + 1
                                 boardStage?.setLiveInk(null)
                                 viewModel.commitStroke(finished)
-                            } else if (state.currentTool in listOf(
+                                val canRecognize = !state.smartWriteEnabled &&
+                                    state.isDrawToShapeEnabled && activeTool in setOf(
+                                    WhiteboardTool.PEN,
+                                    WhiteboardTool.PENCIL,
+                                    WhiteboardTool.MARKER
+                                )
+                                if (canRecognize) {
+                                    val recognized = ShapeRecognitionHelper.recognize(finished.points)
+                                    if (recognized != null && recognized.confidence >= 0.7f) {
+                                        shapePrompt = ShapePrompt(
+                                            strokeId = finished.id,
+                                            replacement = finished.copy(
+                                                points = recognized.points,
+                                                pointPressures = emptyList(),
+                                                strokeType = recognized.strokeType
+                                            )
+                                        )
+                                    }
+                                }
+                            } else if (activeTool in listOf(
                                     WhiteboardTool.RECTANGLE,
                                     WhiteboardTool.DIAMOND,
                                     WhiteboardTool.CIRCLE,
@@ -1416,11 +1704,6 @@ fun CanvasScreen(
                                 if (!state.isToolLocked) {
                                     viewModel.setTool(WhiteboardTool.SELECT)
                                 }
-                            } else if (state.currentTool == WhiteboardTool.RULER &&
-                                rulerZone == RulerZone.NONE && shapePoints.size >= 2
-                            ) {
-                                viewModel.updateStroke(shapePoints)
-                                viewModel.finishStroke()
                             }
                         }
                     }
@@ -1443,6 +1726,12 @@ fun CanvasScreen(
                         selected = page.selectedStrokeIds
                     )
                     stage.currentStroke = page.currentStroke
+                    val document = page.document
+                    stage.setDocumentPage(
+                        pageBitmap,
+                        document?.pageWidth ?: 0f,
+                        document?.pageHeight ?: 0f
+                    )
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -1518,18 +1807,18 @@ fun CanvasScreen(
                         style = DrawStroke(width = 1.5f)
                     )
                 }
-                val liveRulerCenter = rulerCenter
-                if (state.currentTool == WhiteboardTool.RULER && liveRulerCenter != null) {
-                    drawRuler(
-                        center = liveRulerCenter,
-                        rotationDeg = rulerRotationDeg,
-                        length = rulerLength,
-                        thickness = RULER_THICKNESS,
-                        isDark = state.isDarkCanvas,
-                        pxPerCm = rulerPxPerCm
-                    )
+                val readout = mathReadout
+                mathTools.forEach { tool ->
+                    drawMathTool(tool, state.isDarkCanvas, pxPerCm)
+                }
+                mathGhost?.let { ghost ->
+                    drawMathTool(ghost, state.isDarkCanvas, pxPerCm)
+                }
+                if (readout != null) {
+                    drawMathReadout(readout.first, readout.second)
                 }
             }
+        }
         }
 
         AvitriSphareWhiteboardChrome(
@@ -1598,8 +1887,495 @@ fun CanvasScreen(
                 canvasOffsetY = newOffset.y
                 viewModel.updateTransform(canvasScale, canvasOffsetX, canvasOffsetY)
             },
-            onFit = { viewModel.fitToContent(canvasSize.width, canvasSize.height) }
+            onFit = { viewModel.fitToContent(canvasSize.width, canvasSize.height) },
+            rulerPlaced = mathTools.any { it.kind == MathToolKind.RULER },
+            compassPlaced = mathTools.any { it.kind == MathToolKind.COMPASS },
+            protractorPlaced = mathTools.any { it.kind == MathToolKind.PROTRACTOR },
+            onMathDrag = { kind, root ->
+                mathGhost = newMathTool(kind, rootToCanvas(root))
+            },
+            onMathDragEnd = { kind, root, moved ->
+                mathGhost = null
+                val overToolbar = moved && droppedOnToolbar(root, dockBounds)
+                if (!overToolbar) {
+                    val local = if (moved) rootToCanvas(root) else canvasCenter()
+                    placeMathTool(kind, local)
+                }
+            },
+            onDockBounds = { dockBounds = it },
+            onOpenDocument = {
+                documentPickerLauncher.launch(
+                    arrayOf(
+                        "application/pdf",
+                        "application/vnd.ms-powerpoint",
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    )
+                )
+            }
         )
+
+        val openDocument = state.document
+        if (openDocument != null) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 8.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xF21C2130),
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = {
+                        viewModel.selectPage(pageStep(state.pageIndex, state.pageCount, -1))
+                    }) { Text("Prev", color = Color.White) }
+                    Text(
+                        "${openDocument.name}  ${state.pageIndex + 1}/${state.pageCount}",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        maxLines = 1
+                    )
+                    TextButton(onClick = {
+                        viewModel.selectPage(pageStep(state.pageIndex, state.pageCount, 1))
+                    }) { Text("Next", color = Color.White) }
+
+                    if (openDocument.kind == DocumentKind.PDF) {
+                        if (state.isPdfOcrActive) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 6.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    color = Color(0xFF60A5FA),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    "OCR: ${state.pdfOcrCurrentPage}/${state.pdfOcrTotalPages}",
+                                    color = Color(0xFF93C5FD),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        } else if (state.pdfOcrDocument == null) {
+                            TextButton(
+                                onClick = { viewModel.makePdfEditable() },
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF60A5FA))
+                            ) {
+                                Text("Make Editable", fontWeight = FontWeight.SemiBold)
+                            }
+                        } else {
+                            TextButton(
+                                onClick = { viewModel.togglePdfSearchPanel() },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = if (state.showPdfSearchPanel) Color(0xFF34D399) else Color(0xFF60A5FA)
+                                )
+                            ) {
+                                Text(
+                                    if (state.showPdfSearchPanel) "Hide Text" else "Search & Text",
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
+                    TextButton(onClick = {
+                        viewModel.exportAnnotatedPdf { uri ->
+                            exportedUri = uri
+                            showExportDialog = true
+                        }
+                    }) { Text("Export PDF", color = Color.White) }
+                    TextButton(onClick = { viewModel.closeDocument() }) {
+                        Text("Close", color = Color.White)
+                    }
+                }
+            }
+
+            val ocrDoc = state.pdfOcrDocument
+            if (state.showPdfSearchPanel && ocrDoc != null) {
+                val currentPageText = ocrDoc.textForPage(state.pageIndex)
+                val searchResults = remember(state.pdfSearchQuery, ocrDoc) {
+                    ocrDoc.search(state.pdfSearchQuery)
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(top = 64.dp, end = 16.dp)
+                        .width(360.dp)
+                        .heightIn(max = 520.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xF21C2130),
+                    shadowElevation = 12.dp
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Document Live Text",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            )
+                            IconButton(
+                                onClick = { viewModel.togglePdfSearchPanel(false) },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.LightGray)
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = state.pdfSearchQuery,
+                            onValueChange = { viewModel.setPdfSearchQuery(it) },
+                            placeholder = { Text("Search within PDF...", fontSize = 13.sp, color = Color.Gray) },
+                            singleLine = true,
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.Gray) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color(0xFF3B82F6),
+                                unfocusedBorderColor = Color(0xFF4B5563)
+                            )
+                        )
+
+                        if (state.pdfSearchQuery.isNotBlank()) {
+                            Spacer(Modifier.height(6.dp))
+                            if (searchResults.isEmpty()) {
+                                Text("No matches found", color = Color(0xFFF87171), fontSize = 12.sp)
+                            } else {
+                                Text(
+                                    "Found in ${searchResults.size} page(s):",
+                                    color = Color(0xFF34D399),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    items(searchResults) { (matchedPage, count) ->
+                                        val isCurrent = matchedPage == state.pageIndex
+                                        Text(
+                                            text = "Page ${matchedPage + 1} ($count)",
+                                            fontSize = 12.sp,
+                                            color = Color.White,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(if (isCurrent) Color(0xFF2563EB) else Color(0xFF374151))
+                                                .clickable { viewModel.selectPage(matchedPage) }
+                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            "Page ${state.pageIndex + 1} Selectable Text:",
+                            color = Color.LightGray,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(4.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF111827))
+                                .padding(8.dp)
+                        ) {
+                            SelectionContainer {
+                                BasicTextField(
+                                    value = if (currentPageText.isBlank()) "No text detected on this page." else currentPageText,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { viewModel.copyPdfTextToCanvas(currentPageText) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                            ) {
+                                Text("Copy to Canvas", fontSize = 12.sp, maxLines = 1)
+                            }
+                            Button(
+                                onClick = { viewModel.copyPdfTextToClipboard(currentPageText) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
+                            ) {
+                                Text("Copy for AI", fontSize = 12.sp, maxLines = 1)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        val smartOffer = state.smartWriteOffer
+        if (smartOffer != null) {
+            val anchor = CanvasTransform.worldToScreen(
+                smartOffer.anchor,
+                canvasScale,
+                Offset(canvasOffsetX, canvasOffsetY)
+            )
+            Surface(
+                modifier = Modifier
+                    .offset { IntOffset(anchor.x.roundToInt().coerceAtLeast(8), (anchor.y + 12f).roundToInt().coerceAtLeast(8)) }
+                    .widthIn(max = 520.dp),
+                shape = RoundedCornerShape(18.dp),
+                color = Color(0xFF1C2130),
+                shadowElevation = 10.dp
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                    if (smartOffer.lowConfidence) {
+                        Text(
+                            "Low confidence — please check",
+                            color = Color(0xFFFBBF24),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        PEN_COLORS.take(6).forEach { color ->
+                            Box(
+                                modifier = Modifier
+                                    .padding(end = 6.dp)
+                                    .size(18.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(color))
+                                    .border(
+                                        width = if (smartOffer.color == color) 2.dp else 0.dp,
+                                        color = Color.White,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { viewModel.recolorSmartWrite(color) }
+                            )
+                        }
+                        smartOffer.candidates.forEach { candidate ->
+                            Text(
+                                text = candidate,
+                                color = Color(0xFF111827),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier
+                                    .padding(end = 6.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color.White)
+                                    .clickable { viewModel.acceptSmartWrite(candidate) }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                        Text(
+                            text = "Close",
+                            color = Color(0xFFD1D5DB),
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .clickable { viewModel.dismissSmartWrite() }
+                                .padding(horizontal = 6.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        val editing = state.strokes.firstOrNull { it.id == state.editingTextId && it.strokeType == StrokeType.TEXT }
+        if (editing != null && editing.points.isNotEmpty()) {
+            val origin = CanvasTransform.worldToScreen(
+                editing.points.first(),
+                canvasScale,
+                Offset(canvasOffsetX, canvasOffsetY)
+            )
+            Column(
+                modifier = Modifier
+                    .offset { IntOffset(origin.x.roundToInt().coerceAtLeast(8), origin.y.roundToInt().coerceAtLeast(8)) }
+                    .width(240.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White)
+                    .padding(8.dp)
+            ) {
+                val warning = state.smartWriteWarning
+                if (warning != null) {
+                    Text(warning, color = Color(0xFFB45309), fontSize = 12.sp)
+                    Spacer(Modifier.height(4.dp))
+                }
+                var draft by remember(editing.id) { mutableStateOf(editing.text) }
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = {
+                        draft = it
+                        viewModel.editStrokeText(editing.id, it)
+                    },
+                    singleLine = false,
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = Color(editing.colorValue),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                TextButton(onClick = { viewModel.endTextEdit() }) {
+                    Text("Done")
+                }
+            }
+        }
+
+        state.formulaSolution?.let { solution ->
+            FormulaCard(
+                solution = solution,
+                onSolve = { viewModel.solveCurrentEquation() },
+                onDismiss = { viewModel.dismissFormula() },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 108.dp)
+            )
+        }
+
+        if (state.smartWriteBusy && smartOffer == null && editing == null) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 72.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xF21C2130)
+            ) {
+                Text(
+                    "Reading handwriting…",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+            }
+        }
+
+        if (shapePromptVisible) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 64.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White,
+                shadowElevation = 12.dp
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        "Convert to shape?",
+                        color = Color(0xFF1F2937),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        "Converts automatically",
+                        color = Color(0xFF6B7280),
+                        fontSize = 12.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = {
+                            shapePrompt = null
+                            shapePromptVisible = false
+                        }) {
+                            Text("No", color = Color(0xFF4B5563), fontWeight = FontWeight.SemiBold)
+                        }
+                        Button(
+                            onClick = {
+                                val prompt = shapePrompt
+                                if (prompt != null) viewModel.replaceStroke(prompt.replacement)
+                                shapePrompt = null
+                                shapePromptVisible = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
+                        ) {
+                            Text("Yes")
+                        }
+                    }
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showAiPanel,
+            enter = fadeIn() + slideInHorizontally { it },
+            exit = fadeOut() + slideOutHorizontally { it }
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0x33000000))
+                    .clickable { showAiPanel = false }
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .width(320.dp)
+                        .clickable { },
+                    color = Color(0xFF1C2130),
+                    shadowElevation = 12.dp
+                ) {
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "AI",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 22.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { showAiPanel = false }) {
+                                Text("Close", color = Color(0xFFC7D2FE))
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Four-finger tap opens and closes this panel.",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 13.sp
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        listOf(
+                            "Lesson step" to "Walk the class through the next step on the board.",
+                            "Explain" to "Restate what is on the canvas in plain language.",
+                            "Quiz" to "Turn the current page into a short check.",
+                            "Voice" to "Listen, then place the answer on the board."
+                        ).forEach { (title, detail) ->
+                            Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text(detail, color = Color(0xFFCBD5E1), fontSize = 13.sp)
+                            Spacer(Modifier.height(16.dp))
+                        }
+                    }
+                }
+            }
+        }
 
         // 5. Left Floating Sidebar (Exact Match to User's Image 1)
         AnimatedVisibility(
@@ -1947,7 +2723,7 @@ fun CanvasScreen(
 
                         // 4. Privacy & Disconnect note
                         Text(
-                            text = "🔒 Don't worry, the session is end-to-end encrypted, and fully private. Not even our server can see what you draw.",
+                            text = "ðŸ”’ Don't worry, the session is end-to-end encrypted, and fully private. Not even our server can see what you draw.",
                             fontSize = 12.sp,
                             color = Color(0xFF4B5563),
                             lineHeight = 16.sp
@@ -2017,7 +2793,10 @@ fun CanvasScreen(
                         "Draw Arrow" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.ARROW) },
                         "Add Sticky Note" to { showCommandPalette = false; showStickyInputDialog = true },
                         "Toggle Laser Pointer" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.LASER) },
-                        "Enable Ruler" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.RULER) },
+                        "Place ruler" to { showCommandPalette = false; placeMathTool(MathToolKind.RULER, canvasCenter()) },
+                        "Place compass" to { showCommandPalette = false; placeMathTool(MathToolKind.COMPASS, canvasCenter()) },
+                        "Place protractor" to { showCommandPalette = false; placeMathTool(MathToolKind.PROTRACTOR, canvasCenter()) },
+                        "Graph paper" to { showCommandPalette = false; viewModel.toggleGraphPaper() },
                         "Standard eraser" to { showCommandPalette = false; viewModel.setEraserMode(EraserMode.STANDARD) },
                         "Smart eraser" to { showCommandPalette = false; viewModel.setEraserMode(EraserMode.SMART) },
                         "Clear page" to { showCommandPalette = false; showClearDialog = true },
@@ -2051,9 +2830,20 @@ fun CanvasScreen(
             title = { Text("Whiteboard Guide & Shortcuts", color = Color(0xFF1F2937), fontWeight = FontWeight.Bold) },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    Text("• V: Selection tool\n• H: Hand (Pan tool)\n• R: Rectangle\n• D: Diamond\n• O: Circle\n• A: Arrow\n• L: Line\n• P: Pen, plus pencil, marker, highlighter, and brush\n• T: Text placement\n• N: Sticky Note\n• E: Eraser. Standard erases inside the circle, Smart removes the whole stroke. Palm touches wider than 3 cm are ignored while a stylus is down\n• K: Laser Pointer\n• B: Bucket Fill\n• 9: Insert Image", fontSize = 13.sp, color = Color(0xFF4B5563), lineHeight = 20.sp)
+                    Text(
+                        "V selects. H pans. R rectangle, D diamond, O circle, A arrow, L line. P pen, plus pencil, marker, highlighter, and brush. T text, N sticky note. E eraser: Standard erases inside the circle, Smart removes the whole stroke. Palm touches wider than 3 cm are ignored while a stylus is down. K laser, B bucket fill, 9 inserts an image.",
+                        fontSize = 13.sp,
+                        color = Color(0xFF4B5563),
+                        lineHeight = 20.sp
+                    )
                     Spacer(modifier = Modifier.height(10.dp))
-                    Text("Pinch with 2 fingers to zoom from 10% to 500%. Two fingers also pan. Ctrl+Z undoes, Ctrl+Y redoes. Double tap fits the page.", fontSize = 12.sp, color = Color(0xFF6B7280))
+                    Text(
+                        "Drag the ruler, compass, or protractor from the toolbar onto the board. Drag either end to rotate. On the compass, drag the pencil to set the radius in centimetres, then tap it to draw a circle or sweep it to draw an arc. On the protractor, tap the scale to mark an angle in degrees. Draw along the ruler edge to place a straight line with its length. Two fingers on a tool move and rotate it. Drag a tool back to the toolbar to remove it. Graph paper adds a squared background. A rough circle, ellipse, rectangle, square, triangle, line, arrow, star, or diamond offers Convert to shape half a second after you lift the pen. Yes converts it, No keeps the drawing, and no answer converts it after two seconds. Turn Shape recognition off in the menu for free drawing. A converted shape can be moved, resized from its corners, and recoloured.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF6B7280)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("Pinch with 2 fingers on empty board to zoom from 10% to 500%. Two fingers also pan. Ctrl+Z undoes, Ctrl+Y redoes. Double tap fits the page.", fontSize = 12.sp, color = Color(0xFF6B7280))
                 }
             },
             confirmButton = {
@@ -2177,6 +2967,30 @@ fun CanvasScreen(
                 }
             }
         }
+    }
+
+    if (paneWebIndex >= 0) {
+        AlertDialog(
+            onDismissRequest = { paneWebIndex = -1 },
+            title = { Text("Open a page in this panel") },
+            text = {
+                OutlinedTextField(
+                    value = paneWebAddress,
+                    onValueChange = { paneWebAddress = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.openPaneWeb(paneWebIndex, paneWebAddress)
+                    paneWebIndex = -1
+                }) { Text("Open") }
+            },
+            dismissButton = {
+                TextButton(onClick = { paneWebIndex = -1 }) { Text("Cancel") }
+            }
+        )
     }
 
     // Web Embed Dialog
