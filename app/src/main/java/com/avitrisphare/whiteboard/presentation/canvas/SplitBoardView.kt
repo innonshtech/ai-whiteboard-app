@@ -55,6 +55,8 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
     private var showGrid = false
     private var inkColor = 0xFF1B1F2A.toInt()
     private var inkWidth = 4f
+    private var inkSampleGapMm = DEFAULT_INK_SAMPLE_GAP_MM
+    private var xdpi = 160f
     private var eraserMode = EraserMode.STANDARD
     private var eraserSize = 28f
     private var gesturePane = -1
@@ -84,6 +86,9 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
         showGrid = state.showGrid
         inkColor = state.selectedColor
         inkWidth = state.strokeWidth
+        inkSampleGapMm = state.inkSampleGapMm
+        val metrics = resources.displayMetrics
+        xdpi = if (metrics.xdpi > 50f) metrics.xdpi else metrics.densityDpi.toFloat()
         eraserMode = state.eraserMode
         eraserSize = state.eraserSize
         val count = state.splitCount.coerceIn(2, 6)
@@ -558,7 +563,8 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
         val last = points.lastOrNull() ?: return
         val dx = world.x - last.x
         val dy = world.y - last.y
-        val gap = INK_SAMPLE_GAP_PX
+        val scale = cells[index].stage.viewScale().coerceAtLeast(0.05f)
+        val gap = inkSampleGapPx(inkSampleGapMm, xdpi, scale)
         if (dx * dx + dy * dy < gap * gap) return
         points.add(world)
         pressures.add(if (stylusInk) stylusPressure(pressure) else 1f)

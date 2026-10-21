@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">AvitriSphare</string>
+    <string name="clear_all">सब साफ करें</string>
+    <string name="save">सेव करें</string>
+    <string name="save_slides_pdf">स्लाइड सेव (PDF)</string>
+    <string name="magic_pen">मैजिक पेन</string>
+    <string name="help_close">बंद करें</string>
+</resources>

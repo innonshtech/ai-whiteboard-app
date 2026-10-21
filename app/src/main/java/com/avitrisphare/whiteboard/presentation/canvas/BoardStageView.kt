@@ -66,6 +66,9 @@ class BoardStageView(context: Context) : FrameLayout(context) {
     private var documentBitmap: Bitmap? = null
     private var documentWidth = 0
     private var documentHeight = 0
+    private var documentFrameX = 0f
+    private var documentFrameY = 0f
+    private var documentFrameScale = 1f
     private var resizing = false
     private var previewing = false
     private var paintScale = 1f
@@ -239,6 +242,15 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         documentBitmap = bitmap
         documentWidth = width
         documentHeight = height
+        gridDirty = true
+        grid.invalidate()
+    }
+
+    fun setDocumentFrame(x: Float, y: Float, scale: Float) {
+        if (documentFrameX == x && documentFrameY == y && documentFrameScale == scale) return
+        documentFrameX = x
+        documentFrameY = y
+        documentFrameScale = scale.coerceIn(0.2f, 3f)
         gridDirty = true
         grid.invalidate()
     }
@@ -534,6 +546,8 @@ class BoardStageView(context: Context) : FrameLayout(context) {
                     withTransform({
                         translate(offsetX, offsetY)
                         scale(scale, scale, pivot = Offset.Zero)
+                        translate(documentFrameX, documentFrameY)
+                        scale(documentFrameScale, documentFrameScale, pivot = Offset.Zero)
                     }) {
                         drawImage(
                             image = page.asImageBitmap(),

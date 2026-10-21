@@ -15,7 +15,12 @@ data class Stroke(
     val text: String = "",
     val fillColor: Int = 0,
     val imageUri: String = "",
-    val pointPressures: List<Float> = emptyList()
+    val pointPressures: List<Float> = emptyList(),
+    /** When non-empty, this stroke is anchored to another stroke (flowchart / mind map). */
+    val linkToId: String = "",
+    val linkFromId: String = "",
+    /** Bundled sticker id or emoji payload. */
+    val stickerKind: String = ""
 ) {
     val bounds: Rect by lazy {
         if (points.isEmpty()) {
@@ -92,5 +97,13 @@ enum class StrokeType {
     SQUARE,
     TRIANGLE,
     STAR,
-    EQUATION
+    EQUATION,
+    HEXAGON,
+    ROUND_RECT,
+    CUBE,
+    CYLINDER,
+    CONE,
+    PYRAMID,
+    STICKER,
+    CONNECTOR
 }

@@ -7,7 +7,9 @@ enum class CanvasBackground(val key: String) {
     DOTTED("dotted"),
     GRID("grid"),
     /** Squared graph paper: light minor squares and a heavier line every fifth square. */
-    GRAPH("graph");
+    GRAPH("graph"),
+    FOOTBALL("football"),
+    CUSTOM("custom");
 
     companion object {
         fun fromKey(key: String): CanvasBackground {

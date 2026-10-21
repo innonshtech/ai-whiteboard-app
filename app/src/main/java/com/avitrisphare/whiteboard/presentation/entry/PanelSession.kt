@@ -82,6 +82,18 @@ class PanelSessionStore(context: Context) {
             .apply()
     }
 
+    fun demoNoteId(): String? = prefs.getString(KEY_DEMO_NOTE_ID, null)
+
+    fun saveDemoNoteId(noteId: String) {
+        prefs.edit().putString(KEY_DEMO_NOTE_ID, noteId).apply()
+    }
+
+    fun uiLocaleTag(): String = prefs.getString(KEY_UI_LOCALE, "en") ?: "en"
+
+    fun setUiLocaleTag(tag: String) {
+        prefs.edit().putString(KEY_UI_LOCALE, tag).apply()
+    }
+
     companion object {
         private const val PREFS = "gyoash_panel"
         private const val KEY_LICENSE = "license_key"
@@ -96,6 +108,8 @@ class PanelSessionStore(context: Context) {
         private const val KEY_SUBJECT = "teacher_subject"
         private const val KEY_ACCESS = "access_token"
         private const val KEY_REFRESH = "refresh_token"
+        private const val KEY_DEMO_NOTE_ID = "demo_note_id"
+        private const val KEY_UI_LOCALE = "ui_locale"
     }
 }
 

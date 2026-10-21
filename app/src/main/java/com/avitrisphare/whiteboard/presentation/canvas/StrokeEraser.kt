@@ -162,6 +162,33 @@ object StrokeEraser {
                     Offset(cx + rx * cos(angle), cy + ry * sin(angle))
                 }
             }
+            StrokeType.STAR -> {
+                val cx = (left + right) / 2f
+                val cy = (top + bottom) / 2f
+                val outer = kotlin.math.min(right - left, bottom - top) / 2f
+                val inner = outer * 0.45f
+                List(11) { i ->
+                    val angle = -Math.PI / 2 + i * Math.PI / 5
+                    val r = if (i % 2 == 0) outer else inner
+                    Offset(cx + (r * cos(angle)).toFloat(), cy + (r * sin(angle)).toFloat())
+                }
+            }
+            StrokeType.HEXAGON -> {
+                val cx = (left + right) / 2f
+                val cy = (top + bottom) / 2f
+                val r = kotlin.math.min(right - left, bottom - top) / 2f
+                List(7) { i ->
+                    val angle = i / 6f * (2.0 * PI).toFloat() - (PI / 2).toFloat()
+                    Offset(cx + r * cos(angle), cy + r * sin(angle))
+                }
+            }
+            StrokeType.ROUND_RECT -> listOf(
+                Offset(left, top),
+                Offset(right, top),
+                Offset(right, bottom),
+                Offset(left, bottom),
+                Offset(left, top)
+            )
             else -> null
         }
     }

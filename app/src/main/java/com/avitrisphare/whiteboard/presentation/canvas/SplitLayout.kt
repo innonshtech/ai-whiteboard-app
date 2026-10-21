@@ -88,8 +88,10 @@ fun hitDivider(frames: List<PaneFrame>, count: Int, x: Float, y: Float, slop: Fl
         }
     }
     if (rows > 1) {
-        val edge = frames[columns].top.toFloat()
-        if (abs(y - edge) <= slop) return DividerHit(vertical = false, index = 0)
+        for (row in 0 until rows - 1) {
+            val edge = frames[row * columns].bottom.toFloat()
+            if (abs(y - edge) <= slop) return DividerHit(vertical = false, index = row)
+        }
     }
     return null
 }

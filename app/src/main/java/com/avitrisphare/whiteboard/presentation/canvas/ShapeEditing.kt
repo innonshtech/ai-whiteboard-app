@@ -37,7 +37,13 @@ private val boxShapes = setOf(
     StrokeType.CIRCLE,
     StrokeType.ELLIPSE,
     StrokeType.DIAMOND,
-    StrokeType.STAR
+    StrokeType.STAR,
+    StrokeType.HEXAGON,
+    StrokeType.ROUND_RECT,
+    StrokeType.CUBE,
+    StrokeType.CYLINDER,
+    StrokeType.CONE,
+    StrokeType.PYRAMID
 )
 
 private val lockedAspect = setOf(StrokeType.SQUARE, StrokeType.CIRCLE)

@@ -14,8 +14,16 @@ enum class PanelGesture {
 
 const val FOUR_TAP_TRAVEL_PX = 36f
 
-/** Samples closer than this are the same point. At 48 dpi this is about 0.7 mm. */
+/** Legacy default; prefer [inkSampleGapPx]. */
 const val INK_SAMPLE_GAP_PX = 1.25f
+
+const val DEFAULT_INK_SAMPLE_GAP_MM = 0.4f
+
+fun inkSampleGapPx(gapMm: Float, xdpi: Float, canvasScale: Float = 1f): Float {
+    val mm = gapMm.coerceIn(0.15f, 2f)
+    val px = mm / 25.4f * xdpi.coerceAtLeast(1f)
+    return (px / canvasScale.coerceAtLeast(0.05f)).coerceAtLeast(0.35f)
+}
 
 fun sampleGapMillimetres(gapPx: Float, xdpi: Float): Float {
     return gapPx / xdpi.coerceAtLeast(1f) * 25.4f

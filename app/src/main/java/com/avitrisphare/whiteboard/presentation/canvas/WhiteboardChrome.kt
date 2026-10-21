@@ -65,6 +65,10 @@ import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Architecture
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Undo
@@ -116,6 +120,7 @@ private val DockColor = Color(0xFF1C2130)
 private val DockLabel = Color(0xFFC9CED6)
 private val PenGradient = listOf(Color(0xFF4C8DFF), Color(0xFF7A5CFF), Color(0xFFD946EF))
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun AvitriSphareWhiteboardChrome(
     state: CanvasState,
@@ -145,11 +150,24 @@ fun AvitriSphareWhiteboardChrome(
     onMathDrag: (MathToolKind, Offset) -> Unit,
     onMathDragEnd: (MathToolKind, Offset, Boolean) -> Unit,
     onDockBounds: (Rect) -> Unit,
-    onOpenDocument: () -> Unit
+    onOpenDocument: () -> Unit,
+    demoMode: Boolean = false,
+    dockDismissNonce: Int = 0,
+    onSave: () -> Unit = {},
+    onSaveSlides: () -> Unit = {},
+    onCopySelection: () -> Unit = {},
+    onPasteClipboard: () -> Unit = {},
+    onToggleLocale: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var panel by remember { mutableStateOf<String?>(null) }
+    var pageMenuIndex by remember { mutableStateOf<Int?>(null) }
+    var renamePageTitle by remember { mutableStateOf("") }
+
+    androidx.compose.runtime.LaunchedEffect(dockDismissNonce) {
+        if (dockDismissNonce > 0) panel = null
+    }
 
     fun toggle(name: String) {
         panel = if (panel == name) null else name
@@ -161,6 +179,13 @@ fun AvitriSphareWhiteboardChrome(
             .navigationBarsPadding()
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
+        if (panel != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { panel = null }
+            )
+        }
         Surface(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -173,26 +198,28 @@ fun AvitriSphareWhiteboardChrome(
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable(onClick = onExit)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.ArrowBack,
-                        contentDescription = "Back to class",
-                        tint = Color(0xFF1F2937),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        "Class",
-                        color = Color(0xFF1F2937),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(start = 4.dp, end = 6.dp)
-                    )
+                if (!demoMode) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable(onClick = onExit)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Back to class",
+                            tint = Color(0xFF1F2937),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            "Class",
+                            color = Color(0xFF1F2937),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(start = 4.dp, end = 6.dp)
+                        )
+                    }
                 }
                 Text(
                     text = state.noteTitle.ifBlank { "Untitled" },
@@ -325,6 +352,29 @@ fun AvitriSphareWhiteboardChrome(
                         val selectedImage = state.strokes.firstOrNull {
                             it.id in state.selectedStrokeIds && it.strokeType == StrokeType.IMAGE
                         }
+                        if (state.selectedStrokeIds.isNotEmpty()) {
+                            Text(
+                                text = "Copy",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onCopySelection() }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            )
+                            if (state.hasStrokeClipboard) {
+                                Text(
+                                    text = "Paste",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { onPasteClipboard() }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                        }
                         if (selectedImage != null) {
                             Text(
                                 text = if (state.extractTextBusy) "Extracting…" else "Extract Text",
@@ -407,6 +457,52 @@ fun AvitriSphareWhiteboardChrome(
                     PopoverRow(Icons.Default.ArrowForward, "Arrow", state.currentTool == WhiteboardTool.ARROW) {
                         viewModel.setTool(WhiteboardTool.ARROW); panel = null
                     }
+                    PopoverRow(Icons.Default.ChangeHistory, "Triangle", state.currentTool == WhiteboardTool.TRIANGLE) {
+                        viewModel.setTool(WhiteboardTool.TRIANGLE); panel = null
+                    }
+                    PopoverRow(Icons.Default.Star, "Star", state.currentTool == WhiteboardTool.STAR) {
+                        viewModel.setTool(WhiteboardTool.STAR); panel = null
+                    }
+                    PopoverRow(Icons.Default.RadioButtonUnchecked, "Ellipse", state.currentTool == WhiteboardTool.ELLIPSE) {
+                        viewModel.setTool(WhiteboardTool.ELLIPSE); panel = null
+                    }
+                    PopoverRow(Icons.Default.CropSquare, "Square", state.currentTool == WhiteboardTool.SQUARE) {
+                        viewModel.setTool(WhiteboardTool.SQUARE); panel = null
+                    }
+                    PopoverRow(Icons.Default.Category, "Hexagon", state.currentTool == WhiteboardTool.HEXAGON) {
+                        viewModel.setTool(WhiteboardTool.HEXAGON); panel = null
+                    }
+                    PopoverRow(Icons.Default.CropFree, "Rounded rect", state.currentTool == WhiteboardTool.ROUND_RECT) {
+                        viewModel.setTool(WhiteboardTool.ROUND_RECT); panel = null
+                    }
+                    PopoverRow(Icons.Default.Architecture, "Cube", state.currentTool == WhiteboardTool.CUBE) {
+                        viewModel.setTool(WhiteboardTool.CUBE); panel = null
+                    }
+                    PopoverRow(Icons.Default.RadioButtonUnchecked, "Cylinder", state.currentTool == WhiteboardTool.CYLINDER) {
+                        viewModel.setTool(WhiteboardTool.CYLINDER); panel = null
+                    }
+                    PopoverRow(Icons.Default.ChangeHistory, "Cone", state.currentTool == WhiteboardTool.CONE) {
+                        viewModel.setTool(WhiteboardTool.CONE); panel = null
+                    }
+                    PopoverRow(Icons.Default.Category, "Pyramid", state.currentTool == WhiteboardTool.PYRAMID) {
+                        viewModel.setTool(WhiteboardTool.PYRAMID); panel = null
+                    }
+                    PopoverRow(Icons.Default.Dashboard, "Flowchart node") {
+                        viewModel.addFlowchartNode("process", Offset(400f, 400f))
+                        panel = null
+                    }
+                    PopoverRow(Icons.Default.Hub, "Mind map centre") {
+                        viewModel.addMindMapCenter(Offset(480f, 360f))
+                        panel = null
+                    }
+                    PopoverRow(Icons.Default.EmojiEmotions, "Emoji") {
+                        viewModel.insertEmoji("😀", Offset(520f, 320f))
+                        panel = null
+                    }
+                    PopoverRow(Icons.Default.Star, "Sticker") {
+                        viewModel.insertSticker("star", Offset(560f, 320f))
+                        panel = null
+                    }
                 }
                 "geometry" -> DockPopover {
                     Text(
@@ -418,9 +514,14 @@ fun AvitriSphareWhiteboardChrome(
                     PopoverRow(Icons.Default.GridOn, "Graph paper", state.canvasBackground == CanvasBackground.GRAPH) {
                         viewModel.toggleGraphPaper(); panel = null
                     }
-                    PopoverRow(Icons.Default.AutoFixHigh, "Shape recognition", state.isDrawToShapeEnabled) {
+                    PopoverRow(Icons.Default.AutoFixHigh, "Magic pen", state.isDrawToShapeEnabled) {
                         viewModel.toggleDrawToShape()
                     }
+                    Text(
+                        if (state.smartWriteEnabled) "Turn off Smart Write to use Magic pen." else "",
+                        fontSize = 11.sp,
+                        color = Color(0xFF6B7280)
+                    )
                     PopoverRow(Icons.Default.HorizontalRule, "Line", state.currentTool == WhiteboardTool.LINE) {
                         viewModel.setTool(WhiteboardTool.LINE); panel = null
                     }
@@ -495,7 +596,7 @@ fun AvitriSphareWhiteboardChrome(
                     }
                     if (state.splitCount > 1) {
                         PopoverRow(Icons.Default.CropFree, "Full canvas") {
-                            viewModel.closeSplit()
+                            viewModel.requestCloseSplit()
                             panel = null
                         }
                     }
@@ -517,14 +618,25 @@ fun AvitriSphareWhiteboardChrome(
                         viewModel.setTool(state.inkTool)
                         panel = "ink"
                     }
-                    PopoverRow(Icons.Default.AutoFixHigh, "Shape recognition", state.isDrawToShapeEnabled) {
+                    PopoverRow(Icons.Default.AutoFixHigh, "Magic pen", state.isDrawToShapeEnabled) {
                         viewModel.toggleDrawToShape()
                     }
+                    Text(
+                        if (state.smartWriteEnabled) "Turn off Smart Write to use Magic pen." else "",
+                        fontSize = 11.sp,
+                        color = Color(0xFF6B7280)
+                    )
                     PopoverRow(Icons.Default.GridOn, "Background") { panel = "background" }
                     PopoverRow(Icons.Default.IosShare, "Export image") { panel = null; onExport() }
                     PopoverRow(Icons.Default.Group, "Live collaboration") { panel = null; onLive() }
                     PopoverRow(Icons.Default.HelpOutline, "Help") { panel = null; onHelp() }
-                    PopoverRow(Icons.Default.LayersClear, "Clear page") { panel = null; onClear() }
+                    PopoverRow(Icons.Default.LayersClear, "Clear all") { panel = null; onClear() }
+                    PopoverRow(Icons.Default.Save, "Save") { panel = null; onSave() }
+                    PopoverRow(Icons.Default.Description, "Save slides (PDF)") { panel = null; onSaveSlides() }
+                    PopoverRow(Icons.Default.Language, if (state.uiLocaleTag == "hi") "English" else "हिंदी") {
+                        onToggleLocale()
+                        panel = null
+                    }
                     PopoverRow(Icons.Default.Add, "Zoom in") { onZoomIn() }
                     PopoverRow(Icons.Default.ChevronLeft, "Zoom out") { onZoomOut() }
                     PopoverRow(Icons.Default.CropFree, "Fit to content") { panel = null; onFit() }
@@ -574,13 +686,14 @@ fun AvitriSphareWhiteboardChrome(
                             CanvasBackground.GRID,
                             CanvasBackground.GRAPH,
                             CanvasBackground.LINED,
-                            CanvasBackground.DARK
+                            CanvasBackground.DARK,
+                            CanvasBackground.FOOTBALL
                         ).forEach { type ->
                             BackgroundSwatch(
                                 type = type,
                                 isSelected = state.canvasBackground == type,
                                 onClick = {
-                                    viewModel.setCanvasBackground(type)
+                                    viewModel.setPageBackground(type)
                                     panel = null
                                 }
                             )
@@ -611,10 +724,12 @@ fun AvitriSphareWhiteboardChrome(
                     }
                     PageThumbnail(
                         index = index,
+                        title = state.pageTitles.getOrElse(index) { "Page ${index + 1}" },
                         strokes = strokes,
                         selected = index == state.pageIndex,
                         dark = state.isDarkCanvas,
-                        onClick = { viewModel.selectPage(index) }
+                        onClick = { viewModel.selectPage(index) },
+                        onLongClick = { pageMenuIndex = index }
                     )
                 }
                 if (state.document == null && state.pageCount < 50) {
@@ -629,6 +744,17 @@ fun AvitriSphareWhiteboardChrome(
                         Icon(Icons.Default.Add, contentDescription = "Add page", tint = Color.White)
                     }
                 }
+            }
+
+            pageMenuIndex?.let { idx ->
+                PageActionsDialog(
+                    pageIndex = idx,
+                    title = state.pageTitles.getOrElse(idx) { "Page ${idx + 1}" },
+                    onDismiss = { pageMenuIndex = null },
+                    onRename = { viewModel.renamePage(idx, it) },
+                    onDelete = { viewModel.deletePage(idx) },
+                    onDuplicate = { viewModel.duplicatePage(idx) }
+                )
             }
 
             Row(
@@ -974,17 +1100,20 @@ private fun TopBarButton(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun PageThumbnail(
     index: Int,
+    title: String,
     strokes: List<Stroke>,
     selected: Boolean,
     dark: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {}
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick)
+        modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
         Box(
             modifier = Modifier
@@ -1036,10 +1165,40 @@ private fun PageThumbnail(
             }
         }
         Text(
-            text = "${index + 1}",
+            text = title.take(12),
             color = if (selected) Color(0xFF4F46E5) else Color(0xFF6B7280),
             fontSize = 10.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
         )
     }
+}
+
+@Composable
+private fun PageActionsDialog(
+    pageIndex: Int,
+    title: String,
+    onDismiss: () -> Unit,
+    onRename: (String) -> Unit,
+    onDelete: () -> Unit,
+    onDuplicate: () -> Unit
+) {
+    var draft by remember(title) { mutableStateOf(title) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Page ${pageIndex + 1}") },
+        text = {
+            Column {
+                OutlinedTextField(value = draft, onValueChange = { draft = it }, label = { Text("Name") })
+            }
+        },
+        confirmButton = {
+            Text("Save", modifier = Modifier.clickable { onRename(draft); onDismiss() })
+        },
+        dismissButton = {
+            Row {
+                Text("Duplicate", modifier = Modifier.clickable { onDuplicate(); onDismiss() }.padding(end = 12.dp))
+                Text("Delete", modifier = Modifier.clickable { onDelete(); onDismiss() })
+            }
+        }
+    )
 }

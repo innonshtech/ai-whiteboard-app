@@ -35,13 +35,18 @@ android {
             }
         }
         buildConfigField "String", "API_BASE_URL", "\"${apiBaseUrl}\""
+        buildConfigField "boolean", "DEMO_MODE", "false"
     }
 
     buildTypes {
+        debug {
+            buildConfigField "boolean", "DEMO_MODE", "true"
+        }
         release {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            buildConfigField "boolean", "DEMO_MODE", "false"
         }
     }
 

@@ -21,12 +21,12 @@ fun DrawScope.drawPageGrid(
     offsetX: Float,
     offsetY: Float
 ) {
-    val bgColor = when (background) {
-        CanvasBackground.DARK -> Color(0xFF171717)
-        CanvasBackground.GRAPH -> Color(0xFFF7FBFF)
-        else -> Color.White
+    when (background) {
+        CanvasBackground.FOOTBALL -> drawFootballPitch()
+        CanvasBackground.DARK -> drawRect(Color(0xFF171717), size = size)
+        CanvasBackground.GRAPH -> drawRect(Color(0xFFF7FBFF), size = size)
+        else -> drawRect(Color.White, size = size)
     }
-    drawRect(bgColor, size = size)
     val viewport = CanvasTransform.calculateViewportWorldBounds(
         viewportSize = size,
         scale = scale,

@@ -271,15 +271,66 @@ fun InkToolPanel(state: CanvasState, viewModel: CanvasViewModel) {
         }
         Spacer(Modifier.height(8.dp))
         Text("Size", fontSize = 12.sp, color = Color(0xFF6B7280))
-        Slider(
-            value = state.strokeWidth.coerceIn(1f, 50f),
-            onValueChange = { viewModel.setStrokeWidth(it) },
-            valueRange = 1f..50f,
-            modifier = Modifier.fillMaxWidth(),
-            colors = SliderDefaults.colors(
-                thumbColor = Color(0xFF6366F1),
-                activeTrackColor = Color(0xFF6366F1)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "−",
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { viewModel.nudgeStrokeWidth(-2f) }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                fontWeight = FontWeight.Bold
             )
+            Slider(
+                value = state.strokeWidth.coerceIn(1f, 50f),
+                onValueChange = { viewModel.setStrokeWidth(it) },
+                valueRange = 1f..50f,
+                modifier = Modifier.weight(1f),
+                colors = SliderDefaults.colors(
+                    thumbColor = Color(0xFF6366F1),
+                    activeTrackColor = Color(0xFF6366F1)
+                )
+            )
+            Text(
+                "+",
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { viewModel.nudgeStrokeWidth(2f) }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Text("Two-colour pen", fontSize = 12.sp, color = Color(0xFF6B7280))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Color(state.selectedColor))
+                    .clickable { viewModel.setColor(state.selectedColor) }
+            )
+            Box(
+                Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Color(state.secondaryColor))
+                    .clickable { viewModel.setSecondaryColor(state.secondaryColor) }
+            )
+            Text(
+                "Swap",
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFEEF2FF))
+                    .clickable { viewModel.swapPenColors() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                fontSize = 12.sp
+            )
+        }
+        Text("Ink quality (mm)", fontSize = 12.sp, color = Color(0xFF6B7280))
+        Slider(
+            value = state.inkSampleGapMm,
+            onValueChange = { viewModel.setInkSampleGapMm(it) },
+            valueRange = 0.15f..1.2f,
+            modifier = Modifier.fillMaxWidth()
         )
         Text("Colour", fontSize = 12.sp, color = Color(0xFF6B7280))
         Spacer(Modifier.height(6.dp))
@@ -438,6 +489,25 @@ fun EraserToolPanel(
             color = Color(0xFF6B7280)
         )
         Spacer(Modifier.height(8.dp))
+        Text(
+            "Palm eraser",
+            fontSize = 12.sp,
+            color = if (state.palmEraserEnabled) Color(0xFF2563EB) else Color(0xFF6B7280),
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { viewModel.setPalmEraserEnabled(!state.palmEraserEnabled) }
+                .padding(vertical = 4.dp)
+        )
+        Text(
+            "Selection eraser only",
+            fontSize = 12.sp,
+            color = if (state.restrictEraserToSelection) Color(0xFF2563EB) else Color(0xFF6B7280),
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { viewModel.setRestrictEraserToSelection(!state.restrictEraserToSelection) }
+                .padding(vertical = 4.dp)
+        )
+        Spacer(Modifier.height(8.dp))
         Text("Size ${state.eraserSize.toInt()}px", fontSize = 12.sp, color = Color(0xFF6B7280))
         Slider(
             value = state.eraserSize.coerceIn(8f, 80f),
@@ -450,7 +520,7 @@ fun EraserToolPanel(
             )
         )
         Text(
-            text = "Clear page",
+            text = "Clear all",
             color = Color(0xFFB91C1C),
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,

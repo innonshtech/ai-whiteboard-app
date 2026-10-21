@@ -409,11 +409,61 @@ fun DrawScope.renderStroke(
                 )
             }
         }
+        StrokeType.HEXAGON -> {
+            if (pointsList.size >= 2) {
+                drawHexagon(strokeColor, pointsList.first(), pointsList.last(), strokeWidth)
+            }
+        }
+        StrokeType.ROUND_RECT -> {
+            if (pointsList.size >= 2) {
+                val p1 = pointsList.first()
+                val p2 = pointsList.last()
+                val left = minOf(p1.x, p2.x)
+                val top = minOf(p1.y, p2.y)
+                val width = kotlin.math.abs(p2.x - p1.x)
+                val height = kotlin.math.abs(p2.y - p1.y)
+                drawRoundRect(
+                    strokeColor,
+                    Offset(left, top),
+                    Size(width, height),
+                    cornerRadius = CornerRadius(24f / safeScale, 24f / safeScale),
+                    style = DrawStroke(width = strokeWidth)
+                )
+            }
+        }
+        StrokeType.CUBE, StrokeType.CYLINDER, StrokeType.CONE, StrokeType.PYRAMID -> {
+            if (pointsList.size >= 2) {
+                drawIsometricSolid(stroke.strokeType, strokeColor, pointsList.first(), pointsList.last(), strokeWidth)
+            }
+        }
+        StrokeType.CONNECTOR -> {
+            if (pointsList.size >= 2) {
+                drawLine(strokeColor, pointsList.first(), pointsList.last(), strokeWidth, cap = StrokeCap.Round)
+            }
+        }
+        StrokeType.STICKER -> {
+            val origin = pointsList.first()
+            val label = when (stroke.stickerKind) {
+                "tick" -> "✓"
+                "cross" -> "✕"
+                "thumb" -> "👍"
+                else -> "★"
+            }
+            drawContext.canvas.nativeCanvas.apply {
+                val paint = Paint().apply {
+                    color = stroke.colorValue
+                    textSize = stroke.strokeWidth.coerceAtLeast(48f)
+                    isAntiAlias = true
+                }
+                drawText(label, origin.x, origin.y + paint.textSize, paint)
+            }
+        }
         StrokeType.IMAGE, StrokeType.VIDEO, StrokeType.WEB_EMBED -> Unit
         StrokeType.STICKY_NOTE -> {
             val origin = pointsList.first()
-            val w = 220f
-            val h = 180f
+            val scale = (stroke.strokeWidth / 20f).coerceIn(0.75f, 3f)
+            val w = 220f * scale
+            val h = 180f * scale
             val fillColor = if (stroke.fillColor != 0) Color(stroke.fillColor) else Color(0xFFFFF9C4)
             drawRoundRect(
                 color = fillColor,
@@ -682,6 +732,12 @@ fun BackgroundSwatch(type: CanvasBackground, isSelected: Boolean, onClick: () ->
                     for (h in 0..size.width.toInt() step 6)
                         drawLine(Color(0xFFD3E3F4), Offset(h.toFloat(), 0f), Offset(h.toFloat(), size.height), 1f)
                 }
+                CanvasBackground.FOOTBALL -> {
+                    drawRect(Color(0xFF2E7D32))
+                    drawRect(Color(0x99FFFFFF), style = DrawStroke(2f))
+                    drawLine(Color.White, Offset(size.width / 2f, 0f), Offset(size.width / 2f, size.height), 2f)
+                }
+                CanvasBackground.CUSTOM -> drawRect(Color(0xFFE5E7EB))
             }
         }
     }
@@ -693,10 +749,22 @@ fun CanvasScreen(
     noteId: String,
     noteTitle: String = "",
     viewModel: CanvasViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    demoMode: Boolean = false,
+    panelSession: com.avitrisphare.whiteboard.presentation.entry.PanelSessionStore? = null
 ) {
     LaunchedEffect(noteId) {
         viewModel.loadNote(noteId)
+    }
+
+    LaunchedEffect(panelSession) {
+        panelSession?.let { session ->
+            viewModel.setUiLocaleTag(session.uiLocaleTag())
+            viewModel.configureHelpPanel(
+                panelId = session.panelId(),
+                licenseState = if (session.snapshot().isLicensed) "Licensed" else "Not licensed"
+            )
+        }
     }
 
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -753,6 +821,7 @@ fun CanvasScreen(
     var canvasSize by remember { mutableStateOf(Size.Zero) }
     var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
     var dockBounds by remember { mutableStateOf<Rect?>(null) }
+    var dockDismissNonce by remember { mutableIntStateOf(0) }
 
     // Math instruments live in screen space so centimetre marks stay physical size.
     var mathTools by remember { mutableStateOf(listOf<PlacedMathTool>()) }
@@ -994,7 +1063,7 @@ fun CanvasScreen(
                         }
                         fun PointerInputChange.rejectedPalm(): Boolean {
                             val stylus = isStylusPointer()
-                            return isPalmContact(
+                            val palm = isPalmContact(
                                 touchMajorPx = touchContacts.majorPx(id),
                                 xdpi = xdpi,
                                 stylusActive = touchContacts.stylusActive || stylus,
@@ -1002,8 +1071,10 @@ fun CanvasScreen(
                                 touchMinorPx = touchContacts.minorPx(id),
                                 ydpi = ydpi
                             )
+                            return palm && !(state.palmEraserEnabled && !stylus)
                         }
                         var down = awaitFirstDown(requireUnconsumed = false)
+                        dockDismissNonce++
                         while (down.rejectedPalm()) {
                             down.consume()
                             val skipped = awaitPointerEvent()
@@ -1019,6 +1090,17 @@ fun CanvasScreen(
                             scale = canvasScale,
                             offset = Offset(canvasOffsetX, canvasOffsetY)
                         )
+                        if (state.palmEraserEnabled && !down.isStylusPointer() && isPalmContact(
+                                touchMajorPx = touchContacts.majorPx(down.id),
+                                xdpi = xdpi,
+                                stylusActive = touchContacts.stylusActive,
+                                isStylus = false,
+                                touchMinorPx = touchContacts.minorPx(down.id),
+                                ydpi = ydpi
+                            )
+                        ) {
+                            viewModel.setTool(WhiteboardTool.ERASER)
+                        }
                         var prevPosition = down.position
                         var shapePoints = listOf(downWorld)
                         val stylusDraw = down.isStylusPointer()
@@ -1098,7 +1180,7 @@ fun CanvasScreen(
                             if (last != null) {
                                 val dx = (world.x - last.x) * canvasScale
                                 val dy = (world.y - last.y) * canvasScale
-                                val gap = INK_SAMPLE_GAP_PX
+                                val gap = inkSampleGapPx(state.inkSampleGapMm, xdpi, canvasScale)
                                 if (dx * dx + dy * dy < gap * gap) return
                             }
                             inkPoints.add(world)
@@ -1113,12 +1195,18 @@ fun CanvasScreen(
                             }
                             val latest = viewModel.state.value
                             val radius = latest.eraserSize / canvasScale.coerceAtLeast(0.001f)
-                            val updated = StrokeEraser.apply(
-                                eraserSession.strokes,
-                                world,
-                                radius,
-                                latest.eraserMode
-                            )
+                            val pool = if (latest.restrictEraserToSelection && latest.selectedStrokeIds.isNotEmpty()) {
+                                eraserSession.strokes.filter { it.id in latest.selectedStrokeIds }
+                            } else {
+                                eraserSession.strokes
+                            }
+                            val erased = StrokeEraser.apply(pool, world, radius, latest.eraserMode)
+                            val updated = if (latest.restrictEraserToSelection && latest.selectedStrokeIds.isNotEmpty()) {
+                                val kept = eraserSession.strokes.filter { it.id !in latest.selectedStrokeIds }
+                                kept + erased
+                            } else {
+                                erased
+                            }
                             if (updated !== eraserSession.strokes) {
                                 eraserSession.strokes = updated
                                 eraserSession.changed = true
@@ -1241,7 +1329,17 @@ fun CanvasScreen(
                             WhiteboardTool.CIRCLE,
                             WhiteboardTool.ARROW,
                             WhiteboardTool.LINE,
-                            WhiteboardTool.FRAME -> {
+                            WhiteboardTool.FRAME,
+                            WhiteboardTool.TRIANGLE,
+                            WhiteboardTool.STAR,
+                            WhiteboardTool.ELLIPSE,
+                            WhiteboardTool.SQUARE,
+                            WhiteboardTool.HEXAGON,
+                            WhiteboardTool.ROUND_RECT,
+                            WhiteboardTool.CUBE,
+                            WhiteboardTool.CYLINDER,
+                            WhiteboardTool.CONE,
+                            WhiteboardTool.PYRAMID -> {
                                 val sType = when (activeTool) {
                                     WhiteboardTool.RECTANGLE -> StrokeType.RECTANGLE
                                     WhiteboardTool.DIAMOND -> StrokeType.DIAMOND
@@ -1249,6 +1347,16 @@ fun CanvasScreen(
                                     WhiteboardTool.ARROW -> StrokeType.ARROW
                                     WhiteboardTool.LINE -> StrokeType.LINE
                                     WhiteboardTool.FRAME -> StrokeType.FRAME
+                                    WhiteboardTool.TRIANGLE -> StrokeType.TRIANGLE
+                                    WhiteboardTool.STAR -> StrokeType.STAR
+                                    WhiteboardTool.ELLIPSE -> StrokeType.ELLIPSE
+                                    WhiteboardTool.SQUARE -> StrokeType.SQUARE
+                                    WhiteboardTool.HEXAGON -> StrokeType.HEXAGON
+                                    WhiteboardTool.ROUND_RECT -> StrokeType.ROUND_RECT
+                                    WhiteboardTool.CUBE -> StrokeType.CUBE
+                                    WhiteboardTool.CYLINDER -> StrokeType.CYLINDER
+                                    WhiteboardTool.CONE -> StrokeType.CONE
+                                    WhiteboardTool.PYRAMID -> StrokeType.PYRAMID
                                     else -> StrokeType.PEN
                                 }
                                 val newStroke = Stroke(
@@ -1732,6 +1840,7 @@ fun CanvasScreen(
                         document?.pageWidth ?: 0f,
                         document?.pageHeight ?: 0f
                     )
+                    stage.setDocumentFrame(page.documentFrameX, page.documentFrameY, page.documentFrameScale)
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -1911,6 +2020,24 @@ fun CanvasScreen(
                         "application/vnd.openxmlformats-officedocument.presentationml.presentation"
                     )
                 )
+            },
+            demoMode = demoMode,
+            dockDismissNonce = dockDismissNonce,
+            onSave = { viewModel.confirmSave() },
+            onSaveSlides = {
+                viewModel.exportAllSlidesPdf { uri ->
+                    if (uri != null) {
+                        exportedUri = uri
+                        showExportDialog = true
+                    }
+                }
+            },
+            onCopySelection = { viewModel.copySelectedStrokes() },
+            onPasteClipboard = { viewModel.pasteStrokeClipboard() },
+            onToggleLocale = {
+                val next = if (state.uiLocaleTag == "hi") "en" else "hi"
+                panelSession?.setUiLocaleTag(next)
+                viewModel.setUiLocaleTag(next)
             }
         )
 
@@ -1960,13 +2087,23 @@ fun CanvasScreen(
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
+                                Spacer(Modifier.width(8.dp))
+                                TextButton(onClick = { viewModel.cancelPdfOcr() }) {
+                                    Text("Stop", color = Color(0xFFFF6B6B))
+                                }
                             }
                         } else if (state.pdfOcrDocument == null) {
                             TextButton(
-                                onClick = { viewModel.makePdfEditable() },
+                                onClick = { viewModel.makePdfEditableCurrentPage() },
                                 colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF60A5FA))
                             ) {
-                                Text("Make Editable", fontWeight = FontWeight.SemiBold)
+                                Text("OCR this page", fontWeight = FontWeight.SemiBold)
+                            }
+                            TextButton(
+                                onClick = { viewModel.makePdfEditable() },
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF93C5FD))
+                            ) {
+                                Text("OCR all pages", fontWeight = FontWeight.SemiBold)
                             }
                         } else {
                             TextButton(
@@ -1983,6 +2120,30 @@ fun CanvasScreen(
                         }
                     }
 
+                    TextButton(onClick = {
+                        viewModel.setDocumentFrame(
+                            state.documentFrameX - 40f,
+                            state.documentFrameY,
+                            state.documentFrameScale
+                        )
+                    }) { Text("Move PDF ←", color = Color.White, fontSize = 11.sp) }
+                    TextButton(onClick = {
+                        viewModel.setDocumentFrame(
+                            state.documentFrameX,
+                            state.documentFrameY,
+                            state.documentFrameScale * 0.9f
+                        )
+                    }) { Text("PDF −", color = Color.White, fontSize = 11.sp) }
+                    TextButton(onClick = {
+                        viewModel.setDocumentFrame(
+                            state.documentFrameX,
+                            state.documentFrameY,
+                            state.documentFrameScale * 1.1f
+                        )
+                    }) { Text("PDF +", color = Color.White, fontSize = 11.sp) }
+                    TextButton(onClick = { viewModel.resetDocumentFrame() }) {
+                        Text("Fit PDF", color = Color.White, fontSize = 11.sp)
+                    }
                     TextButton(onClick = {
                         viewModel.exportAnnotatedPdf { uri ->
                             exportedUri = uri
@@ -2844,6 +3005,19 @@ fun CanvasScreen(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text("Pinch with 2 fingers on empty board to zoom from 10% to 500%. Two fingers also pan. Ctrl+Z undoes, Ctrl+Y redoes. Double tap fits the page.", fontSize = 12.sp, color = Color(0xFF6B7280))
+                    if (state.panelIdForHelp.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            "Panel: ${state.panelIdForHelp} · ${state.licenseStateForHelp}",
+                            fontSize = 11.sp,
+                            color = Color(0xFF9CA3AF)
+                        )
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showHelpDialog = false }) {
+                    Text("Close", color = LocalAvitriSphareColors.current.textMuted)
                 }
             },
             confirmButton = {
@@ -3194,11 +3368,29 @@ fun CanvasScreen(
         )
     }
 
+    if (state.showCloseSplitDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissCloseSplitDialog() },
+            title = { Text("Leave split screen") },
+            text = { Text("Keep ink from the active panel on the main board?") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.closeSplit(state.splitActive) }) {
+                    Text("Keep active panel")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissCloseSplitDialog() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     // Clear Canvas confirmation dialog
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
-            title = { Text("Clear page", color = LocalAvitriSphareColors.current.textPrimary) },
+            title = { Text("Clear all", color = LocalAvitriSphareColors.current.textPrimary) },
             text = { Text("Clear everything on this page? You can bring it back with Undo.", color = LocalAvitriSphareColors.current.textMuted) },
             confirmButton = {
                 TextButton(onClick = {
