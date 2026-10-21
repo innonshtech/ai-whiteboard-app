@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Dashboard
@@ -79,6 +80,11 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.HourglassBottom
+import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -129,6 +135,7 @@ fun AvitriSphareWhiteboardChrome(
     onOpenMenu: () -> Unit,
     onInsertImage: () -> Unit,
     onExport: () -> Unit,
+    onOpenIwb: () -> Unit = {},
     onLive: () -> Unit,
     onHelp: () -> Unit,
     onClear: () -> Unit,
@@ -157,7 +164,15 @@ fun AvitriSphareWhiteboardChrome(
     onSaveSlides: () -> Unit = {},
     onCopySelection: () -> Unit = {},
     onPasteClipboard: () -> Unit = {},
-    onToggleLocale: () -> Unit = {}
+    onToggleLocale: () -> Unit = {},
+    isTimerVisible: Boolean = false,
+    onToggleTimer: () -> Unit = {},
+    isStopwatchVisible: Boolean = false,
+    onToggleStopwatch: () -> Unit = {},
+    isCalculatorVisible: Boolean = false,
+    onToggleCalculator: () -> Unit = {},
+    isPeriodicTableVisible: Boolean = false,
+    onTogglePeriodicTable: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -627,9 +642,14 @@ fun AvitriSphareWhiteboardChrome(
                         color = Color(0xFF6B7280)
                     )
                     PopoverRow(Icons.Default.GridOn, "Background") { panel = "background" }
-                    PopoverRow(Icons.Default.IosShare, "Export image") { panel = null; onExport() }
+                    PopoverRow(Icons.Default.IosShare, "Export lesson...") { panel = null; onExport() }
+                    PopoverRow(Icons.Default.FolderOpen, "Open GYOASH Lesson (.iwb)...") { panel = null; onOpenIwb() }
                     PopoverRow(Icons.Default.Group, "Live collaboration") { panel = null; onLive() }
                     PopoverRow(Icons.Default.HelpOutline, "Help") { panel = null; onHelp() }
+                    PopoverRow(Icons.Default.HourglassBottom, "Countdown Timer", isTimerVisible) { panel = null; onToggleTimer() }
+                    PopoverRow(Icons.Default.Timer, "Stopwatch", isStopwatchVisible) { panel = null; onToggleStopwatch() }
+                    PopoverRow(Icons.Default.Calculate, "Calculator", isCalculatorVisible) { panel = null; onToggleCalculator() }
+                    PopoverRow(Icons.Default.Science, "Periodic Table", isPeriodicTableVisible) { panel = null; onTogglePeriodicTable() }
                     PopoverRow(Icons.Default.LayersClear, "Clear all") { panel = null; onClear() }
                     PopoverRow(Icons.Default.Save, "Save") { panel = null; onSave() }
                     PopoverRow(Icons.Default.Description, "Save slides (PDF)") { panel = null; onSaveSlides() }
@@ -640,6 +660,26 @@ fun AvitriSphareWhiteboardChrome(
                     PopoverRow(Icons.Default.Add, "Zoom in") { onZoomIn() }
                     PopoverRow(Icons.Default.ChevronLeft, "Zoom out") { onZoomOut() }
                     PopoverRow(Icons.Default.CropFree, "Fit to content") { panel = null; onFit() }
+                }
+                "utilities" -> DockPopover {
+                    Text("Class Utilities", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+                    Spacer(Modifier.height(8.dp))
+                    PopoverRow(Icons.Default.HourglassBottom, "Countdown Timer", isTimerVisible) {
+                        panel = null
+                        onToggleTimer()
+                    }
+                    PopoverRow(Icons.Default.Timer, "Stopwatch", isStopwatchVisible) {
+                        panel = null
+                        onToggleStopwatch()
+                    }
+                    PopoverRow(Icons.Default.Calculate, "Scientific Calculator", isCalculatorVisible) {
+                        panel = null
+                        onToggleCalculator()
+                    }
+                    PopoverRow(Icons.Default.Science, "Periodic Table", isPeriodicTableVisible) {
+                        panel = null
+                        onTogglePeriodicTable()
+                    }
                 }
                 "eraser" -> DockPopover {
                     EraserToolPanel(state = state, viewModel = viewModel, onClearPage = {
@@ -839,6 +879,11 @@ fun AvitriSphareWhiteboardChrome(
                             "Media",
                             panel == "media" || state.currentTool == WhiteboardTool.TEXT || state.currentTool == WhiteboardTool.STICKY_NOTE
                         ) { toggle("media") }
+                        DockItem(
+                            Icons.Default.Widgets,
+                            "Tools",
+                            isTimerVisible || isStopwatchVisible || isCalculatorVisible || isPeriodicTableVisible || panel == "utilities"
+                        ) { toggle("utilities") }
                         DockItem(Icons.Default.Undo, "Undo", enabled = state.canUndo) {
                             panel = null
                             viewModel.undo()
@@ -853,6 +898,10 @@ fun AvitriSphareWhiteboardChrome(
                                 viewModel.saveNow()
                                 Toast.makeText(context, "Saved", Toast.LENGTH_SHORT).show()
                             }
+                        }
+                        DockItem(Icons.Default.IosShare, "Export") {
+                            panel = null
+                            onExport()
                         }
                         DockItem(Icons.Default.Dashboard, "Split", state.splitCount > 1 || panel == "split") {
                             toggle("split")
