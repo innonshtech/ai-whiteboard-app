@@ -16,6 +16,9 @@ data class StrokeDto(
     val text: String = "",
     val fillColor: Int = 0,
     val imageUri: String = "",
+    val opacity: Float = 1f,
+    val cornerRadius: Float = 0f,
+    val showDimensions: Boolean = false,
     val linkToId: String = "",
     val linkFromId: String = "",
     val stickerKind: String = ""
@@ -34,6 +37,9 @@ fun StrokeDto.toDomain(): Stroke {
             text = text,
             fillColor = fillColor,
             imageUri = imageUri,
+            opacity = opacity,
+            cornerRadius = cornerRadius,
+            showDimensions = showDimensions,
             linkToId = linkToId,
             linkFromId = linkFromId,
             stickerKind = stickerKind
@@ -63,6 +69,9 @@ fun StrokeDto.toDomain(): Stroke {
         fillColor = fillColor,
         imageUri = imageUri,
         pointPressures = parsed.map { it.second },
+        opacity = opacity,
+        cornerRadius = cornerRadius,
+        showDimensions = showDimensions,
         linkToId = linkToId,
         linkFromId = linkFromId,
         stickerKind = stickerKind
@@ -89,6 +98,9 @@ fun Stroke.toDto(): StrokeDto {
         text = text,
         fillColor = fillColor,
         imageUri = imageUri,
+        opacity = opacity,
+        cornerRadius = cornerRadius,
+        showDimensions = showDimensions,
         linkToId = linkToId,
         linkFromId = linkFromId,
         stickerKind = stickerKind

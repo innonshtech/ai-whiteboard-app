@@ -1,11 +1,14 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -107,6 +110,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -179,6 +183,7 @@ fun AvitriSphareWhiteboardChrome(
     var panel by remember { mutableStateOf<String?>(null) }
     var pageMenuIndex by remember { mutableStateOf<Int?>(null) }
     var renamePageTitle by remember { mutableStateOf("") }
+    var selectionColorTarget by remember { mutableStateOf("border") }
 
     androidx.compose.runtime.LaunchedEffect(dockDismissNonce) {
         if (dockDismissNonce > 0) panel = null
@@ -201,6 +206,19 @@ fun AvitriSphareWhiteboardChrome(
                     .clickable { panel = null }
             )
         }
+        if (panel != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        panel = null
+                    }
+            )
+        }
+
         Surface(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -292,142 +310,332 @@ fun AvitriSphareWhiteboardChrome(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (state.selectedStrokeIds.isNotEmpty()) {
+                val selectedStrokes = remember(state.strokes, state.selectedStrokeIds) {
+                    state.strokes.filter { it.id in state.selectedStrokeIds }
+                }
+                val hasFillableShape = remember(selectedStrokes) {
+                    selectedStrokes.any { isFillableShape(it.strokeType) }
+                }
+                val activeShape = selectedStrokes.firstOrNull { isFillableShape(it.strokeType) }
+                val currentBorderColor = activeShape?.colorValue ?: state.selectedColor
+                val currentFillColor = activeShape?.fillColor ?: 0
+
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(16.dp),
                     color = DockColor,
-                    shadowElevation = 8.dp,
-                    modifier = Modifier.padding(bottom = 10.dp)
+                    border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                    shadowElevation = 10.dp,
+                    modifier = Modifier
+                        .padding(bottom = 10.dp)
+                        .widthIn(max = 440.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
                     ) {
-                        Text(
-                            "${state.selectedStrokeIds.size} selected",
-                            color = Color.White,
-                            fontSize = 12.sp
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        PEN_COLORS.take(6).forEach { color ->
-                            Box(
-                                modifier = Modifier
-                                    .padding(end = 6.dp)
-                                    .size(18.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(color))
-                                    .clickable { viewModel.recolorSelected(color) }
-                            )
-                        }
-                        val canConvert = state.strokes.any {
-                            it.id in state.selectedStrokeIds && it.strokeType in HANDWRITING_TYPES
-                        }
-                        if (canConvert) {
+                        // Top row: status, mode switch, stroke width, actions
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = if (state.smartWriteBusy) "Reading…" else "Convert to Text",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF2563EB))
-                                    .clickable(enabled = !state.smartWriteBusy) { viewModel.convertSelectionToText() }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                                "${state.selectedStrokeIds.size} selected",
+                                color = Color(0xFFC9CED6),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = if (state.equationBusy) "Reading equation…" else "Convert Equation",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF4F46E5))
-                                    .clickable(enabled = !state.equationBusy) { viewModel.convertSelectionToEquation() }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        val selectedEquation = state.strokes.singleOrNull {
-                            it.id in state.selectedStrokeIds && it.strokeType == StrokeType.EQUATION
-                        }
-                        if (selectedEquation != null && state.formulaSolution?.solved != true) {
-                            Text(
-                                text = "Solve this",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF0F766E))
-                                    .clickable { viewModel.solveCurrentEquation() }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        val selectedImage = state.strokes.firstOrNull {
-                            it.id in state.selectedStrokeIds && it.strokeType == StrokeType.IMAGE
-                        }
-                        if (state.selectedStrokeIds.isNotEmpty()) {
+
+                            if (hasFillableShape) {
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFF262C38))
+                                        .padding(2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Border Tab
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(if (selectionColorTarget == "border") Color(0xFF3B82F6) else Color.Transparent)
+                                            .clickable { selectionColorTarget = "border" }
+                                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(9.dp)
+                                                .clip(CircleShape)
+                                                .border(1.5.dp, Color(currentBorderColor), CircleShape)
+                                        )
+                                        Spacer(Modifier.width(3.dp))
+                                        Text(
+                                            "Border",
+                                            color = Color.White,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (selectionColorTarget == "border") FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+
+                                    // Fill Tab
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(if (selectionColorTarget == "fill") Color(0xFF3B82F6) else Color.Transparent)
+                                            .clickable { selectionColorTarget = "fill" }
+                                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (currentFillColor == 0) {
+                                            Text("⊘", color = Color(0xFFD1D5DB), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        } else {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(9.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(currentFillColor))
+                                            )
+                                        }
+                                        Spacer(Modifier.width(3.dp))
+                                        Text(
+                                            "Fill",
+                                            color = Color.White,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (selectionColorTarget == "fill") FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+                                }
+
+                                if (selectionColorTarget == "border") {
+                                    Spacer(Modifier.width(6.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFF262C38))
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            "−",
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier
+                                                .clip(CircleShape)
+                                                .clickable {
+                                                    val cur = activeShape?.strokeWidth ?: state.strokeWidth
+                                                    viewModel.setStrokeWidth((cur - 2f).coerceAtLeast(1f))
+                                                }
+                                                .padding(horizontal = 3.dp)
+                                        )
+                                        Text(
+                                            "${(activeShape?.strokeWidth ?: state.strokeWidth).toInt()}px",
+                                            color = Color(0xFFE5E7EB),
+                                            fontSize = 10.sp,
+                                            modifier = Modifier.padding(horizontal = 2.dp)
+                                        )
+                                        Text(
+                                            "+",
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier
+                                                .clip(CircleShape)
+                                                .clickable {
+                                                    val cur = activeShape?.strokeWidth ?: state.strokeWidth
+                                                    viewModel.setStrokeWidth((cur + 2f).coerceAtMost(48f))
+                                                }
+                                                .padding(horizontal = 3.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.weight(1f))
+
                             Text(
                                 text = "Copy",
                                 color = Color.White,
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(6.dp))
                                     .clickable { onCopySelection() }
-                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                                    .padding(horizontal = 6.dp, vertical = 3.dp)
                             )
                             if (state.hasStrokeClipboard) {
                                 Text(
                                     text = "Paste",
                                     color = Color.White,
-                                    fontSize = 12.sp,
+                                    fontSize = 11.sp,
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
+                                        .clip(RoundedCornerShape(6.dp))
                                         .clickable { onPasteClipboard() }
-                                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                                        .padding(horizontal = 6.dp, vertical = 3.dp)
                                 )
                             }
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        if (selectedImage != null) {
-                            Text(
-                                text = if (state.extractTextBusy) "Extracting…" else "Extract Text",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
+                            Spacer(Modifier.width(4.dp))
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Delete selection",
+                                tint = Color(0xFFFF6B6B),
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF2563EB))
-                                    .clickable(enabled = !state.extractTextBusy) { viewModel.extractTextFromSelectedImage() }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        val canEdit = state.strokes.count {
-                            it.id in state.selectedStrokeIds && it.strokeType == StrokeType.TEXT
-                        } == 1
-                        if (canEdit && state.editingTextId == null) {
-                            Text(
-                                text = "Edit text",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { viewModel.beginTextEdit() }
-                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .clickable { viewModel.deleteSelectedStrokes() }
+                                    .padding(3.dp)
                             )
                         }
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete selection",
-                            tint = Color(0xFFFF6B6B),
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .clickable { viewModel.deleteSelectedStrokes() }
-                                .padding(5.dp)
-                        )
+
+                        // Bottom row: Color palette
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (hasFillableShape && selectionColorTarget == "fill") {
+                                // None / Transparent swatch
+                                Box(
+                                    modifier = Modifier
+                                        .padding(end = 6.dp)
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF262C38))
+                                        .border(
+                                            if (currentFillColor == 0) 2.dp else 1.dp,
+                                            if (currentFillColor == 0) Color.White else Color(0xFF6B7280),
+                                            CircleShape
+                                        )
+                                        .clickable { viewModel.setSelectionFillColor(0) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("⊘", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                val fillPalette = listOf(
+                                    0xFFFFFFFF.toInt(),
+                                    0xFF1B1F2A.toInt(),
+                                    0xFFFF6B6B.toInt(),
+                                    0xFF3ECF8E.toInt(),
+                                    0xFF4ECDC4.toInt(),
+                                    0xFFFFE66D.toInt(),
+                                    0xFF60A5FA.toInt(),
+                                    0xFFAA96DA.toInt()
+                                )
+                                fillPalette.forEach { color ->
+                                    val isSelected = currentFillColor == color
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(end = 6.dp)
+                                            .size(20.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(color))
+                                            .then(
+                                                if (isSelected) Modifier.border(2.dp, Color.White, CircleShape)
+                                                else Modifier.border(0.5.dp, Color(0x44FFFFFF), CircleShape)
+                                            )
+                                            .clickable { viewModel.setSelectionFillColor(color) }
+                                    )
+                                }
+                            } else {
+                                val borderPalette = if (hasFillableShape) PEN_COLORS.take(8) else PEN_COLORS.take(7)
+                                borderPalette.forEach { color ->
+                                    val isSelected = (if (hasFillableShape) currentBorderColor else state.selectedColor) == color
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(end = 6.dp)
+                                            .size(20.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(color))
+                                            .then(
+                                                if (isSelected) Modifier.border(2.dp, Color.White, CircleShape)
+                                                else Modifier.border(0.5.dp, Color(0x44FFFFFF), CircleShape)
+                                            )
+                                            .clickable {
+                                                if (hasFillableShape) viewModel.setSelectionBorderColor(color)
+                                                else viewModel.recolorSelected(color)
+                                            }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Optional row 3: Contextual actions for Handwriting / Equation / Image OCR
+                        val canConvert = state.strokes.any { it.id in state.selectedStrokeIds && it.strokeType in HANDWRITING_TYPES }
+                        val selectedEquation = state.strokes.singleOrNull { it.id in state.selectedStrokeIds && it.strokeType == StrokeType.EQUATION }
+                        val selectedImage = state.strokes.firstOrNull { it.id in state.selectedStrokeIds && it.strokeType == StrokeType.IMAGE }
+                        val canEdit = state.strokes.count { it.id in state.selectedStrokeIds && it.strokeType == StrokeType.TEXT } == 1
+
+                        if (canConvert || (selectedEquation != null && state.formulaSolution?.solved != true) || selectedImage != null || (canEdit && state.editingTextId == null)) {
+                            Spacer(Modifier.height(6.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (canConvert) {
+                                    Text(
+                                        text = if (state.smartWriteBusy) "Reading…" else "Text",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFF2563EB))
+                                            .clickable(enabled = !state.smartWriteBusy) { viewModel.convertSelectionToText() }
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = if (state.equationBusy) "Reading…" else "Math",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFF4F46E5))
+                                            .clickable(enabled = !state.equationBusy) { viewModel.convertSelectionToEquation() }
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                if (selectedEquation != null && state.formulaSolution?.solved != true) {
+                                    Text(
+                                        text = "Solve",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFF0F766E))
+                                            .clickable { viewModel.solveCurrentEquation() }
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                if (selectedImage != null) {
+                                    Text(
+                                        text = if (state.extractTextBusy) "Extracting…" else "OCR",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFF2563EB))
+                                            .clickable(enabled = !state.extractTextBusy) { viewModel.extractTextFromSelectedImage() }
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                if (canEdit && state.editingTextId == null) {
+                                    Text(
+                                        text = "Edit text",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .clickable { viewModel.beginTextEdit() }
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -457,21 +665,11 @@ fun AvitriSphareWhiteboardChrome(
                     }
                 }
                 "shapes" -> DockPopover {
-                    PopoverRow(Icons.Default.CropSquare, "Rectangle", state.currentTool == WhiteboardTool.RECTANGLE) {
-                        viewModel.setTool(WhiteboardTool.RECTANGLE); panel = null
-                    }
-                    PopoverRow(Icons.Default.RadioButtonUnchecked, "Circle", state.currentTool == WhiteboardTool.CIRCLE) {
-                        viewModel.setTool(WhiteboardTool.CIRCLE); panel = null
-                    }
-                    PopoverRow(Icons.Default.Diamond, "Diamond", state.currentTool == WhiteboardTool.DIAMOND) {
-                        viewModel.setTool(WhiteboardTool.DIAMOND); panel = null
-                    }
-                    PopoverRow(Icons.Default.HorizontalRule, "Line", state.currentTool == WhiteboardTool.LINE) {
-                        viewModel.setTool(WhiteboardTool.LINE); panel = null
-                    }
-                    PopoverRow(Icons.Default.ArrowForward, "Arrow", state.currentTool == WhiteboardTool.ARROW) {
-                        viewModel.setTool(WhiteboardTool.ARROW); panel = null
-                    }
+                    ShapeToolPanel(
+                        state = state,
+                        viewModel = viewModel,
+                        onClose = { panel = null }
+                    )
                     PopoverRow(Icons.Default.ChangeHistory, "Triangle", state.currentTool == WhiteboardTool.TRIANGLE) {
                         viewModel.setTool(WhiteboardTool.TRIANGLE); panel = null
                     }
@@ -682,13 +880,18 @@ fun AvitriSphareWhiteboardChrome(
                     }
                 }
                 "eraser" -> DockPopover {
-                    EraserToolPanel(state = state, viewModel = viewModel, onClearPage = {
-                        panel = null
-                        onClear()
-                    })
+                    EraserToolPanel(
+                        state = state,
+                        viewModel = viewModel,
+                        onClearPage = {
+                            panel = null
+                            onClear()
+                        },
+                        onClose = { panel = null }
+                    )
                 }
                 "ink" -> DockPopover {
-                    InkToolPanel(state = state, viewModel = viewModel)
+                    InkToolPanel(state = state, viewModel = viewModel, onClose = { panel = null })
                 }
                 "color" -> DockPopover {
                     Text("Stroke", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
@@ -818,7 +1021,8 @@ fun AvitriSphareWhiteboardChrome(
                             WhiteboardTool.CIRCLE,
                             WhiteboardTool.DIAMOND,
                             WhiteboardTool.LINE,
-                            WhiteboardTool.ARROW
+                            WhiteboardTool.ARROW,
+                            WhiteboardTool.SHAPE
                         )
                         DockItem(Icons.Default.NearMe, "Select", state.currentTool == WhiteboardTool.SELECT) {
                             panel = null
@@ -1094,7 +1298,7 @@ private fun DockPopover(content: @Composable () -> Unit) {
         shadowElevation = 12.dp,
         modifier = Modifier
             .padding(bottom = 4.dp)
-            .widthIn(min = 200.dp, max = 320.dp)
+            .widthIn(min = 200.dp, max = 460.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             content()

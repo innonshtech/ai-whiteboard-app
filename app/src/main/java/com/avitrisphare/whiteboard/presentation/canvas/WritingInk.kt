@@ -22,6 +22,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
@@ -186,7 +189,11 @@ private fun inkLook(type: StrokeType): InkLook = when (type) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun InkToolPanel(state: CanvasState, viewModel: CanvasViewModel) {
+fun InkToolPanel(
+    state: CanvasState,
+    viewModel: CanvasViewModel,
+    onClose: () -> Unit = {}
+) {
     var showSmartWrite by remember { mutableStateOf(false) }
     var hex by remember(state.selectedColor) {
         mutableStateOf(String.format("%06X", state.selectedColor and 0xFFFFFF))
@@ -197,43 +204,87 @@ fun InkToolPanel(state: CanvasState, viewModel: CanvasViewModel) {
 
     Column(
         modifier = Modifier
-            .width(300.dp)
+            .width(380.dp)
             .heightIn(max = 460.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(Color(state.selectedColor))
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "${state.inkTool.label} · ${state.strokeWidth.toInt()}px",
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1F2937)
+                )
+            }
             Box(
                 modifier = Modifier
-                    .size(22.dp)
+                    .size(28.dp)
                     .clip(CircleShape)
-                    .background(Color(state.selectedColor))
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "${state.inkTool.label} · ${state.strokeWidth.toInt()}px",
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF1F2937)
-            )
+                    .background(Color(0xFFF3F4F6))
+                    .clickable(onClick = onClose),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = Color(0xFF4B5563),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
         Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             listOf(
                 WhiteboardTool.PEN,
+                WhiteboardTool.MATH_PEN,
                 WhiteboardTool.PENCIL,
                 WhiteboardTool.MARKER,
                 WhiteboardTool.HIGHLIGHTER,
                 WhiteboardTool.BRUSH
             ).forEach { tool ->
                 val selected = state.inkTool == tool
+                val label = if (tool == WhiteboardTool.MATH_PEN) "Math fx" else tool.label
                 Text(
-                    text = tool.label,
+                    text = label,
                     color = if (selected) Color.White else Color(0xFF1F2937),
                     fontSize = 11.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (selected) Color(0xFF6366F1) else Color(0xFFF3F4F6))
                         .clickable { viewModel.setTool(tool) }
                         .padding(horizontal = 8.dp, vertical = 6.dp)
+                )
+            }
+        }
+        if (state.inkTool == WhiteboardTool.MATH_PEN) {
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFEEF2FF))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Math Pen active · Write equations (e.g. a² + b² = ) to auto-convert into formatted math.",
+                    fontSize = 11.sp,
+                    color = Color(0xFF4338CA),
+                    fontWeight = FontWeight.Medium
                 )
             }
         }
@@ -455,10 +506,32 @@ private fun SmartWriteLanguageDialog(
 fun EraserToolPanel(
     state: CanvasState,
     viewModel: CanvasViewModel,
-    onClearPage: () -> Unit
+    onClearPage: () -> Unit,
+    onClose: () -> Unit = {}
 ) {
     Column(modifier = Modifier.width(260.dp)) {
-        Text("Eraser", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Eraser", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFF3F4F6))
+                    .clickable(onClick = onClose),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = Color(0xFF4B5563),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(

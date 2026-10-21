@@ -273,7 +273,17 @@ fun DrawScope.renderStroke(
     val safeScale = if (currentScale <= 0f) 1f else currentScale
     val baseWidth = if (stroke.isHighlighter) stroke.strokeWidth * 3f else stroke.strokeWidth
     val strokeWidth = (baseWidth / safeScale).coerceAtLeast(1f / safeScale)
-    val strokeColor = if (stroke.isHighlighter) Color(stroke.colorValue).copy(alpha = 0.4f) else Color(stroke.colorValue)
+    val opacity = stroke.opacity.coerceIn(0.05f, 1f)
+    val strokeColor = if (stroke.isHighlighter) {
+        Color(stroke.colorValue).copy(alpha = 0.4f * opacity)
+    } else {
+        val baseColor = Color(stroke.colorValue)
+        baseColor.copy(alpha = (baseColor.alpha * opacity).coerceIn(0f, 1f))
+    }
+
+    if (renderExtendedShape(stroke, safeScale, strokeColor, strokeWidth)) {
+        return
+    }
 
     when (stroke.strokeType) {
         StrokeType.CIRCLE, StrokeType.ELLIPSE -> {
@@ -394,12 +404,20 @@ fun DrawScope.renderStroke(
                     lineTo(pointsList[2].x, pointsList[2].y)
                     close()
                 }
+                if (stroke.fillColor != 0) {
+                    val fc = Color(stroke.fillColor)
+                    drawPath(triangle, fc.copy(alpha = (fc.alpha * opacity).coerceIn(0f, 1f)))
+                }
                 drawPath(triangle, strokeColor, style = DrawStroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
         }
         StrokeType.STAR -> {
             if (pointsList.size >= 2) {
                 val star = regularStarPath(pointsList.first(), pointsList.last())
+                if (stroke.fillColor != 0) {
+                    val fc = Color(stroke.fillColor)
+                    drawPath(star, fc.copy(alpha = (fc.alpha * opacity).coerceIn(0f, 1f)))
+                }
                 drawPath(star, strokeColor, style = DrawStroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
         }
@@ -580,6 +598,7 @@ fun DrawScope.renderStroke(
         StrokeType.MARKER,
         StrokeType.HIGHLIGHTER,
         StrokeType.BRUSH -> drawWritingStroke(stroke, safeScale)
+        else -> {}
     }
 
     if (isSelected) {
@@ -1189,10 +1208,20 @@ fun CanvasScreen(
                         var prevPosition = down.position
                         var shapePoints = listOf(downWorld)
                         val stylusDraw = down.isStylusPointer()
+                        val isShapeActive = state.currentTool == WhiteboardTool.SHAPE || state.currentTool in setOf(
+                            WhiteboardTool.RECTANGLE,
+                            WhiteboardTool.CIRCLE,
+                            WhiteboardTool.DIAMOND,
+                            WhiteboardTool.LINE,
+                            WhiteboardTool.ARROW,
+                            WhiteboardTool.FRAME
+                        )
                         val activeTool = if (stylusDraw) {
                             val toolType = touchContacts.toolType(down.id)
                             if (toolType == MotionEvent.TOOL_TYPE_ERASER || down.type == PointerType.Eraser) {
                                 WhiteboardTool.ERASER
+                            } else if (isShapeActive) {
+                                state.currentTool
                             } else {
                                 state.inkTool
                             }
@@ -1405,6 +1434,7 @@ fun CanvasScreen(
                             }
                             WhiteboardTool.MAGNIFIER -> boardStage?.showMagnifier(down.position.x, down.position.y)
                             WhiteboardTool.PEN,
+                            WhiteboardTool.MATH_PEN,
                             WhiteboardTool.PENCIL,
                             WhiteboardTool.MARKER,
                             WhiteboardTool.HIGHLIGHTER,
@@ -1424,7 +1454,8 @@ fun CanvasScreen(
                             WhiteboardTool.CUBE,
                             WhiteboardTool.CYLINDER,
                             WhiteboardTool.CONE,
-                            WhiteboardTool.PYRAMID -> {
+                            WhiteboardTool.PYRAMID,
+                            WhiteboardTool.SHAPE -> {
                                 val sType = when (activeTool) {
                                     WhiteboardTool.RECTANGLE -> StrokeType.RECTANGLE
                                     WhiteboardTool.DIAMOND -> StrokeType.DIAMOND
@@ -1442,13 +1473,18 @@ fun CanvasScreen(
                                     WhiteboardTool.CYLINDER -> StrokeType.CYLINDER
                                     WhiteboardTool.CONE -> StrokeType.CONE
                                     WhiteboardTool.PYRAMID -> StrokeType.PYRAMID
+                                    WhiteboardTool.SHAPE -> state.activeShapeType
                                     else -> StrokeType.PEN
                                 }
                                 val newStroke = Stroke(
                                     points = listOf(downWorld, downWorld),
-                                    colorValue = state.selectedColor,
+                                    colorValue = if (activeTool == WhiteboardTool.SHAPE) state.shapeBorderColor else state.selectedColor,
+                                    fillColor = if (activeTool == WhiteboardTool.SHAPE) state.shapeFillColor else state.fillColor,
                                     strokeWidth = state.strokeWidth,
-                                    strokeType = sType
+                                    strokeType = sType,
+                                    opacity = if (activeTool == WhiteboardTool.SHAPE) state.shapeOpacity else 1f,
+                                    cornerRadius = if (activeTool == WhiteboardTool.SHAPE) state.shapeCornerRadius else 0f,
+                                    showDimensions = if (activeTool == WhiteboardTool.SHAPE) state.showShapeDimensions else false
                                 )
                                 shapePoints = newStroke.points
                                 viewModel.startStroke(newStroke)
@@ -1473,6 +1509,7 @@ fun CanvasScreen(
                             }
                             if (fingerScratch.size > fingerPeak) fingerPeak = fingerScratch.size
                             val drawsImmediately = activeTool == WhiteboardTool.PENCIL ||
+                                activeTool == WhiteboardTool.MATH_PEN ||
                                 activeTool == WhiteboardTool.ERASER
                             val multiFingers = !drawsImmediately &&
                                 !touchContacts.stylusActive &&
@@ -1669,7 +1706,8 @@ fun CanvasScreen(
                                             WhiteboardTool.CIRCLE,
                                             WhiteboardTool.ARROW,
                                             WhiteboardTool.LINE,
-                                            WhiteboardTool.FRAME
+                                            WhiteboardTool.FRAME,
+                                            WhiteboardTool.SHAPE
                                         )
                                     ) {
                                         shapePoints = listOf(downWorld, curWorld)
@@ -1889,7 +1927,8 @@ fun CanvasScreen(
                                     WhiteboardTool.CIRCLE,
                                     WhiteboardTool.ARROW,
                                     WhiteboardTool.LINE,
-                                    WhiteboardTool.FRAME
+                                    WhiteboardTool.FRAME,
+                                    WhiteboardTool.SHAPE
                                 ) && shapePoints.size >= 2
                             ) {
                                 viewModel.updateStroke(shapePoints)
@@ -2563,12 +2602,43 @@ fun CanvasScreen(
         state.formulaSolution?.let { solution ->
             FormulaCard(
                 solution = solution,
-                onSolve = { viewModel.solveCurrentEquation() },
+                onSolve = { latex -> viewModel.solveEditedEquation(latex) },
                 onDismiss = { viewModel.dismissFormula() },
+                onRetry = { viewModel.retryEquationConversion() },
+                onDraftChange = { latex -> viewModel.updateEquationDraft(latex) },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 108.dp)
             )
+        }
+
+        if (state.equationBusy) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 72.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xF21C2130),
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = Color(0xFF818CF8)
+                    )
+                    Text(
+                        "Recognizing equation…",
+                        color = Color.White,
+                        fontSize = 13.sp
+                    )
+                }
+            }
         }
 
         if (state.smartWriteBusy && smartOffer == null && editing == null) {

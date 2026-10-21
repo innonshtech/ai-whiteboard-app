@@ -574,11 +574,21 @@ class BoardStageView(context: Context) : FrameLayout(context) {
             strokeJoin = android.graphics.Paint.Join.ROUND
         }
         private val path = android.graphics.Path()
+        private val liveScope = CanvasDrawScope()
 
         override fun onDraw(canvas: android.graphics.Canvas) {
             val stroke = activeLive?.stroke
             val active = currentStroke
             if ((stroke == null || stroke.points.isEmpty()) && (active == null || active.points.isEmpty())) return
+            val s = if (active != null && active.points.isNotEmpty()) active else stroke!!
+            if (s.points.size >= 2 && (isEditableShape(s.strokeType) || s.strokeType == StrokeType.FRAME)) {
+                liveScope.draw(density, LayoutDirection.Ltr, Canvas(canvas), Size(width.toFloat(), height.toFloat())) {
+                    inPageSpace(offsetX, offsetY, scale) {
+                        renderStroke(context, s, scale, false)
+                    }
+                }
+                return
+            }
             canvas.save()
             canvas.translate(offsetX, offsetY)
             canvas.scale(scale, scale)

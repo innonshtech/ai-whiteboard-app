@@ -31,36 +31,63 @@ data class ShapeHandleHit(
     val vertexIndex: Int = -1
 )
 
+private val lineShapes = setOf(
+    StrokeType.LINE,
+    StrokeType.LINE_DASHED,
+    StrokeType.ARROW,
+    StrokeType.DOUBLE_ARROW,
+    StrokeType.DASHED_ARROW,
+    StrokeType.ANGLE_RAY
+)
+
 private val boxShapes = setOf(
     StrokeType.RECTANGLE,
+    StrokeType.ROUNDED_RECTANGLE,
     StrokeType.SQUARE,
     StrokeType.CIRCLE,
     StrokeType.ELLIPSE,
+    StrokeType.SEMICIRCLE,
     StrokeType.DIAMOND,
     StrokeType.STAR,
+    StrokeType.RIGHT_TRIANGLE,
+    StrokeType.SCALENE_TRIANGLE,
+    StrokeType.TRAPEZOID,
+    StrokeType.PARALLELOGRAM,
+    StrokeType.RHOMBUS,
+    StrokeType.PENTAGON,
     StrokeType.HEXAGON,
-    StrokeType.ROUND_RECT,
+    StrokeType.OCTAGON,
     StrokeType.CUBE,
+    StrokeType.CUBOID,
+    StrokeType.PYRAMID,
+    StrokeType.PRISM,
     StrokeType.CYLINDER,
     StrokeType.CONE,
-    StrokeType.PYRAMID
+    StrokeType.SPHERE
 )
 
-private val lockedAspect = setOf(StrokeType.SQUARE, StrokeType.CIRCLE)
+private val lockedAspect = setOf(
+    StrokeType.SQUARE,
+    StrokeType.CIRCLE,
+    StrokeType.SPHERE,
+    StrokeType.CUBE,
+    StrokeType.PENTAGON,
+    StrokeType.HEXAGON,
+    StrokeType.OCTAGON
+)
 
 fun isEditableShape(type: StrokeType): Boolean {
     return type in boxShapes ||
-        type == StrokeType.TRIANGLE ||
-        type == StrokeType.LINE ||
-        type == StrokeType.ARROW
+        type in lineShapes ||
+        type == StrokeType.TRIANGLE
 }
 
 fun hitShapeHandle(stroke: Stroke, point: Offset, slop: Float): ShapeHandleHit? {
     if (!isEditableShape(stroke.strokeType) || stroke.points.isEmpty()) return null
     val slopSq = slop * slop
     fun near(target: Offset) = hypot(point.x - target.x, point.y - target.y).let { it * it <= slopSq }
-    return when (stroke.strokeType) {
-        StrokeType.LINE, StrokeType.ARROW -> {
+    return when {
+        stroke.strokeType in lineShapes -> {
             val start = stroke.points.first()
             val end = stroke.points.last()
             when {
@@ -69,7 +96,7 @@ fun hitShapeHandle(stroke: Stroke, point: Offset, slop: Float): ShapeHandleHit? 
                 else -> null
             }
         }
-        StrokeType.TRIANGLE -> {
+        stroke.strokeType == StrokeType.TRIANGLE -> {
             val index = stroke.points.indices.minByOrNull { vertex ->
                 hypot(point.x - stroke.points[vertex].x, point.y - stroke.points[vertex].y)
             } ?: return null
@@ -90,13 +117,13 @@ fun hitShapeHandle(stroke: Stroke, point: Offset, slop: Float): ShapeHandleHit? 
 }
 
 fun resizeShape(stroke: Stroke, hit: ShapeHandleHit, point: Offset): Stroke {
-    val points = when (stroke.strokeType) {
-        StrokeType.LINE, StrokeType.ARROW -> when (hit.kind) {
+    val points = when {
+        stroke.strokeType in lineShapes -> when (hit.kind) {
             ShapeHandle.START -> listOf(point, stroke.points.last())
             ShapeHandle.END -> listOf(stroke.points.first(), point)
             else -> stroke.points
         }
-        StrokeType.TRIANGLE -> {
+        stroke.strokeType == StrokeType.TRIANGLE -> {
             if (hit.kind != ShapeHandle.VERTEX || hit.vertexIndex !in stroke.points.indices) {
                 stroke.points
             } else {

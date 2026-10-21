@@ -16,6 +16,9 @@ data class Stroke(
     val fillColor: Int = 0,
     val imageUri: String = "",
     val pointPressures: List<Float> = emptyList(),
+    val opacity: Float = 1f,
+    val cornerRadius: Float = 0f,
+    val showDimensions: Boolean = false,
     /** When non-empty, this stroke is anchored to another stroke (flowchart / mind map). */
     val linkToId: String = "",
     val linkFromId: String = "",
@@ -98,12 +101,31 @@ enum class StrokeType {
     TRIANGLE,
     STAR,
     EQUATION,
-    HEXAGON,
+    // 2D Shapes
+    ROUNDED_RECTANGLE,
     ROUND_RECT,
+    SEMICIRCLE,
+    RIGHT_TRIANGLE,
+    SCALENE_TRIANGLE,
+    TRAPEZOID,
+    PARALLELOGRAM,
+    RHOMBUS,
+    PENTAGON,
+    HEXAGON,
+    OCTAGON,
+    // Lines & Rays
+    LINE_DASHED,
+    DOUBLE_ARROW,
+    DASHED_ARROW,
+    ANGLE_RAY,
+    // 3D Solids
     CUBE,
+    CUBOID,
+    PYRAMID,
+    PRISM,
     CYLINDER,
     CONE,
-    PYRAMID,
+    SPHERE,
     STICKER,
     CONNECTOR
 }

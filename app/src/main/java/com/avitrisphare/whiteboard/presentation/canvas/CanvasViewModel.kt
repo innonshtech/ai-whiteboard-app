@@ -26,12 +26,15 @@ import com.avitrisphare.whiteboard.domain.model.CanvasBackground
 import com.avitrisphare.whiteboard.domain.model.withGraphPaperToggled
 import com.avitrisphare.whiteboard.domain.model.Stroke
 import com.avitrisphare.whiteboard.domain.model.StrokeType
+import com.avitrisphare.whiteboard.data.remote.ApiCall
+import com.avitrisphare.whiteboard.data.remote.PanelApi
 import com.avitrisphare.whiteboard.domain.model.isPlacedMedia
 import com.avitrisphare.whiteboard.domain.repository.NoteRepository
 import com.avitrisphare.whiteboard.presentation.canvas.export.ExportDestination
 import com.avitrisphare.whiteboard.presentation.canvas.export.ExportFormat
 import com.avitrisphare.whiteboard.presentation.canvas.export.ExportResult
 import com.avitrisphare.whiteboard.presentation.canvas.export.WhiteboardExportManager
+import com.avitrisphare.whiteboard.presentation.entry.PanelSessionStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -52,12 +55,14 @@ enum class WhiteboardTool(val label: String, val shortcut: String) {
     LOCK("Lock", ""),
     HAND("Hand", "H"),
     SELECT("Selection", "V"),
+    SHAPE("Shape", "S"),
     RECTANGLE("Rectangle", "R"),
     DIAMOND("Diamond", "D"),
     CIRCLE("Circle", "O"),
     ARROW("Arrow", "A"),
     LINE("Line", "L"),
     PEN("Pen", "P"),
+    MATH_PEN("Math", "M"),
     PENCIL("Pencil", ""),
     MARKER("Marker", ""),
     HIGHLIGHTER("Highlighter", ""),
@@ -175,11 +180,19 @@ data class CanvasState(
     val licenseStateForHelp: String = "",
     val hasStrokeClipboard: Boolean = false,
     val flowchartToolActive: Boolean = false,
-    val mindMapCenterId: String? = null
+    val mindMapCenterId: String? = null,
+    val activeShapeType: StrokeType = StrokeType.RECTANGLE,
+    val shapeOpacity: Float = 1f,
+    val shapeCornerRadius: Float = 24f,
+    val showShapeDimensions: Boolean = false,
+    val shapeStyleMode: ShapeStyleMode = ShapeStyleMode.BORDER,
+    val shapeBorderColor: Int = 0xFF1B1F2A.toInt(),
+    val shapeFillColor: Int = 0
 )
 
 val WRITING_TOOLS = setOf(
     WhiteboardTool.PEN,
+    WhiteboardTool.MATH_PEN,
     WhiteboardTool.PENCIL,
     WhiteboardTool.MARKER,
     WhiteboardTool.HIGHLIGHTER,
@@ -191,6 +204,7 @@ fun WhiteboardTool.toStrokeType(): StrokeType = when (this) {
     WhiteboardTool.MARKER -> StrokeType.MARKER
     WhiteboardTool.HIGHLIGHTER -> StrokeType.HIGHLIGHTER
     WhiteboardTool.BRUSH -> StrokeType.BRUSH
+    WhiteboardTool.MATH_PEN -> StrokeType.PEN
     else -> StrokeType.PEN
 }
 
@@ -199,6 +213,7 @@ fun WhiteboardTool.defaultStrokeWidth(): Float = when (this) {
     WhiteboardTool.MARKER -> 18f
     WhiteboardTool.HIGHLIGHTER -> 28f
     WhiteboardTool.BRUSH -> 12f
+    WhiteboardTool.MATH_PEN -> 4f
     else -> 4f
 }
 
@@ -240,7 +255,8 @@ private const val SMART_WRITE_INTERVAL_KEY = "smart_write_interval"
 @HiltViewModel
 class CanvasViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val noteRepository: NoteRepository
+    private val noteRepository: NoteRepository,
+    private val panelApi: PanelApi
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CanvasState())
@@ -273,6 +289,7 @@ class CanvasViewModel @Inject constructor(
     private val paneRedo = Array(6) { ArrayDeque<List<Stroke>>() }
     private val toolWidths = mutableMapOf(
         WhiteboardTool.PEN to 4f,
+        WhiteboardTool.MATH_PEN to 4f,
         WhiteboardTool.PENCIL to 8f,
         WhiteboardTool.MARKER to 18f,
         WhiteboardTool.HIGHLIGHTER to 28f,
@@ -304,6 +321,15 @@ class CanvasViewModel @Inject constructor(
             return
         }
         val width = toolWidths[tool]
+        val isMathPen = tool == WhiteboardTool.MATH_PEN
+        if (isMathPen) {
+            viewModelScope.launch(Dispatchers.IO) {
+                handwritingReader.prefetch(SmartWriteLanguage("en", "English", SmartWriteScript.LATIN))
+            }
+        } else if (_state.value.inkTool == WhiteboardTool.MATH_PEN) {
+            mathPenJob?.cancel()
+            mathPenSessionStrokeIds.clear()
+        }
         _state.update {
             val panes = if (it.splitCount > 1) {
                 it.splitPanes.mapIndexed { index, pane ->
@@ -338,6 +364,42 @@ class CanvasViewModel @Inject constructor(
                 ),
                 splitPanes = panes
             )
+        }
+    }
+
+    fun setShapeType(type: StrokeType) {
+        _state.update {
+            it.copy(
+                activeShapeType = type,
+                currentTool = WhiteboardTool.SHAPE,
+                isShapeMode = true
+            )
+        }
+    }
+
+    fun setShapeOpacity(opacity: Float) {
+        _state.update { it.copy(shapeOpacity = opacity.coerceIn(0.05f, 1f)) }
+    }
+
+    fun setShapeCornerRadius(radius: Float) {
+        _state.update { it.copy(shapeCornerRadius = radius.coerceIn(0f, 120f)) }
+    }
+
+    fun toggleShapeDimensions() {
+        _state.update { it.copy(showShapeDimensions = !it.showShapeDimensions) }
+    }
+
+    fun setShapeStyleMode(mode: ShapeStyleMode) {
+        _state.update { it.copy(shapeStyleMode = mode) }
+    }
+
+    fun setShapeColor(color: Int) {
+        _state.update {
+            if (it.shapeStyleMode == ShapeStyleMode.BORDER) {
+                it.copy(shapeBorderColor = color, selectedColor = color)
+            } else {
+                it.copy(shapeFillColor = color, fillColor = color)
+            }
         }
     }
 
@@ -609,16 +671,20 @@ class CanvasViewModel @Inject constructor(
 
     fun convertSelectionToEquation() {
         if (_state.value.equationBusy) return
+        val totalSelected = _state.value.selectedStrokeIds.size
         val selected = _state.value.strokes.filter {
-            it.id in _state.value.selectedStrokeIds && it.strokeType in HANDWRITING_TYPES && it.points.size >= 2
+            it.id in _state.value.selectedStrokeIds &&
+                (it.strokeType in HANDWRITING_TYPES || it.strokeType == StrokeType.LINE) &&
+                it.points.isNotEmpty()
         }
+        EquationDiagnostics.logSelection(selected, totalSelected)
         if (selected.isEmpty()) {
             Toast.makeText(context, "Select a handwritten equation first", Toast.LENGTH_SHORT).show()
             return
         }
         viewModelScope.launch {
             _state.update { it.copy(equationBusy = true, formulaSolution = null) }
-            val latex = withTimeoutOrNull(3_800L) {
+            val latex = withTimeoutOrNull(12_000L) {
                 withContext(Dispatchers.Default) { readEquation(selected) }
             }
             if (!isActive) return@launch
@@ -638,7 +704,59 @@ class CanvasViewModel @Inject constructor(
                 it.id in _state.value.selectedStrokeIds && it.strokeType == StrokeType.EQUATION
             }?.text
             ?: return
-        _state.update { it.copy(formulaSolution = solveLatex(latex)) }
+        solveEditedEquation(latex)
+    }
+
+    fun updateEquationDraft(latex: String) {
+        val current = _state.value.formulaSolution ?: return
+        if (current.latex == latex) return
+        val updated = solveLatex(latex).copy(steps = emptyList(), answerLatex = latex, solved = false)
+        val selectedEquationId = _state.value.selectedStrokeIds.singleOrNull()
+        val updatedStrokes = if (selectedEquationId != null) {
+            _state.value.strokes.map { stroke ->
+                if (stroke.id == selectedEquationId && stroke.strokeType == StrokeType.EQUATION) {
+                    val font = stroke.strokeWidth
+                    val (w, h) = formulaExtent(latex, font)
+                    stroke.copy(
+                        text = latex,
+                        points = listOf(stroke.points[0], Offset(stroke.points[0].x + w, stroke.points[0].y + h))
+                    )
+                } else stroke
+            }
+        } else _state.value.strokes
+        _state.update { it.copy(formulaSolution = updated, strokes = updatedStrokes) }
+    }
+
+    fun solveEditedEquation(latex: String) {
+        val clean = latex.trim()
+        if (clean.isBlank()) return
+        val solved = solveLatex(clean)
+        val selectedEquationId = _state.value.selectedStrokeIds.singleOrNull()
+        val updatedStrokes = if (selectedEquationId != null) {
+            _state.value.strokes.map { stroke ->
+                if (stroke.id == selectedEquationId && stroke.strokeType == StrokeType.EQUATION) {
+                    val font = stroke.strokeWidth
+                    val (w, h) = formulaExtent(clean, font)
+                    stroke.copy(
+                        text = clean,
+                        points = listOf(stroke.points[0], Offset(stroke.points[0].x + w, stroke.points[0].y + h))
+                    )
+                } else stroke
+            }
+        } else _state.value.strokes
+        _state.update { it.copy(formulaSolution = solved, strokes = updatedStrokes) }
+    }
+
+    fun retryEquationConversion() {
+        val selectedEquation = _state.value.strokes.singleOrNull {
+            it.id in _state.value.selectedStrokeIds && it.strokeType == StrokeType.EQUATION
+        }
+        if (selectedEquation != null && _state.value.canUndo) {
+            undo()
+            convertSelectionToEquation()
+        } else {
+            convertSelectionToEquation()
+        }
     }
 
     fun dismissFormula() {
@@ -646,29 +764,100 @@ class CanvasViewModel @Inject constructor(
     }
 
     private suspend fun readEquation(strokes: List<Stroke>): String {
-        val bar = fractionBar(strokes)
-        if (bar == null) {
-            return equationFromReadings(visionRead(strokes))
+        val startTotal = System.currentTimeMillis()
+
+        // Step 4: Preferred strategy - Backend Vision API (handles complex math, fractions, superscripts, roots, Greek symbols)
+        var rawLatex = remoteVisionRead(strokes)
+        var usedEngine = "Backend Vision"
+
+        // Fallback strategy: On-device ML Kit Math Digital Ink recognizer
+        if (rawLatex.isNullOrBlank()) {
+            rawLatex = visionRead(strokes)
+            usedEngine = "MLKit Math"
         }
-        val (above, below, beside) = splitFraction(strokes, bar)
-        val numerator = visionRead(above)
-        val denominator = visionRead(below)
-        if (numerator.isBlank() && denominator.isBlank()) return ""
-        return equationFromReadings(
-            whole = "",
-            numerator = numerator,
-            denominator = denominator,
-            leading = if (beside.isEmpty()) null else visionRead(beside)
-        )
+
+        if (rawLatex.isBlank()) {
+            EquationDiagnostics.logFailure("Pipeline", "No recognition output from any engine", System.currentTimeMillis() - startTotal)
+            return ""
+        }
+
+        // Normalization stage
+        val startNorm = System.currentTimeMillis()
+        val normalized = normalizeMathReading(rawLatex)
+        val normElapsed = System.currentTimeMillis() - startNorm
+        EquationDiagnostics.logNormalized(rawLatex, normalized, normElapsed)
+
+        return normalized
     }
 
     private suspend fun visionRead(strokes: List<Stroke>): String {
         if (strokes.isEmpty()) return ""
-        val guesses = handwritingReader.read(strokes, smartWriteLanguage("en"))
-        return guesses.firstOrNull()?.text.orEmpty()
+        val start = System.currentTimeMillis()
+        EquationDiagnostics.logEngine("MLKit Math", "Digital Ink / Spatial")
+        val guesses = handwritingReader.readMath(strokes)
+        val bestGuess = selectBestMathGuess(guesses, strokes.size)
+        var rawText = bestGuess?.text.orEmpty()
+        val confidence = bestGuess?.score ?: 0f
+
+        // If recognition yielded only a single character (e.g. "y" or "Y") or is empty,
+        // but there are 2 or more strokes and one is in the superscript position,
+        // isolate the superscript stroke so ML Kit doesn't drop the exponent as stray noise.
+        if (rawText.length <= 1 && strokes.size >= 2) {
+            val supPair = detectSuperscriptStrokes(strokes)
+            if (supPair != null) {
+                val supGuesses = handwritingReader.readMath(supPair.second)
+                val supBest = supGuesses.firstOrNull()?.text?.trim().orEmpty()
+                if (supBest.isNotEmpty() && supBest.any { it.isDigit() || it.isLetter() }) {
+                    val baseText = if (rawText.isNotEmpty()) rawText else {
+                        handwritingReader.readMath(supPair.first).firstOrNull()?.text?.trim().orEmpty()
+                    }
+                    if (baseText.isNotEmpty()) {
+                        rawText = "${baseText.trim()}^{$supBest}"
+                        EquationDiagnostics.logEngine("Spatial Superscript", "Recovered base='$baseText' sup='$supBest'")
+                    }
+                }
+            }
+        }
+
+        val elapsed = System.currentTimeMillis() - start
+        EquationDiagnostics.logRawResult("MLKit Math", rawText, confidence, elapsed)
+        return rawText
     }
 
-    private fun placeEquation(selected: List<Stroke>, latex: String) {
+    private suspend fun remoteVisionRead(strokes: List<Stroke>): String? {
+        val bitmap = renderHandwriting(strokes) ?: return null
+        EquationDiagnostics.saveDebugBitmap(context, bitmap)
+        // If API_BASE_URL points to 10.0.2.2 on a physical device, skip immediately to avoid 8-second timeout
+        if (com.avitrisphare.whiteboard.BuildConfig.API_BASE_URL.contains("10.0.2.2") &&
+            !android.os.Build.FINGERPRINT.contains("generic") &&
+            !android.os.Build.MODEL.contains("Emulator") &&
+            !android.os.Build.MODEL.contains("google_sdk")
+        ) {
+            EquationDiagnostics.logFailure("Backend Vision", "Skipping backend vision: 10.0.2.2 is unreachable from physical panel.", 0)
+            return null
+        }
+        val stream = java.io.ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        val base64 = android.util.Base64.encodeToString(stream.toByteArray(), android.util.Base64.NO_WRAP)
+        val token = PanelSessionStore(context).snapshot().teacher?.accessToken.orEmpty()
+        val start = System.currentTimeMillis()
+        EquationDiagnostics.logEngine("Backend Vision", "POST /api/v1/math/recognize-equation")
+        return when (val result = panelApi.recognizeEquation(base64, token)) {
+            is ApiCall.Ok -> {
+                val elapsed = System.currentTimeMillis() - start
+                val res = result.value
+                EquationDiagnostics.logRawResult("Backend Vision", res.latex, res.confidence, elapsed)
+                res.latex.takeIf { it.isNotBlank() }
+            }
+            is ApiCall.Err -> {
+                val elapsed = System.currentTimeMillis() - start
+                EquationDiagnostics.logFailure("Backend Vision", result.message, elapsed)
+                null
+            }
+        }
+    }
+
+    private fun placeEquation(selected: List<Stroke>, latex: String, showDialog: Boolean = true) {
         saveToUndoStack()
         var left = Float.POSITIVE_INFINITY
         var top = Float.POSITIVE_INFINITY
@@ -678,7 +867,7 @@ class CanvasViewModel @Inject constructor(
             top = minOf(top, stroke.bounds.top)
             bottom = maxOf(bottom, stroke.bounds.bottom)
         }
-        val font = (bottom - top).coerceIn(36f, 96f)
+        val font = (bottom - top).coerceIn(48f, 220f)
         val (width, height) = formulaExtent(latex, font)
         val equation = Stroke(
             points = listOf(Offset(left, top), Offset(left + width, top + height)),
@@ -688,11 +877,13 @@ class CanvasViewModel @Inject constructor(
             text = latex
         )
         val ids = selected.map { it.id }.toSet()
-        val formatted = solveLatex(latex).copy(steps = emptyList(), answerLatex = latex, solved = false)
+        val formatted = if (showDialog) {
+            solveLatex(latex).copy(steps = emptyList(), answerLatex = latex, solved = false)
+        } else null
         _state.update { state ->
             state.copy(
                 strokes = state.strokes.filterNot { it.id in ids } + equation,
-                selectedStrokeIds = setOf(equation.id),
+                selectedStrokeIds = if (showDialog) setOf(equation.id) else emptySet(),
                 equationBusy = false,
                 formulaSolution = formatted,
                 canUndo = true,
@@ -1329,6 +1520,10 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun recolorSelected(color: Int) {
+        setSelectionBorderColor(color)
+    }
+
+    fun setSelectionBorderColor(color: Int) {
         if (_state.value.selectedStrokeIds.isEmpty()) return
         saveToUndoStack()
         val selected = _state.value.selectedStrokeIds
@@ -1338,6 +1533,26 @@ class CanvasViewModel @Inject constructor(
                     if (stroke.id in selected) stroke.copy(colorValue = color) else stroke
                 },
                 selectedColor = color,
+                shapeBorderColor = color,
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun setSelectionFillColor(color: Int) {
+        if (_state.value.selectedStrokeIds.isEmpty()) return
+        saveToUndoStack()
+        val selected = _state.value.selectedStrokeIds
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes.map { stroke ->
+                    if (stroke.id in selected) stroke.copy(fillColor = color) else stroke
+                },
+                fillColor = color,
+                shapeFillColor = color,
                 canUndo = true,
                 canRedo = false
             )
@@ -2162,8 +2377,58 @@ class CanvasViewModel @Inject constructor(
         }
         redoStack.clear()
         scheduleSave()
-        if (stroke.strokeType in HANDWRITING_TYPES && _state.value.smartWriteEnabled) {
+        if (stroke.strokeType in HANDWRITING_TYPES && _state.value.smartWriteEnabled && _state.value.inkTool != WhiteboardTool.MATH_PEN) {
             scheduleSmartWrite()
+        }
+        if (stroke.strokeType in HANDWRITING_TYPES && _state.value.inkTool == WhiteboardTool.MATH_PEN) {
+            mathPenSessionStrokeIds.add(stroke.id)
+            scheduleMathPen()
+        }
+    }
+
+    private var mathPenJob: Job? = null
+    private val mathPenSessionStrokeIds = mutableListOf<String>()
+
+    private fun scheduleMathPen() {
+        if (_state.value.inkTool != WhiteboardTool.MATH_PEN) return
+        mathPenJob?.cancel()
+        mathPenJob = viewModelScope.launch {
+            delay(2200L)
+            if (!isActive) return@launch
+            if (_state.value.inkTool != WhiteboardTool.MATH_PEN) return@launch
+
+            val currentStrokes = _state.value.strokes
+            val sessionStrokes = currentStrokes.filter {
+                it.id in mathPenSessionStrokeIds && it.strokeType in HANDWRITING_TYPES
+            }
+            if (sessionStrokes.isEmpty()) {
+                mathPenSessionStrokeIds.clear()
+                return@launch
+            }
+
+            val cluster = clusterMathStrokes(sessionStrokes)
+            if (cluster.isEmpty()) return@launch
+
+            val totalPoints = cluster.sumOf { it.points.size }
+            val bounds = unionStrokeBounds(cluster)
+            if (totalPoints < 3 || (bounds.width < 25f && bounds.height < 25f)) {
+                return@launch
+            }
+
+            _state.update { it.copy(equationBusy = true) }
+            val latex = withTimeoutOrNull(4000L) {
+                withContext(Dispatchers.Default) { readEquation(cluster) }
+            }
+            if (!isActive) return@launch
+            _state.update { it.copy(equationBusy = false) }
+
+            val clean = latex?.trim().orEmpty()
+            val isJunk = clean.isEmpty() || (cluster.size <= 2 && clean in setOf("/", "\\", "|", "_", "-", "c", "C", "l", "I"))
+            if (!isJunk) {
+                val clusterIds = cluster.map { it.id }.toSet()
+                mathPenSessionStrokeIds.removeAll(clusterIds)
+                placeEquation(cluster, clean, showDialog = false)
+            }
         }
     }
 
@@ -2270,6 +2535,8 @@ class CanvasViewModel @Inject constructor(
                 editingTextId = null
             )
         }
+        mathPenJob?.cancel()
+        mathPenSessionStrokeIds.clear()
         scheduleSave()
     }
 
@@ -2320,6 +2587,8 @@ class CanvasViewModel @Inject constructor(
                 canRedo = false
             )
         }
+        mathPenJob?.cancel()
+        mathPenSessionStrokeIds.clear()
         redoStack.clear()
         scheduleSave()
     }

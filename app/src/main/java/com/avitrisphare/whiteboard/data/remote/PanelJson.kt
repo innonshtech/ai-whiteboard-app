@@ -231,6 +231,52 @@ private fun jsonObjects(json: String?, vararg keys: String): List<JsonObject> {
     }
 }
 
+// ── Equation recognition ─────────────────────────────────────────────────────
+
+/**
+ * Structured result from POST /api/v1/math/recognize-equation.
+ * [latex] is always present on success; [confidence] is 0..1 from the provider,
+ * or -1f when the backend does not report it.
+ */
+data class MathRecognitionResponse(
+    val latex: String,
+    val mathml: String?,
+    val confidence: Float,
+    val error: String?
+)
+
+fun parseMathRecognitionResponse(json: String): ApiCall<MathRecognitionResponse> {
+    return try {
+        val root = JsonParser.parseString(json).asJsonObject
+        val success = root.get("success")?.asBoolean ?: true
+        val error = root.str("error")
+        if (!success) {
+            return ApiCall.Err(error ?: "Recognition failed")
+        }
+        val latex = root.str("latex")?.trim()
+        if (latex.isNullOrBlank()) {
+            return ApiCall.Err(error ?: "Recognition returned no LaTeX")
+        }
+        val confidence = try {
+            root.get("confidence")?.takeIf { !it.isJsonNull }?.asFloat ?: -1f
+        } catch (_: Exception) {
+            -1f
+        }
+        ApiCall.Ok(
+            MathRecognitionResponse(
+                latex = latex,
+                mathml = root.str("mathml"),
+                confidence = confidence,
+                error = error
+            )
+        )
+    } catch (_: Exception) {
+        ApiCall.Err("Malformed recognition response")
+    }
+}
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
 private fun parseInstantMillis(value: String): Long? {
     return try {
         java.time.Instant.parse(value).toEpochMilli()
