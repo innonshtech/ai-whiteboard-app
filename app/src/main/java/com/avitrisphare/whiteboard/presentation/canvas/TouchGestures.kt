@@ -17,12 +17,38 @@ const val FOUR_TAP_TRAVEL_PX = 36f
 /** Legacy default; prefer [inkSampleGapPx]. */
 const val INK_SAMPLE_GAP_PX = 1.25f
 
-const val DEFAULT_INK_SAMPLE_GAP_MM = 0.4f
+/**
+ * Default sample gap in millimetres for pen stroke capture.
+ * 0.25 mm provides smooth, continuous ink curves for handwriting and slow drawing
+ * across varying display DPIs and zoom levels without polygonal angularity.
+ */
+const val DEFAULT_INK_SAMPLE_GAP_MM = 0.25f
 
-fun inkSampleGapPx(gapMm: Float, xdpi: Float, canvasScale: Float = 1f): Float {
+/**
+ * Calculates the ink sampling gap in physical screen-space pixels based on physical mm and display DPI.
+ */
+fun inkSampleGapScreenPx(gapMm: Float, xdpi: Float): Float {
     val mm = gapMm.coerceIn(0.15f, 2f)
-    val px = mm / 25.4f * xdpi.coerceAtLeast(1f)
-    return (px / canvasScale.coerceAtLeast(0.05f)).coerceAtLeast(0.35f)
+    return mm / 25.4f * xdpi.coerceAtLeast(1f)
+}
+
+/**
+ * Calculates the ink sampling gap in canvas world-space units.
+ *
+ * Screen-space gap = (gapMm / 25.4) * xdpi (in pixels).
+ * World-space gap = Screen-space gap / canvasScale.
+ *
+ * When comparing world-space points:
+ * `(world.x - last.x)^2 + (world.y - last.y)^2 < gap^2`
+ * is mathematically equivalent to:
+ * `screenDist^2 < screenGap^2`.
+ * This guarantees consistent physical stroke density across different zoom levels
+ * and between the main canvas and split panes.
+ */
+fun inkSampleGapPx(gapMm: Float, xdpi: Float, canvasScale: Float = 1f): Float {
+    val screenPx = inkSampleGapScreenPx(gapMm, xdpi)
+    val worldGap = screenPx / canvasScale.coerceAtLeast(0.05f)
+    return worldGap.coerceAtLeast(0.2f)
 }
 
 fun sampleGapMillimetres(gapPx: Float, xdpi: Float): Float {
