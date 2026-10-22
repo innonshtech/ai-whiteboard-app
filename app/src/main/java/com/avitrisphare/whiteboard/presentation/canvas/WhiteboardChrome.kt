@@ -176,7 +176,9 @@ fun AvitriSphareWhiteboardChrome(
     isCalculatorVisible: Boolean = false,
     onToggleCalculator: () -> Unit = {},
     isPeriodicTableVisible: Boolean = false,
-    onTogglePeriodicTable: () -> Unit = {}
+    onTogglePeriodicTable: () -> Unit = {},
+    onOpenStickerEmoji: () -> Unit = {},
+    onEditNodeText: (String, String) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -409,17 +411,39 @@ fun AvitriSphareWhiteboardChrome(
                             Spacer(Modifier.width(8.dp))
                         }
                         val canEdit = state.strokes.count {
-                            it.id in state.selectedStrokeIds && it.strokeType == StrokeType.TEXT
+                            it.id in state.selectedStrokeIds && (
+                                it.strokeType == StrokeType.TEXT ||
+                                it.stickerKind.startsWith("flow:") ||
+                                it.strokeType in setOf(
+                                    StrokeType.RECTANGLE,
+                                    StrokeType.DIAMOND,
+                                    StrokeType.ELLIPSE,
+                                    StrokeType.ROUND_RECT,
+                                    StrokeType.CIRCLE,
+                                    StrokeType.SQUARE
+                                )
+                            )
                         } == 1
                         if (canEdit && state.editingTextId == null) {
+                            val targetStroke = state.strokes.firstOrNull { it.id in state.selectedStrokeIds }
                             Text(
-                                text = "Edit text",
+                                text = if (targetStroke?.text?.isNotEmpty() == true) "Edit text" else "Type text",
                                 color = Color.White,
                                 fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .clickable { viewModel.beginTextEdit() }
-                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                                    .background(Color(0xFF2563EB))
+                                    .clickable {
+                                        if (targetStroke != null) {
+                                            if (targetStroke.strokeType == StrokeType.TEXT) {
+                                                viewModel.beginTextEdit()
+                                            } else {
+                                                onEditNodeText(targetStroke.id, targetStroke.text)
+                                            }
+                                        }
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
                             )
                         }
                         Icon(
@@ -506,20 +530,52 @@ fun AvitriSphareWhiteboardChrome(
                     PopoverRow(Icons.Default.Category, "Pyramid", state.currentTool == WhiteboardTool.PYRAMID) {
                         viewModel.setTool(WhiteboardTool.PYRAMID); panel = null
                     }
-                    PopoverRow(Icons.Default.Dashboard, "Flowchart node") {
-                        viewModel.addFlowchartNode("process", Offset(400f, 400f))
+                    PopoverRow(Icons.Default.Dashboard, "Flowchart (3 Connected Nodes)") {
+                        viewModel.createThreeNodeFlowchart(Offset(320f, 360f))
+                        panel = null
+                    }
+                    PopoverRow(Icons.Default.CropSquare, "Process Node (Rectangle)") {
+                        viewModel.addFlowchartNode("process", Offset(420f, 360f))
+                        panel = null
+                    }
+                    PopoverRow(Icons.Default.Diamond, "Decision Node (Diamond)") {
+                        viewModel.addFlowchartNode("decision", Offset(420f, 360f))
+                        panel = null
+                    }
+                    PopoverRow(Icons.Default.RadioButtonUnchecked, "Terminator Node (Start/End)") {
+                        viewModel.addFlowchartNode("terminator", Offset(420f, 360f))
                         panel = null
                     }
                     PopoverRow(Icons.Default.Hub, "Mind map centre") {
                         viewModel.addMindMapCenter(Offset(480f, 360f))
                         panel = null
                     }
-                    PopoverRow(Icons.Default.EmojiEmotions, "Emoji") {
-                        viewModel.insertEmoji("😀", Offset(520f, 320f))
+                    PopoverRow(Icons.Default.EmojiEmotions, "Classroom Emoji") {
+                        onOpenStickerEmoji()
                         panel = null
                     }
-                    PopoverRow(Icons.Default.Star, "Sticker") {
-                        viewModel.insertSticker("star", Offset(560f, 320f))
+                    PopoverRow(Icons.Default.Star, "Teacher Stickers (⭐, ✓, ✕, 👍)") {
+                        onOpenStickerEmoji()
+                        panel = null
+                    }
+                }
+                "flowchart" -> DockPopover {
+                    Text("Flowchart & Nodes", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+                    Spacer(Modifier.height(6.dp))
+                    PopoverRow(Icons.Default.Dashboard, "3-Node Connected Flowchart") {
+                        viewModel.createThreeNodeFlowchart(Offset(320f, 360f))
+                        panel = null
+                    }
+                    PopoverRow(Icons.Default.CropSquare, "Process Node (Rectangle)") {
+                        viewModel.addFlowchartNode("process", Offset(420f, 360f))
+                        panel = null
+                    }
+                    PopoverRow(Icons.Default.Diamond, "Decision Node (Diamond)") {
+                        viewModel.addFlowchartNode("decision", Offset(420f, 360f))
+                        panel = null
+                    }
+                    PopoverRow(Icons.Default.RadioButtonUnchecked, "Terminator Node (Start/End)") {
+                        viewModel.addFlowchartNode("terminator", Offset(420f, 360f))
                         panel = null
                     }
                 }
@@ -840,14 +896,34 @@ fun AvitriSphareWhiteboardChrome(
                             WhiteboardTool.LINE,
                             WhiteboardTool.ARROW
                         )
-                        DockItem(Icons.Default.NearMe, "Select", state.currentTool == WhiteboardTool.SELECT) {
+                        // Single active tool determination: strictly one dock item is highlighted at any time
+                        val activeDockTag = when {
+                            panel != null -> panel
+                            state.currentTool == WhiteboardTool.SELECT -> "select"
+                            state.currentTool == WhiteboardTool.ERASER -> "eraser"
+                            state.currentTool == WhiteboardTool.LASER -> "laser"
+                            state.currentTool in shapeTools -> "shapes"
+                            state.currentTool == WhiteboardTool.RULER -> "ruler"
+                            state.currentTool == WhiteboardTool.COMPASS -> "compass"
+                            state.currentTool == WhiteboardTool.PROTRACTOR -> "protractor"
+                            state.currentTool == WhiteboardTool.SET_SQUARE -> "set_square"
+                            state.currentTool == WhiteboardTool.TRIANGLE -> "triangle"
+                            state.currentTool == WhiteboardTool.TEXT || state.currentTool == WhiteboardTool.STICKY_NOTE -> "media"
+                            state.currentTool == state.inkTool || state.currentTool in listOf(
+                                WhiteboardTool.PEN, WhiteboardTool.PENCIL, WhiteboardTool.MARKER,
+                                WhiteboardTool.HIGHLIGHTER, WhiteboardTool.BRUSH
+                            ) -> "ink"
+                            else -> null
+                        }
+
+                        DockItem(Icons.Default.NearMe, "Select", active = activeDockTag == "select") {
                             panel = null
                             viewModel.setTool(WhiteboardTool.SELECT)
                         }
                         DockItem(
                             icon = Icons.Default.Edit,
                             label = state.inkTool.label,
-                            active = state.currentTool == state.inkTool,
+                            active = activeDockTag == "ink",
                             swatch = state.selectedColor
                         ) {
                             viewModel.setTool(state.inkTool)
@@ -859,76 +935,91 @@ fun AvitriSphareWhiteboardChrome(
                             onSwap = {
                                 viewModel.swapPenColors()
                                 Toast.makeText(context, "Color swapped", Toast.LENGTH_SHORT).show()
-                            },
-                            onActiveClick = {
-                                viewModel.setTool(state.inkTool)
-                                toggle("ink")
                             }
                         )
-                        DockItem(Icons.Default.Category, "Shapes", state.currentTool in shapeTools || panel == "shapes") {
+                        DockItem(
+                            icon = Icons.Default.Dashboard,
+                            label = "Flowchart",
+                            active = activeDockTag == "flowchart"
+                        ) {
+                            toggle("flowchart")
+                        }
+                        DockItem(
+                            icon = Icons.Default.Star,
+                            label = "Stickers",
+                            active = activeDockTag == "stickers"
+                        ) {
+                            panel = null
+                            onOpenStickerEmoji()
+                        }
+                        DockItem(
+                            icon = Icons.Default.Category,
+                            label = "Shapes",
+                            active = activeDockTag == "shapes"
+                        ) {
                             toggle("shapes")
                         }
                         DockItem(
-                            Icons.Default.AutoFixNormal,
-                            "Eraser",
-                            state.currentTool == WhiteboardTool.ERASER || panel == "eraser"
+                            icon = Icons.Default.AutoFixNormal,
+                            label = "Eraser",
+                            active = activeDockTag == "eraser"
                         ) {
                             viewModel.setTool(WhiteboardTool.ERASER)
                             toggle("eraser")
                         }
-                        DockItem(Icons.Default.Highlight, "Laser", state.currentTool == WhiteboardTool.LASER) {
+                        DockItem(Icons.Default.Highlight, "Laser", active = activeDockTag == "laser") {
                             panel = null
                             viewModel.setTool(WhiteboardTool.LASER)
                         }
                         DockItem(
-                            Icons.Default.ChangeHistory,
-                            "Geometry",
-                            state.isDrawToShapeEnabled || state.currentTool == WhiteboardTool.FRAME || panel == "geometry"
+                            icon = Icons.Default.ChangeHistory,
+                            label = "Geometry",
+                            active = activeDockTag == "geometry"
                         ) { toggle("geometry") }
                         DraggableDockItem(
                             icon = Icons.Default.Straighten,
                             label = "Ruler",
-                            active = rulerPlaced || state.currentTool == WhiteboardTool.RULER,
+                            active = activeDockTag == "ruler",
                             onDrag = { onMathDrag(MathToolKind.RULER, it) },
                             onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.RULER, at, moved) }
                         )
                         DraggableDockItem(
                             icon = Icons.Default.Architecture,
                             label = "Compass",
-                            active = compassPlaced || state.currentTool == WhiteboardTool.COMPASS,
+                            active = activeDockTag == "compass",
                             onDrag = { onMathDrag(MathToolKind.COMPASS, it) },
                             onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.COMPASS, at, moved) }
                         )
                         DraggableDockItem(
                             icon = Icons.Default.Speed,
                             label = "Protractor",
-                            active = protractorPlaced || state.currentTool == WhiteboardTool.PROTRACTOR,
+                            active = activeDockTag == "protractor",
                             onDrag = { onMathDrag(MathToolKind.PROTRACTOR, it) },
                             onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.PROTRACTOR, at, moved) }
                         )
                         DraggableDockItem(
                             icon = Icons.Default.Category,
                             label = "Set Square",
-                            active = setSquarePlaced || state.currentTool == WhiteboardTool.SET_SQUARE,
+                            active = activeDockTag == "set_square",
                             onDrag = { onMathDrag(MathToolKind.SET_SQUARE, it) },
                             onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.SET_SQUARE, at, moved) }
                         )
                         DraggableDockItem(
                             icon = Icons.Default.ChangeHistory,
                             label = "Triangle",
-                            active = trianglePlaced || state.currentTool == WhiteboardTool.TRIANGLE,
+                            active = activeDockTag == "triangle",
                             onDrag = { onMathDrag(MathToolKind.TRIANGLE, it) },
                             onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.TRIANGLE, at, moved) }
                         )
                         DockItem(
                             Icons.Default.Videocam,
                             "Media",
-                            panel == "media" || state.currentTool == WhiteboardTool.TEXT || state.currentTool == WhiteboardTool.STICKY_NOTE
+                            active = activeDockTag == "media"
                         ) { toggle("media") }
                         DockItem(
                             Icons.Default.Widgets,
                             "Tools",
-                            isTimerVisible || isStopwatchVisible || isCalculatorVisible || isPeriodicTableVisible || panel == "utilities"
+                            active = activeDockTag == "utilities"
                         ) { toggle("utilities") }
                         DockItem(Icons.Default.Undo, "Undo", enabled = state.canUndo) {
                             panel = null
@@ -1081,8 +1172,7 @@ private fun DockItem(
 private fun TwoColorPenQuickSwap(
     primaryColor: Int,
     secondaryColor: Int,
-    onSwap: () -> Unit,
-    onActiveClick: () -> Unit
+    onSwap: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -1110,7 +1200,6 @@ private fun TwoColorPenQuickSwap(
                         .clip(CircleShape)
                         .background(Color(primaryColor))
                         .border(1.5.dp, Color.White, CircleShape)
-                        .clickable(onClick = onActiveClick)
                 )
                 // Swap Arrow Icon
                 Icon(
@@ -1126,7 +1215,6 @@ private fun TwoColorPenQuickSwap(
                         .clip(CircleShape)
                         .background(Color(secondaryColor))
                         .border(1.dp, Color(0x66FFFFFF), CircleShape)
-                        .clickable(onClick = onSwap)
                 )
             }
         }

@@ -265,6 +265,25 @@ private fun decodeMediaBitmap(context: Context, uriString: String, maxDim: Int =
     }
 }
 
+private fun DrawScope.drawCenteredNodeText(text: String, cx: Float, cy: Float, colorInt: Int, strokeW: Float) {
+    if (text.isEmpty()) return
+    drawContext.canvas.nativeCanvas.apply {
+        val tPaint = Paint().apply {
+            color = colorInt
+            textSize = (strokeW * 4.2f).coerceIn(16f, 32f)
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val lines = text.split("\n")
+        val lineH = tPaint.textSize * 1.25f
+        val startY = cy - ((lines.size - 1) * lineH) / 2f + tPaint.textSize * 0.35f
+        lines.forEachIndexed { i, line ->
+            drawText(line, cx, startY + i * lineH, tPaint)
+        }
+    }
+}
+
 fun DrawScope.renderStroke(
     context: Context,
     stroke: Stroke,
@@ -300,6 +319,9 @@ fun DrawScope.renderStroke(
                     size = Size(width, height),
                     style = DrawStroke(width = strokeWidth)
                 )
+                if (stroke.text.isNotEmpty()) {
+                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.colorValue, stroke.strokeWidth)
+                }
             }
         }
         StrokeType.RECTANGLE, StrokeType.SQUARE -> {
@@ -325,6 +347,9 @@ fun DrawScope.renderStroke(
                     cornerRadius = CornerRadius(4f / safeScale, 4f / safeScale),
                     style = DrawStroke(width = strokeWidth)
                 )
+                if (stroke.text.isNotEmpty()) {
+                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.colorValue, stroke.strokeWidth)
+                }
             }
         }
         StrokeType.DIAMOND -> {
@@ -353,6 +378,9 @@ fun DrawScope.renderStroke(
                     color = strokeColor,
                     style = DrawStroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
                 )
+                if (stroke.text.isNotEmpty()) {
+                    drawCenteredNodeText(stroke.text, midX, midY, stroke.colorValue, stroke.strokeWidth)
+                }
             }
         }
         StrokeType.FRAME -> {
@@ -482,24 +510,52 @@ fun DrawScope.renderStroke(
         }
         StrokeType.CONNECTOR -> {
             if (pointsList.size >= 2) {
-                drawLine(strokeColor, pointsList.first(), pointsList.last(), strokeWidth, cap = StrokeCap.Round)
+                val p1 = pointsList.first()
+                val p2 = pointsList.last()
+                val actualWidth = strokeWidth.coerceAtLeast(3f)
+                drawLine(strokeColor, p1, p2, actualWidth, cap = StrokeCap.Round)
+                val angle = kotlin.math.atan2(p2.y - p1.y, p2.x - p1.x)
+                val arrowLen = (actualWidth * 4.5f).coerceIn(16f, 32f)
+                val arrowAngle = Math.PI / 6.0
+                val ap1 = Offset(
+                    p2.x - (arrowLen * kotlin.math.cos(angle - arrowAngle)).toFloat(),
+                    p2.y - (arrowLen * kotlin.math.sin(angle - arrowAngle)).toFloat()
+                )
+                val ap2 = Offset(
+                    p2.x - (arrowLen * kotlin.math.cos(angle + arrowAngle)).toFloat(),
+                    p2.y - (arrowLen * kotlin.math.sin(angle + arrowAngle)).toFloat()
+                )
+                val arrowPath = Path().apply {
+                    moveTo(p2.x, p2.y)
+                    lineTo(ap1.x, ap1.y)
+                    lineTo(ap2.x, ap2.y)
+                    close()
+                }
+                drawPath(arrowPath, color = strokeColor)
             }
         }
         StrokeType.STICKER -> {
             val origin = pointsList.first()
             val label = when (stroke.stickerKind) {
+                "star" -> "⭐"
                 "tick" -> "✓"
                 "cross" -> "✕"
                 "thumb" -> "👍"
-                else -> "★"
+                "emoji" -> stroke.text.ifEmpty { "😀" }
+                else -> stroke.text.ifEmpty { stroke.stickerKind }
             }
             drawContext.canvas.nativeCanvas.apply {
                 val paint = Paint().apply {
-                    color = stroke.colorValue
-                    textSize = stroke.strokeWidth.coerceAtLeast(48f)
+                    color = when (stroke.stickerKind) {
+                        "tick" -> 0xFF10B981.toInt()
+                        "cross" -> 0xFFEF4444.toInt()
+                        "star" -> 0xFFF59E0B.toInt()
+                        else -> stroke.colorValue
+                    }
+                    textSize = (stroke.strokeWidth * 14f).coerceIn(56f, 150f)
                     isAntiAlias = true
                 }
-                drawText(label, origin.x, origin.y + paint.textSize, paint)
+                drawText(label, origin.x, origin.y + paint.textSize * 0.88f, paint)
             }
         }
         StrokeType.IMAGE -> {
@@ -841,6 +897,9 @@ fun CanvasScreen(
     var showTextInputDialog by remember { mutableStateOf(false) }
     var showStickyInputDialog by remember { mutableStateOf(false) }
     var showWebEmbedDialog by remember { mutableStateOf(false) }
+    var showStickerEmojiDialog by remember { mutableStateOf(false) }
+    var editingNodeStrokeId by remember { mutableStateOf<String?>(null) }
+    var editingNodeText by remember { mutableStateOf("") }
     var showHelpDialog by remember { mutableStateOf(false) }
     var showCommandPalette by remember { mutableStateOf(false) }
     var commandSearchQuery by remember { mutableStateOf("") }
@@ -2020,8 +2079,9 @@ fun CanvasScreen(
                                         )
                                         val midRad = Math.toRadians((180.0 - leftAngleDeg / 2.0)).toFloat()
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
+                                        val labelScreen = tool.center + midD * (arcR + 32f) - perp * 26f
                                         viewModel.commitStroke(
-                                            measurementLabel("${leftAngleDeg.roundToInt()}°", CanvasTransform.screenToWorld(tool.center + midD * (arcR + 26f), canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${leftAngleDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
                                         Toast.makeText(context, "Left Angle ${leftAngleDeg.roundToInt()}° drawn", Toast.LENGTH_SHORT).show()
                                     }
@@ -2045,8 +2105,9 @@ fun CanvasScreen(
                                         )
                                         val midRad = Math.toRadians((180.0 - leftAngleDeg / 2.0)).toFloat()
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
+                                        val labelScreen = tool.center + midD * (tool.span + 36f) - perp * 24f
                                         viewModel.commitStroke(
-                                            measurementLabel("${leftAngleDeg.roundToInt()}°", CanvasTransform.screenToWorld(tool.center + midD * (tool.span + 32f), canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${leftAngleDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
                                         Toast.makeText(context, "Left Arc (${leftAngleDeg.roundToInt()}°) drawn", Toast.LENGTH_SHORT).show()
                                     }
@@ -2069,8 +2130,9 @@ fun CanvasScreen(
                                         )
                                         val midRad = Math.toRadians((pDeg / 2f).toDouble()).toFloat()
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
+                                        val labelScreen = tool.center + midD * (tool.span + 36f) - perp * 24f
                                         viewModel.commitStroke(
-                                            measurementLabel("${pDeg.roundToInt()}°", CanvasTransform.screenToWorld(tool.center + midD * (tool.span + 32f), canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${pDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
                                         Toast.makeText(context, "Right Arc (${pDeg.roundToInt()}°) drawn", Toast.LENGTH_SHORT).show()
                                     }
@@ -2096,8 +2158,9 @@ fun CanvasScreen(
                                         )
                                         val midRad = Math.toRadians((pDeg / 2f).toDouble()).toFloat()
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
+                                        val labelScreen = tool.center + midD * (arcR + 32f) - perp * 26f
                                         viewModel.commitStroke(
-                                            measurementLabel("${pDeg.roundToInt()}°", CanvasTransform.screenToWorld(tool.center + midD * (arcR + 26f), canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${pDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
                                         Toast.makeText(context, "Right Angle ${pDeg.roundToInt()}° drawn", Toast.LENGTH_SHORT).show()
                                     }
@@ -2472,6 +2535,11 @@ fun CanvasScreen(
                 val next = !periodicTableState.isVisible
                 periodicTableState = periodicTableState.copy(isVisible = next)
                 if (next) bringToolToFront(UtilityToolKind.PERIODIC_TABLE)
+            },
+            onOpenStickerEmoji = { showStickerEmojiDialog = true },
+            onEditNodeText = { strokeId, currentText ->
+                editingNodeStrokeId = strokeId
+                editingNodeText = currentText
             }
         )
 
@@ -3432,6 +3500,11 @@ fun CanvasScreen(
                         "Place protractor" to { showCommandPalette = false; placeMathTool(MathToolKind.PROTRACTOR, canvasCenter()) },
                         "Place set square" to { showCommandPalette = false; placeMathTool(MathToolKind.SET_SQUARE, canvasCenter()) },
                         "Place triangle" to { showCommandPalette = false; placeMathTool(MathToolKind.TRIANGLE, canvasCenter()) },
+                        "Flowchart: 3 Connected Nodes" to { showCommandPalette = false; viewModel.createThreeNodeFlowchart(canvasCenter()) },
+                        "Flowchart: Process Node" to { showCommandPalette = false; viewModel.addFlowchartNode("process", canvasCenter()) },
+                        "Flowchart: Decision Node" to { showCommandPalette = false; viewModel.addFlowchartNode("decision", canvasCenter()) },
+                        "Flowchart: Terminator Node" to { showCommandPalette = false; viewModel.addFlowchartNode("terminator", canvasCenter()) },
+                        "Stickers & Emoji" to { showCommandPalette = false; showStickerEmojiDialog = true },
                         "Countdown Timer" to { showCommandPalette = false; timerState = timerState.copy(isVisible = true); bringToolToFront(UtilityToolKind.TIMER) },
                         "Stopwatch" to { showCommandPalette = false; stopwatchState = stopwatchState.copy(isVisible = true); bringToolToFront(UtilityToolKind.STOPWATCH) },
                         "Scientific Calculator" to { showCommandPalette = false; calculatorState = calculatorState.copy(isVisible = true); bringToolToFront(UtilityToolKind.CALCULATOR) },
@@ -3733,6 +3806,44 @@ fun CanvasScreen(
         )
     }
 
+    // Flowchart Node / Shape Text Editing Dialog
+    if (editingNodeStrokeId != null) {
+        AlertDialog(
+            onDismissRequest = { editingNodeStrokeId = null },
+            title = { Text("Node Text", color = LocalAvitriSphareColors.current.textPrimary) },
+            text = {
+                OutlinedTextField(
+                    value = editingNodeText,
+                    onValueChange = { editingNodeText = it },
+                    placeholder = { Text("Type text for this node...") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = LocalAvitriSphareColors.current.textPrimary,
+                        unfocusedTextColor = LocalAvitriSphareColors.current.textPrimary,
+                        focusedBorderColor = LocalAvitriSphareColors.current.brand,
+                        unfocusedBorderColor = LocalAvitriSphareColors.current.borderStandard
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    editingNodeStrokeId?.let { id ->
+                        viewModel.updateStrokeText(id, editingNodeText)
+                    }
+                    editingNodeStrokeId = null
+                }) {
+                    Text("Save", color = LocalAvitriSphareColors.current.brand)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingNodeStrokeId = null }) {
+                    Text("Cancel", color = LocalAvitriSphareColors.current.textMuted)
+                }
+            },
+            containerColor = LocalAvitriSphareColors.current.surface
+        )
+    }
+
     // Sticky Note Input Modal Dialog
     if (showStickyInputDialog) {
         AlertDialog(
@@ -3970,6 +4081,16 @@ fun CanvasScreen(
             },
             onShareFile = { result ->
                 WhiteboardExportManager.launchShareIntent(context, result, state.noteTitle)
+            }
+        )
+    }
+
+    if (showStickerEmojiDialog) {
+        StickerEmojiPickerDialog(
+            onDismiss = { showStickerEmojiDialog = false },
+            onSelectSticker = { kind, text ->
+                val center = canvasCenter()
+                viewModel.insertSticker(kind, center, text)
             }
         )
     }

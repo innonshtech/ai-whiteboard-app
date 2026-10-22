@@ -25,6 +25,10 @@ data class Stroke(
     val bounds: Rect by lazy {
         if (points.isEmpty()) {
             Rect.Zero
+        } else if (strokeType == StrokeType.STICKER) {
+            val origin = points.first()
+            val size = (strokeWidth * 12f).coerceIn(64f, 160f)
+            Rect(origin.x, origin.y, origin.x + size, origin.y + size)
         } else if (strokeType == StrokeType.STICKY_NOTE) {
             val origin = points.first()
             Rect(origin.x, origin.y, origin.x + 220f, origin.y + 180f)

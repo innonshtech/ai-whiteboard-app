@@ -71,7 +71,7 @@ class MathToolsTest {
             startSpan = widened.span
             startAngleDeg = widened.rotationDeg
             lastAngleDeg = widened.rotationDeg
-            movedPx = 30f
+            movedPx = 45f
         }
         val swept = dragCompassPencil(widened, Offset(240f, 100f), sweep)
         assertTrue(sweep.arcMode)
@@ -103,12 +103,13 @@ class MathToolsTest {
         assertEquals("90°", formatDegrees(90.2f))
 
         val pSpan = protractor.span
-        assertEquals(MathToolZone.CLOSE, hitTestMathTool(protractor, Offset(-0.78f * pSpan, 28f)))
-        assertEquals(MathToolZone.ANGLE_MODE_1, hitTestMathTool(protractor, Offset(-0.32f * pSpan, 28f)))
+        assertEquals(MathToolZone.CLOSE, hitTestMathTool(protractor, Offset(-0.80f * pSpan, 28f)))
+        assertEquals(MathToolZone.ANGLE_MODE_1, hitTestMathTool(protractor, Offset(-0.53f * pSpan, 28f)))
+        assertEquals(MathToolZone.ANGLE_MODE_ARC_LEFT, hitTestMathTool(protractor, Offset(-0.27f * pSpan, 28f)))
         assertEquals(MathToolZone.ANGLE_MODE_ARC, hitTestMathTool(protractor, Offset(0f, 28f)))
-        assertEquals(MathToolZone.ANGLE_MODE_2, hitTestMathTool(protractor, Offset(0.32f * pSpan, 28f)))
-        assertEquals(MathToolZone.SCALE, hitTestMathTool(protractor, Offset(0.64f * pSpan, 28f)))
-        assertEquals(MathToolZone.ROTATE, hitTestMathTool(protractor, Offset(0.86f * pSpan, 28f)))
+        assertEquals(MathToolZone.ANGLE_MODE_2, hitTestMathTool(protractor, Offset(0.27f * pSpan, 28f)))
+        assertEquals(MathToolZone.SCALE, hitTestMathTool(protractor, Offset(0.55f * pSpan, 28f)))
+        assertEquals(MathToolZone.ROTATE, hitTestMathTool(protractor, Offset(0.80f * pSpan, 28f)))
         assertEquals(MathToolZone.ANGLE_ARM, hitTestMathTool(protractor, Offset(0f, -pSpan)))
         assertEquals(MathToolZone.MOVE, hitTestMathTool(protractor, Offset(60f, -60f)))
 

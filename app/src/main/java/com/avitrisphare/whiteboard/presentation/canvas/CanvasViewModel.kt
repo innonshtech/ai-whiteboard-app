@@ -1070,6 +1070,10 @@ class CanvasViewModel @Inject constructor(
         }
     }
 
+    fun selectStroke(id: String) {
+        _state.update { it.copy(selectedStrokeIds = setOf(id)) }
+    }
+
     fun selectInRect(rect: Rect) {
         if (rect.width < 8f && rect.height < 8f) return
         val selected = _state.value.strokes.filter { stroke ->
@@ -1144,7 +1148,10 @@ class CanvasViewModel @Inject constructor(
         saveToUndoStack()
         _state.update { s ->
             s.copy(
-                strokes = s.strokes.filterNot { it.id in selectedIds },
+                strokes = s.strokes.filterNot { stroke ->
+                    stroke.id in selectedIds ||
+                        (stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId in selectedIds || stroke.linkToId in selectedIds))
+                },
                 selectedStrokeIds = emptySet(),
                 canUndo = true,
                 canRedo = false
@@ -1590,27 +1597,50 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun insertEmoji(text: String, world: Offset) {
-        addTextOrSticky(text, world, isSticky = false)
+        insertSticker(kind = "emoji", world = world, text = text)
     }
 
-    fun insertSticker(kind: String, world: Offset) {
-        saveToUndoStack()
+    fun insertSticker(kind: String, world: Offset, text: String = "") {
+        val s = _state.value
         val stroke = Stroke(
             points = listOf(world, Offset(world.x + 96f, world.y + 96f)),
-            colorValue = _state.value.selectedColor,
-            strokeWidth = _state.value.strokeWidth,
+            colorValue = s.selectedColor,
+            strokeWidth = s.strokeWidth.coerceAtLeast(4f),
             strokeType = StrokeType.STICKER,
-            stickerKind = kind
+            stickerKind = kind,
+            text = text
         )
-        _state.update { s ->
-            s.copy(strokes = s.strokes + stroke, selectedStrokeIds = setOf(stroke.id), canUndo = true, canRedo = false)
+        if (s.splitCount > 1 && s.splitPanes.isNotEmpty()) {
+            val activeIndex = s.splitActive.coerceIn(0, s.splitPanes.lastIndex)
+            val currentPanes = s.splitPanes.toMutableList()
+            val activePane = currentPanes[activeIndex]
+            paneUndo[activeIndex].addLast(activePane.strokes)
+            currentPanes[activeIndex] = activePane.copy(strokes = activePane.strokes + stroke)
+            _state.update {
+                it.copy(
+                    splitPanes = currentPanes,
+                    selectedStrokeIds = setOf(stroke.id),
+                    canUndo = true,
+                    canRedo = false
+                )
+            }
+        } else {
+            saveToUndoStack()
+            _state.update {
+                it.copy(
+                    strokes = it.strokes + stroke,
+                    selectedStrokeIds = setOf(stroke.id),
+                    canUndo = true,
+                    canRedo = false
+                )
+            }
+            redoStack.clear()
         }
-        redoStack.clear()
         scheduleSave()
     }
 
-    fun addFlowchartNode(role: String, world: Offset) {
-        val type = when (role) {
+    fun addFlowchartNode(role: String, world: Offset, labelText: String = "") {
+        val type = when (role.lowercase()) {
             "decision" -> StrokeType.DIAMOND
             "terminator" -> StrokeType.ELLIPSE
             else -> StrokeType.RECTANGLE
@@ -1619,12 +1649,90 @@ class CanvasViewModel @Inject constructor(
         val stroke = Stroke(
             points = listOf(world, Offset(world.x + 180f, world.y + 100f)),
             colorValue = _state.value.selectedColor,
-            strokeWidth = _state.value.strokeWidth,
+            strokeWidth = _state.value.strokeWidth.coerceAtLeast(3f),
             strokeType = type,
-            stickerKind = "flow:$role"
+            stickerKind = "flow:$role",
+            text = labelText
         )
         _state.update { s ->
             s.copy(strokes = s.strokes + stroke, selectedStrokeIds = setOf(stroke.id), canUndo = true, canRedo = false)
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun connectNodes(fromNodeId: String, toNodeId: String) {
+        val s = _state.value
+        val from = s.strokes.find { it.id == fromNodeId } ?: return
+        val to = s.strokes.find { it.id == toNodeId } ?: return
+        saveToUndoStack()
+        val connector = Stroke(
+            points = listOf(from.bounds.center, to.bounds.center),
+            colorValue = s.selectedColor,
+            strokeWidth = 3.5f,
+            strokeType = StrokeType.CONNECTOR,
+            linkFromId = fromNodeId,
+            linkToId = toNodeId
+        )
+        _state.update {
+            it.copy(strokes = it.strokes + connector, canUndo = true, canRedo = false)
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun createThreeNodeFlowchart(startPos: Offset) {
+        saveToUndoStack()
+        val s = _state.value
+        val term = Stroke(
+            points = listOf(startPos, Offset(startPos.x + 180f, startPos.y + 100f)),
+            colorValue = s.selectedColor,
+            strokeWidth = s.strokeWidth.coerceAtLeast(3f),
+            strokeType = StrokeType.ELLIPSE,
+            stickerKind = "flow:terminator",
+            text = ""
+        )
+        val procPos = Offset(startPos.x + 280f, startPos.y)
+        val proc = Stroke(
+            points = listOf(procPos, Offset(procPos.x + 180f, procPos.y + 100f)),
+            colorValue = s.selectedColor,
+            strokeWidth = s.strokeWidth.coerceAtLeast(3f),
+            strokeType = StrokeType.RECTANGLE,
+            stickerKind = "flow:process",
+            text = ""
+        )
+        val decPos = Offset(procPos.x + 280f, procPos.y)
+        val dec = Stroke(
+            points = listOf(decPos, Offset(decPos.x + 180f, decPos.y + 100f)),
+            colorValue = s.selectedColor,
+            strokeWidth = s.strokeWidth.coerceAtLeast(3f),
+            strokeType = StrokeType.DIAMOND,
+            stickerKind = "flow:decision",
+            text = ""
+        )
+        val arrow1 = Stroke(
+            points = listOf(term.bounds.center, proc.bounds.center),
+            colorValue = s.selectedColor,
+            strokeWidth = 3.5f,
+            strokeType = StrokeType.CONNECTOR,
+            linkFromId = term.id,
+            linkToId = proc.id
+        )
+        val arrow2 = Stroke(
+            points = listOf(proc.bounds.center, dec.bounds.center),
+            colorValue = s.selectedColor,
+            strokeWidth = 3.5f,
+            strokeType = StrokeType.CONNECTOR,
+            linkFromId = proc.id,
+            linkToId = dec.id
+        )
+        _state.update {
+            it.copy(
+                strokes = it.strokes + listOf(term, arrow1, proc, arrow2, dec),
+                selectedStrokeIds = setOf(proc.id),
+                canUndo = true,
+                canRedo = false
+            )
         }
         redoStack.clear()
         scheduleSave()
@@ -2525,13 +2633,17 @@ class CanvasViewModel @Inject constructor(
         }
 
         if (remaining.size != currentStrokes.size) {
+            val erasedIds = currentStrokes.map { it.id }.toSet() - remaining.map { it.id }.toSet()
+            val cleaned = remaining.filterNot { stroke ->
+                stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId in erasedIds || stroke.linkToId in erasedIds)
+            }
             if (!isErasingActive) {
                 saveToUndoStack()
                 isErasingActive = true
             }
             _state.update { s ->
                 s.copy(
-                    strokes = remaining,
+                    strokes = cleaned,
                     canUndo = true,
                     canRedo = false
                 )
