@@ -226,5 +226,130 @@ class CanvasViewModelTest {
         assertEquals(1, transformedState.strokes.size)
         assertEquals(stroke.points, transformedState.strokes[0].points)
     }
+
+    @Test
+    fun `addPage, renamePage, and duplicatePage work as expected`() {
+        val stroke = Stroke(points = listOf(Offset(5f, 5f), Offset(15f, 15f)))
+        viewModel.commitStroke(stroke)
+        viewModel.renamePage(0, "Introduction")
+        assertEquals("Introduction", viewModel.state.value.pageTitles[0])
+
+        viewModel.addPage()
+        assertEquals(2, viewModel.state.value.pageCount)
+        assertEquals(1, viewModel.state.value.pageIndex)
+        assertEquals("Page 2", viewModel.state.value.pageTitles[1])
+        assertTrue(viewModel.state.value.strokes.isEmpty())
+
+        // Duplicate page 0
+        viewModel.duplicatePage(0)
+        assertEquals(3, viewModel.state.value.pageCount)
+        assertEquals("Introduction copy", viewModel.state.value.pageTitles[1])
+        assertEquals(1, viewModel.state.value.strokes.size)
+        assertEquals(stroke.points, viewModel.state.value.strokes[0].points)
+        assertFalse(stroke.id == viewModel.state.value.strokes[0].id)
+    }
+
+    @Test
+    fun `deletePage prevents deleting the last remaining page`() {
+        assertEquals(1, viewModel.state.value.pageCount)
+        val success = viewModel.deletePage(0)
+        assertFalse(success)
+        assertEquals(1, viewModel.state.value.pageCount)
+        assertEquals("The last remaining page cannot be deleted.", viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun `deletePage can be undone via undo restoring page, title, and strokes`() {
+        val stroke1 = Stroke(points = listOf(Offset(10f, 10f), Offset(20f, 20f)))
+        viewModel.commitStroke(stroke1)
+        viewModel.renamePage(0, "Page One")
+
+        viewModel.addPage()
+        val stroke2 = Stroke(points = listOf(Offset(100f, 100f), Offset(200f, 200f)))
+        viewModel.commitStroke(stroke2)
+        viewModel.renamePage(1, "Page Two")
+        assertEquals(2, viewModel.state.value.pageCount)
+
+        // Delete Page Two (index 1)
+        val deleted = viewModel.deletePage(1)
+        assertTrue(deleted)
+        assertEquals(1, viewModel.state.value.pageCount)
+        assertEquals(0, viewModel.state.value.pageIndex)
+        assertEquals("Page One", viewModel.state.value.pageTitles[0])
+        assertTrue(viewModel.state.value.canUndo)
+
+        // Undo deletion
+        viewModel.undo()
+        val restoredState = viewModel.state.value
+        assertEquals(2, restoredState.pageCount)
+        assertEquals(1, restoredState.pageIndex)
+        assertEquals("Page Two", restoredState.pageTitles[1])
+        assertEquals(1, restoredState.strokes.size)
+        assertEquals(stroke2.points, restoredState.strokes[0].points)
+    }
+
+    @Test
+    fun `copy and paste strokes across ordinary pages applies visible offset`() {
+        val originalStroke = Stroke(points = listOf(Offset(50f, 50f), Offset(100f, 100f)))
+        viewModel.commitStroke(originalStroke)
+        viewModel.selectStrokeAt(Offset(50f, 50f))
+        assertEquals(setOf(originalStroke.id), viewModel.state.value.selectedStrokeIds)
+
+        viewModel.copySelectedStrokes()
+        assertTrue(viewModel.state.value.hasStrokeClipboard)
+
+        // Switch to new page
+        viewModel.addPage()
+        assertEquals(1, viewModel.state.value.pageIndex)
+        assertTrue(viewModel.state.value.strokes.isEmpty())
+
+        // Paste onto page 2
+        viewModel.pasteStrokeClipboard()
+        val stateAfterPaste = viewModel.state.value
+        assertEquals(1, stateAfterPaste.strokes.size)
+        val pastedStroke = stateAfterPaste.strokes[0]
+        assertFalse(pastedStroke.id == originalStroke.id)
+
+        // Verify visible offset
+        val expectedOffset = Offset(36f, 36f)
+        assertEquals(50f + expectedOffset.x, pastedStroke.points[0].x, 0.001f)
+        assertEquals(50f + expectedOffset.y, pastedStroke.points[0].y, 0.001f)
+        assertEquals(100f + expectedOffset.x, pastedStroke.points[1].x, 0.001f)
+        assertEquals(100f + expectedOffset.y, pastedStroke.points[1].y, 0.001f)
+
+        // Pasted stroke should be selected
+        assertEquals(setOf(pastedStroke.id), stateAfterPaste.selectedStrokeIds)
+    }
+
+    @Test
+    fun `PDF-backed board refuses adding, duplicating, deleting, copying, and pasting`() {
+        val doc = BoardDocument(
+            name = "lesson.pdf",
+            kind = DocumentKind.PDF,
+            path = "/sdcard/test.pdf",
+            pageWidth = 1000f,
+            pageHeight = 1500f
+        )
+        viewModel.setDocumentForTesting(doc)
+
+        viewModel.addPage()
+        assertEquals("Adding pages is disabled for document-backed boards.", viewModel.state.value.errorMessage)
+
+        viewModel.duplicatePage(0)
+        assertEquals("Duplicating pages is disabled for document-backed boards.", viewModel.state.value.errorMessage)
+
+        val deleted = viewModel.deletePage(0)
+        assertFalse(deleted)
+        assertEquals("Deleting pages is disabled for document-backed boards.", viewModel.state.value.errorMessage)
+
+        val stroke = Stroke(points = listOf(Offset(10f, 10f), Offset(20f, 20f)))
+        viewModel.commitStroke(stroke)
+        viewModel.selectStrokeAt(Offset(10f, 10f))
+        viewModel.copySelectedStrokes()
+        assertEquals("Copying is not supported on document-backed boards because pages are tied to the PDF file.", viewModel.state.value.errorMessage)
+
+        viewModel.pasteStrokeClipboard()
+        assertEquals("Pasting is not supported on document-backed boards because pages are tied to the PDF file.", viewModel.state.value.errorMessage)
+    }
 }
 

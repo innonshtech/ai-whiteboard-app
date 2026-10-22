@@ -248,6 +248,20 @@ class CanvasViewModel @Inject constructor(
     private val _pageBitmap = MutableStateFlow<Bitmap?>(null)
     val pageBitmap: StateFlow<Bitmap?> = _pageBitmap.asStateFlow()
 
+    sealed interface CanvasUndoEntry {
+        data class StrokeState(val strokes: List<Stroke>) : CanvasUndoEntry
+        data class DeletedPage(
+            val index: Int,
+            val strokes: List<Stroke>,
+            val title: String,
+            val backgroundKey: String,
+            val customBackgroundUri: String,
+            val previousActivePage: Int
+        ) : CanvasUndoEntry
+    }
+
+    private val undoActionStack = mutableListOf<CanvasUndoEntry>()
+    private val redoActionStack = mutableListOf<CanvasUndoEntry>()
     private val undoStack = mutableListOf<List<Stroke>>()
     private val redoStack = mutableListOf<List<Stroke>>()
     private val gson = Gson()
@@ -1351,8 +1365,14 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun addPage() {
-        if (_state.value.document != null) return
-        if (pages.size >= MAX_PAGES) return
+        if (_state.value.document != null) {
+            _state.update { it.copy(errorMessage = "Adding pages is disabled for document-backed boards.") }
+            return
+        }
+        if (pages.size >= MAX_PAGES) {
+            _state.update { it.copy(errorMessage = "Maximum page limit of $MAX_PAGES reached.") }
+            return
+        }
         commitActivePage()
         pages.add(emptyList())
         pageTitles.add("Page ${pages.size}")
@@ -1368,27 +1388,59 @@ class CanvasViewModel @Inject constructor(
         pageTitles[index] = trimmed
         _state.update { it.copy(pageTitles = pageTitles.toList()) }
         scheduleSave()
+        viewModelScope.launch(Dispatchers.IO) {
+            persistSnapshot()
+        }
     }
 
     fun deletePage(index: Int): Boolean {
-        if (_state.value.document != null) return false
-        if (pages.size <= 1) return false
+        if (_state.value.document != null) {
+            _state.update { it.copy(errorMessage = "Deleting pages is disabled for document-backed boards.") }
+            return false
+        }
+        if (pages.size <= 1) {
+            _state.update { it.copy(errorMessage = "The last remaining page cannot be deleted.") }
+            return false
+        }
         if (index !in pages.indices) return false
         commitActivePage()
-        saveToUndoStack()
+        val deletedStrokes = pages[index]
+        val deletedTitle = pageTitles.getOrElse(index) { "Page ${index + 1}" }
+        val deletedBg = pageBackgroundKeys.getOrElse(index) { CanvasBackground.DOTTED.key }
+        val deletedCustomBg = pageCustomBackgroundUris.getOrElse(index) { "" }
+        val prevActive = activePage
+
+        undoActionStack.add(
+            CanvasUndoEntry.DeletedPage(
+                index = index,
+                strokes = deletedStrokes,
+                title = deletedTitle,
+                backgroundKey = deletedBg,
+                customBackgroundUri = deletedCustomBg,
+                previousActivePage = prevActive
+            )
+        )
+        if (undoActionStack.size > MAX_UNDO) undoActionStack.removeAt(0)
+        redoActionStack.clear()
+        redoStack.clear()
+
         pages.removeAt(index)
         pageTitles.removeAt(index)
         pageBackgroundKeys.removeAt(index)
         pageCustomBackgroundUris.removeAt(index)
         activePage = activePage.coerceIn(0, pages.lastIndex)
         if (activePage >= index && activePage > 0) activePage -= 1
-        switchTo(activePage)
+        switchTo(activePage, clearPageUndo = false)
+        _state.update { it.copy(canUndo = true, canRedo = false) }
         scheduleSave()
         return true
     }
 
     fun duplicatePage(index: Int) {
-        if (_state.value.document != null) return
+        if (_state.value.document != null) {
+            _state.update { it.copy(errorMessage = "Duplicating pages is disabled for document-backed boards.") }
+            return
+        }
         if (index !in pages.indices || pages.size >= MAX_PAGES) return
         commitActivePage()
         val copy = pages[index].map { it.copy(id = UUID.randomUUID().toString()) }
@@ -1401,6 +1453,14 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun copySelectedStrokes() {
+        if (_state.value.document != null) {
+            _state.update {
+                it.copy(
+                    errorMessage = "Copying is not supported on document-backed boards because pages are tied to the PDF file."
+                )
+            }
+            return
+        }
         val selected = _state.value.selectedStrokeIds
         if (selected.isEmpty()) return
         strokeClipboard = _state.value.strokes.filter { it.id in selected }.map {
@@ -1410,9 +1470,17 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun pasteStrokeClipboard() {
+        if (_state.value.document != null) {
+            _state.update {
+                it.copy(
+                    errorMessage = "Pasting is not supported on document-backed boards because pages are tied to the PDF file."
+                )
+            }
+            return
+        }
         if (strokeClipboard.isEmpty()) return
         saveToUndoStack()
-        val offset = Offset(24f, 24f)
+        val offset = Offset(36f, 36f)
         val pasted = strokeClipboard.map { stroke ->
             stroke.copy(
                 id = UUID.randomUUID().toString(),
@@ -1427,6 +1495,7 @@ class CanvasViewModel @Inject constructor(
                 canRedo = false
             )
         }
+        redoActionStack.clear()
         redoStack.clear()
         scheduleSave()
     }
@@ -1956,6 +2025,7 @@ class CanvasViewModel @Inject constructor(
     fun beginSelectionMove() {
         if (selectionUndoCaptured) return
         saveToUndoStack()
+        redoActionStack.clear()
         redoStack.clear()
         selectionUndoCaptured = true
         _state.update { it.copy(canUndo = true, canRedo = false) }
@@ -1965,10 +2035,14 @@ class CanvasViewModel @Inject constructor(
         selectionUndoCaptured = false
     }
 
-    private fun switchTo(index: Int) {
+    private fun switchTo(index: Int, clearPageUndo: Boolean = true) {
         activePage = index
-        undoStack.clear()
-        redoStack.clear()
+        if (clearPageUndo) {
+            undoActionStack.removeAll { it is CanvasUndoEntry.StrokeState }
+            redoActionStack.removeAll { it is CanvasUndoEntry.StrokeState }
+            undoStack.clear()
+            redoStack.clear()
+        }
         selectionUndoCaptured = false
         syncPageMetadataLists()
         val bgKey = pageBackgroundKeys.getOrElse(index) { CanvasBackground.DOTTED.key }
@@ -1985,8 +2059,8 @@ class CanvasViewModel @Inject constructor(
                 pageBackgroundKeys = pageBackgroundKeys.toList(),
                 pageCustomBackgroundUris = pageCustomBackgroundUris.toList(),
                 canvasBackground = bg,
-                canUndo = false,
-                canRedo = false
+                canUndo = undoActionStack.isNotEmpty(),
+                canRedo = redoActionStack.isNotEmpty()
             )
         }
     }
@@ -2264,23 +2338,55 @@ class CanvasViewModel @Inject constructor(
             setPaneStrokes(index, previous)
             return
         }
-        if (undoStack.isEmpty()) return
+        if (undoActionStack.isEmpty()) return
         val currentStrokes = _state.value.strokes
-        redoStack.add(currentStrokes)
-        if (redoStack.size > MAX_UNDO) redoStack.removeAt(0)
-        val previousStrokes = undoStack.removeLastOrNull() ?: emptyList()
-        textEditUndoCaptured = false
-        _state.update { s ->
-            s.copy(
-                strokes = previousStrokes,
-                canUndo = undoStack.isNotEmpty(),
-                canRedo = true,
-                smartWriteOffer = null,
-                smartWriteWarning = null,
-                editingTextId = null
-            )
+        val action = undoActionStack.removeLastOrNull() ?: return
+        when (action) {
+            is CanvasUndoEntry.StrokeState -> {
+                redoActionStack.add(CanvasUndoEntry.StrokeState(currentStrokes))
+                if (redoActionStack.size > MAX_UNDO) redoActionStack.removeAt(0)
+                textEditUndoCaptured = false
+                _state.update { s ->
+                    s.copy(
+                        strokes = action.strokes,
+                        canUndo = undoActionStack.isNotEmpty(),
+                        canRedo = true,
+                        smartWriteOffer = null,
+                        smartWriteWarning = null,
+                        editingTextId = null
+                    )
+                }
+                pages[activePage] = action.strokes
+                scheduleSave()
+            }
+            is CanvasUndoEntry.DeletedPage -> {
+                commitActivePage()
+                redoActionStack.add(
+                    CanvasUndoEntry.DeletedPage(
+                        index = action.index,
+                        strokes = action.strokes,
+                        title = action.title,
+                        backgroundKey = action.backgroundKey,
+                        customBackgroundUri = action.customBackgroundUri,
+                        previousActivePage = activePage
+                    )
+                )
+                if (redoActionStack.size > MAX_UNDO) redoActionStack.removeAt(0)
+                val insertIndex = action.index.coerceIn(0, pages.size)
+                pages.add(insertIndex, action.strokes)
+                pageTitles.add(insertIndex, action.title)
+                pageBackgroundKeys.add(insertIndex, action.backgroundKey)
+                pageCustomBackgroundUris.add(insertIndex, action.customBackgroundUri)
+                switchTo(insertIndex, clearPageUndo = false)
+                _state.update { s ->
+                    s.copy(
+                        canUndo = undoActionStack.isNotEmpty(),
+                        canRedo = true
+                    )
+                }
+                scheduleSave()
+            }
         }
-        scheduleSave()
     }
 
     fun redo() {
@@ -2292,22 +2398,57 @@ class CanvasViewModel @Inject constructor(
             setPaneStrokes(index, next)
             return
         }
-        if (redoStack.isEmpty()) return
+        if (redoActionStack.isEmpty()) return
         val currentStrokes = _state.value.strokes
-        undoStack.add(currentStrokes)
-        val nextStrokes = redoStack.removeLastOrNull() ?: emptyList()
-        textEditUndoCaptured = false
-        _state.update { s ->
-            s.copy(
-                strokes = nextStrokes,
-                canUndo = true,
-                canRedo = redoStack.isNotEmpty(),
-                smartWriteOffer = null,
-                smartWriteWarning = null,
-                editingTextId = null
-            )
+        val action = redoActionStack.removeLastOrNull() ?: return
+        when (action) {
+            is CanvasUndoEntry.StrokeState -> {
+                undoActionStack.add(CanvasUndoEntry.StrokeState(currentStrokes))
+                if (undoActionStack.size > MAX_UNDO) undoActionStack.removeAt(0)
+                textEditUndoCaptured = false
+                _state.update { s ->
+                    s.copy(
+                        strokes = action.strokes,
+                        canUndo = true,
+                        canRedo = redoActionStack.isNotEmpty(),
+                        smartWriteOffer = null,
+                        smartWriteWarning = null,
+                        editingTextId = null
+                    )
+                }
+                pages[activePage] = action.strokes
+                scheduleSave()
+            }
+            is CanvasUndoEntry.DeletedPage -> {
+                commitActivePage()
+                undoActionStack.add(
+                    CanvasUndoEntry.DeletedPage(
+                        index = action.index,
+                        strokes = action.strokes,
+                        title = action.title,
+                        backgroundKey = action.backgroundKey,
+                        customBackgroundUri = action.customBackgroundUri,
+                        previousActivePage = activePage
+                    )
+                )
+                if (undoActionStack.size > MAX_UNDO) undoActionStack.removeAt(0)
+                if (action.index in pages.indices) {
+                    pages.removeAt(action.index)
+                    pageTitles.removeAt(action.index)
+                    pageBackgroundKeys.removeAt(action.index)
+                    pageCustomBackgroundUris.removeAt(action.index)
+                    activePage = activePage.coerceIn(0, pages.lastIndex)
+                    switchTo(activePage, clearPageUndo = false)
+                }
+                _state.update { s ->
+                    s.copy(
+                        canUndo = true,
+                        canRedo = redoActionStack.isNotEmpty()
+                    )
+                }
+                scheduleSave()
+            }
         }
-        scheduleSave()
     }
 
     fun clearCanvas() {
@@ -2387,6 +2528,8 @@ class CanvasViewModel @Inject constructor(
     }
 
     private fun saveToUndoStack() {
+        undoActionStack.add(CanvasUndoEntry.StrokeState(_state.value.strokes))
+        if (undoActionStack.size > MAX_UNDO) undoActionStack.removeAt(0)
         undoStack.add(_state.value.strokes)
         if (undoStack.size > MAX_UNDO) undoStack.removeAt(0)
     }
@@ -2499,6 +2642,7 @@ class CanvasViewModel @Inject constructor(
         if (noteId.isNotEmpty()) {
             try {
                 commitActivePage()
+                syncPageMetadataLists()
                 val snapshot = BoardSnapshot(
                     activePage = activePage,
                     showGrid = _state.value.showGrid,
@@ -2506,7 +2650,14 @@ class CanvasViewModel @Inject constructor(
                     scale = _state.value.scale,
                     offsetX = _state.value.offsetX,
                     offsetY = _state.value.offsetY,
-                    pages = pages.map { strokes -> PageSnapshot(strokes.map { it.toDto() }) },
+                    pages = pages.mapIndexed { index, strokes ->
+                        PageSnapshot(
+                            strokes = strokes.map { it.toDto() },
+                            title = pageTitles.getOrNull(index),
+                            backgroundKey = pageBackgroundKeys.getOrNull(index),
+                            customBackgroundUri = pageCustomBackgroundUris.getOrNull(index)
+                        )
+                    },
                     documentPath = _state.value.document?.path,
                     documentName = _state.value.document?.name,
                     documentKind = _state.value.document?.kind?.name,
@@ -2514,7 +2665,8 @@ class CanvasViewModel @Inject constructor(
                     splitCount = _state.value.splitCount.takeIf { it > 1 },
                     splitWeights = _state.value.splitWeights.takeIf { _state.value.splitCount > 1 },
                     splitPanes = if (_state.value.splitCount > 1) _state.value.splitPanes.map { it.toSnapshot() } else null,
-                    splitActive = _state.value.splitActive.takeIf { _state.value.splitCount > 1 }
+                    splitActive = _state.value.splitActive.takeIf { _state.value.splitCount > 1 },
+                    pageTitles = pageTitles.toList()
                 )
                 File(context.filesDir, "board_$noteId.json").writeText(gson.toJson(snapshot))
             } catch (_: Exception) {

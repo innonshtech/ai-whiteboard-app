@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Dashboard
@@ -178,7 +179,6 @@ fun AvitriSphareWhiteboardChrome(
     val scope = rememberCoroutineScope()
     var panel by remember { mutableStateOf<String?>(null) }
     var pageMenuIndex by remember { mutableStateOf<Int?>(null) }
-    var renamePageTitle by remember { mutableStateOf("") }
 
     androidx.compose.runtime.LaunchedEffect(dockDismissNonce) {
         if (dockDismissNonce > 0) panel = null
@@ -773,6 +773,7 @@ fun AvitriSphareWhiteboardChrome(
                         selected = index == state.pageIndex,
                         dark = state.isDarkCanvas,
                         onClick = { viewModel.selectPage(index) },
+                        onOptionsClick = { pageMenuIndex = index },
                         onLongClick = { pageMenuIndex = index }
                     )
                 }
@@ -794,6 +795,8 @@ fun AvitriSphareWhiteboardChrome(
                 PageActionsDialog(
                     pageIndex = idx,
                     title = state.pageTitles.getOrElse(idx) { "Page ${idx + 1}" },
+                    documentOpen = state.document != null,
+                    pageCount = state.pageCount,
                     onDismiss = { pageMenuIndex = null },
                     onRename = { viewModel.renamePage(idx, it) },
                     onDelete = { viewModel.deletePage(idx) },
@@ -1164,6 +1167,7 @@ private fun PageThumbnail(
     selected: Boolean,
     dark: Boolean,
     onClick: () -> Unit,
+    onOptionsClick: () -> Unit = {},
     onLongClick: () -> Unit = {}
 ) {
     Column(
@@ -1218,6 +1222,24 @@ private fun PageThumbnail(
                     )
                 }
             }
+
+            // Options button in top-right corner
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable { onOptionsClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = "Page options",
+                    tint = Color.White,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
         }
         Text(
             text = title.take(12),
@@ -1232,27 +1254,83 @@ private fun PageThumbnail(
 private fun PageActionsDialog(
     pageIndex: Int,
     title: String,
+    documentOpen: Boolean,
+    pageCount: Int,
     onDismiss: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
     onDuplicate: () -> Unit
 ) {
     var draft by remember(title) { mutableStateOf(title) }
+    val canDelete = !documentOpen && pageCount > 1
+    val canDuplicate = !documentOpen && pageCount < 50
+
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Page ${pageIndex + 1}") },
+        title = { Text("Page ${pageIndex + 1} Actions") },
         text = {
-            Column {
-                OutlinedTextField(value = draft, onValueChange = { draft = it }, label = { Text("Name") })
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (documentOpen) {
+                    Surface(
+                        color = Color(0xFFFEF3C7),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "This board is tied to an imported PDF document. Pages cannot be added, duplicated, or deleted.",
+                            color = Color(0xFF92400E),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                } else if (pageCount <= 1) {
+                    Surface(
+                        color = Color(0xFFEFF6FF),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "The last remaining page cannot be deleted.",
+                            color = Color(0xFF1E40AF),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    label = { Text("Page Title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
-            Text("Save", modifier = Modifier.clickable { onRename(draft); onDismiss() })
+            androidx.compose.material3.Button(
+                onClick = { onRename(draft); onDismiss() }
+            ) {
+                Text("Save")
+            }
         },
         dismissButton = {
-            Row {
-                Text("Duplicate", modifier = Modifier.clickable { onDuplicate(); onDismiss() }.padding(end = 12.dp))
-                Text("Delete", modifier = Modifier.clickable { onDelete(); onDismiss() })
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (canDuplicate) {
+                    androidx.compose.material3.OutlinedButton(onClick = { onDuplicate(); onDismiss() }) {
+                        Text("Duplicate")
+                    }
+                }
+                if (canDelete) {
+                    androidx.compose.material3.Button(
+                        onClick = { onDelete(); onDismiss() },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                    ) {
+                        Text("Delete", color = Color.White)
+                    }
+                }
+                androidx.compose.material3.TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
             }
         }
     )

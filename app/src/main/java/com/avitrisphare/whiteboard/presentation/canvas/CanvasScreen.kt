@@ -3497,7 +3497,10 @@ fun CanvasScreen(
                             iwbPickerLauncher.launch(arrayOf("*/*"))
                         },
                         "Reset Zoom (100%)" to { showCommandPalette = false; viewModel.resetTransform() },
-                        "Fit to Content" to { showCommandPalette = false; viewModel.fitToContent(canvasSize.width, canvasSize.height) }
+                        "Fit to Content" to { showCommandPalette = false; viewModel.fitToContent(canvasSize.width, canvasSize.height) },
+                        "Paste from clipboard" to { showCommandPalette = false; viewModel.pasteStrokeClipboard() },
+                        "Add new page" to { showCommandPalette = false; viewModel.addPage() },
+                        "Duplicate current page" to { showCommandPalette = false; viewModel.duplicatePage(state.pageIndex) }
                     ).filter { it.first.contains(commandSearchQuery, ignoreCase = true) }
                         .forEach { (name, action) ->
                             Row(
