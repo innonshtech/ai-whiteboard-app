@@ -26,6 +26,7 @@ import com.avitrisphare.whiteboard.data.local.toDomain
 import com.avitrisphare.whiteboard.data.local.toDto
 import com.avitrisphare.whiteboard.domain.model.CanvasBackground
 import com.avitrisphare.whiteboard.domain.model.Stroke
+import com.avitrisphare.whiteboard.domain.model.StrokeType
 import com.avitrisphare.whiteboard.domain.model.isPlacedMedia
 import com.avitrisphare.whiteboard.presentation.canvas.BoardDocument
 import com.avitrisphare.whiteboard.presentation.canvas.CanvasPane
@@ -35,10 +36,15 @@ import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedOutputStream
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.util.Locale
 import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import javax.xml.parsers.DocumentBuilderFactory
+import org.w3c.dom.Element
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
@@ -744,7 +750,7 @@ object WhiteboardExportManager {
         exportDir: File,
         onProgress: (Float, String) -> Unit
     ): File {
-        onProgress(0.5f, "Serializing GYOASH IWB layers...")
+        onProgress(0.2f, "Serializing GYOASH Whiteboard layers...")
 
         val iwbPages = pages.mapIndexed { index, strokes ->
             GyoashIwbPage(
@@ -796,10 +802,409 @@ object WhiteboardExportManager {
             } else null
         )
 
+        onProgress(0.5f, "Generating universal CFF-IWB & GYOASH package...")
+
         val iwbFile = File(exportDir, "${safeTitle}_${timestamp}.iwb")
         val json = gson.toJson(iwbPackage)
-        iwbFile.writeText(json)
+        val contentXml = buildCffXml(lessonTitle, pages, canvasBackground, isDarkCanvas)
+
+        ZipOutputStream(BufferedOutputStream(FileOutputStream(iwbFile))).use { zos ->
+            // 1. mimetype (CFF standard)
+            val mimeEntry = ZipEntry("mimetype")
+            zos.putNextEntry(mimeEntry)
+            zos.write("application/vnd.common-file-format".toByteArray(Charsets.UTF_8))
+            zos.closeEntry()
+
+            // 2. content.xml (Universal Interactive Whiteboard Common File Format / SVG for any whiteboard)
+            val xmlEntry = ZipEntry("content.xml")
+            zos.putNextEntry(xmlEntry)
+            zos.write(contentXml.toByteArray(Charsets.UTF_8))
+            zos.closeEntry()
+
+            // 3. gyoash_lesson.json (High-fidelity GYOASH Whiteboard layer data)
+            val jsonEntry = ZipEntry("gyoash_lesson.json")
+            zos.putNextEntry(jsonEntry)
+            zos.write(json.toByteArray(Charsets.UTF_8))
+            zos.closeEntry()
+        }
+
+        onProgress(0.9f, "Finalizing IWB package...")
         return iwbFile
+    }
+
+    fun buildCffXml(
+        lessonTitle: String,
+        pages: List<List<Stroke>>,
+        canvasBackground: CanvasBackground,
+        isDarkCanvas: Boolean
+    ): String {
+        val sb = java.lang.StringBuilder()
+        sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+        sb.append("<iwb xmlns=\"http://www.imsglobal.org/xsd/iwbcff_v1p0\" xmlns:svg=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n")
+        sb.append("  <head>\n")
+        sb.append("    <meta name=\"creator\" content=\"GYOASH Whiteboard\" />\n")
+        sb.append("    <meta name=\"title\" content=\"${escapeXml(lessonTitle)}\" />\n")
+        sb.append("  </head>\n")
+        sb.append("  <pages>\n")
+
+        val bgColor = if (isDarkCanvas) "#171717" else when (canvasBackground) {
+            CanvasBackground.DARK -> "#171717"
+            CanvasBackground.WHITE, CanvasBackground.GRID, CanvasBackground.GRAPH, CanvasBackground.LINED, CanvasBackground.DOTTED -> "#FFFFFF"
+            else -> "#FFFFFF"
+        }
+
+        pages.forEachIndexed { pageIndex, strokes ->
+            sb.append("    <page id=\"page_$pageIndex\">\n")
+            sb.append("      <svg:svg width=\"1920\" height=\"1080\" viewBox=\"0 0 1920 1080\">\n")
+            // Background rect
+            sb.append("        <svg:rect width=\"100%\" height=\"100%\" fill=\"$bgColor\" />\n")
+            sb.append("        <svg:g id=\"layer_ink_$pageIndex\">\n")
+
+            for (stroke in strokes) {
+                val hexColor = colorToHex(stroke.colorValue)
+                val width = stroke.strokeWidth.coerceAtLeast(1f)
+
+                when (stroke.strokeType) {
+                    StrokeType.TEXT, StrokeType.EQUATION, StrokeType.STICKY_NOTE -> {
+                        val origin = stroke.points.firstOrNull() ?: Offset.Zero
+                        val textContent = escapeXml(stroke.text.ifBlank { if (stroke.strokeType == StrokeType.STICKY_NOTE) "Note" else "" })
+                        if (textContent.isNotBlank()) {
+                            if (stroke.strokeType == StrokeType.STICKY_NOTE) {
+                                val stickyFill = if (stroke.fillColor != 0) colorToHex(stroke.fillColor) else "#FFF9C4"
+                                sb.append("          <svg:rect x=\"${origin.x}\" y=\"${origin.y}\" width=\"220\" height=\"180\" rx=\"12\" ry=\"12\" fill=\"$stickyFill\" stroke=\"#22000000\" stroke-width=\"1.5\" />\n")
+                                sb.append("          <svg:text x=\"${origin.x + 16}\" y=\"${origin.y + 36}\" fill=\"#171717\" font-size=\"16\" font-family=\"sans-serif\">$textContent</svg:text>\n")
+                            } else {
+                                sb.append("          <svg:text x=\"${origin.x}\" y=\"${origin.y}\" fill=\"$hexColor\" font-size=\"${width.coerceAtLeast(16f)}\" font-family=\"sans-serif\">$textContent</svg:text>\n")
+                            }
+                        }
+                    }
+                    StrokeType.RECTANGLE, StrokeType.FRAME -> {
+                        val b = stroke.bounds
+                        val fill = if (stroke.fillColor != 0) colorToHex(stroke.fillColor) else "none"
+                        sb.append("          <svg:rect x=\"${b.left}\" y=\"${b.top}\" width=\"${b.width}\" height=\"${b.height}\" stroke=\"$hexColor\" stroke-width=\"$width\" fill=\"$fill\" />\n")
+                    }
+                    StrokeType.CIRCLE -> {
+                        val b = stroke.bounds
+                        val cx = b.left + b.width / 2f
+                        val cy = b.top + b.height / 2f
+                        val rx = b.width / 2f
+                        val ry = b.height / 2f
+                        val fill = if (stroke.fillColor != 0) colorToHex(stroke.fillColor) else "none"
+                        sb.append("          <svg:ellipse cx=\"$cx\" cy=\"$cy\" rx=\"$rx\" ry=\"$ry\" stroke=\"$hexColor\" stroke-width=\"$width\" fill=\"$fill\" />\n")
+                    }
+                    StrokeType.LINE, StrokeType.ARROW -> {
+                        if (stroke.points.size >= 2) {
+                            val p1 = stroke.points.first()
+                            val p2 = stroke.points.last()
+                            sb.append("          <svg:line x1=\"${p1.x}\" y1=\"${p1.y}\" x2=\"${p2.x}\" y2=\"${p2.y}\" stroke=\"$hexColor\" stroke-width=\"$width\" stroke-linecap=\"round\" />\n")
+                        }
+                    }
+                    else -> {
+                        // Standard ink strokes (PEN, PENCIL, MARKER, HIGHLIGHTER, BRUSH)
+                        if (stroke.points.isNotEmpty()) {
+                            val pathD = strokePointsToSvgPath(stroke.points)
+                            val opacity = if (stroke.isHighlighter || stroke.strokeType == StrokeType.HIGHLIGHTER) "0.4" else "1.0"
+                            sb.append("          <svg:path d=\"$pathD\" stroke=\"$hexColor\" stroke-width=\"$width\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\"$opacity\" />\n")
+                        }
+                    }
+                }
+            }
+
+            sb.append("        </svg:g>\n")
+            sb.append("      </svg:svg>\n")
+            sb.append("    </page>\n")
+        }
+
+        sb.append("  </pages>\n")
+        sb.append("</iwb>\n")
+        return sb.toString()
+    }
+
+    private fun colorToHex(colorValue: Int): String {
+        val r = (colorValue shr 16) and 0xFF
+        val g = (colorValue shr 8) and 0xFF
+        val b = colorValue and 0xFF
+        return "#%02X%02X%02X".format(Locale.US, r, g, b)
+    }
+
+    private fun escapeXml(str: String): String {
+        return str
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&apos;")
+    }
+
+    private fun strokePointsToSvgPath(points: List<Offset>): String {
+        if (points.isEmpty()) return ""
+        val sb = java.lang.StringBuilder()
+        sb.append("M ").append(roundFloat(points[0].x)).append(" ").append(roundFloat(points[0].y))
+        for (i in 1 until points.size) {
+            sb.append(" L ").append(roundFloat(points[i].x)).append(" ").append(roundFloat(points[i].y))
+        }
+        return sb.toString()
+    }
+
+    private fun roundFloat(f: Float): String {
+        return if (f == f.toInt().toFloat()) f.toInt().toString() else "%.1f".format(Locale.US, f)
+    }
+
+    private fun parseSvgColor(colorStr: String?, defaultColor: Int = 0xFFFFFFFF.toInt()): Int {
+        if (colorStr.isNullOrBlank() || colorStr == "none") return defaultColor
+        val s = colorStr.trim()
+        if (s.startsWith("#")) {
+            val hex = s.substring(1)
+            return when (hex.length) {
+                3 -> {
+                    val r = hex[0].toString().repeat(2).toInt(16)
+                    val g = hex[1].toString().repeat(2).toInt(16)
+                    val b = hex[2].toString().repeat(2).toInt(16)
+                    (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+                }
+                6 -> (0xFFL shl 24 or hex.toLong(16)).toInt()
+                8 -> hex.toLong(16).toInt()
+                else -> defaultColor
+            }
+        }
+        if (s.startsWith("rgb", ignoreCase = true)) {
+            val nums = Regex("""\d+""").findAll(s).map { it.value.toInt() }.toList()
+            if (nums.size >= 3) {
+                return (0xFF shl 24) or ((nums[0] and 0xFF) shl 16) or ((nums[1] and 0xFF) shl 8) or (nums[2] and 0xFF)
+            }
+        }
+        return when (s.lowercase(Locale.US)) {
+            "black" -> 0xFF000000.toInt()
+            "white" -> 0xFFFFFFFF.toInt()
+            "red" -> 0xFFFF0000.toInt()
+            "green" -> 0xFF00FF00.toInt()
+            "blue" -> 0xFF0000FF.toInt()
+            "yellow" -> 0xFFFFFF00.toInt()
+            "cyan" -> 0xFF00FFFF.toInt()
+            "magenta" -> 0xFFFF00FF.toInt()
+            "gray", "grey" -> 0xFF808080.toInt()
+            else -> defaultColor
+        }
+    }
+
+    private fun parseSvgPathData(d: String): String {
+        val numberRegex = Regex("""[-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?""")
+        val matches = numberRegex.findAll(d).mapNotNull { it.value.toFloatOrNull() }.toList()
+        if (matches.size < 2) return ""
+        val sb = java.lang.StringBuilder()
+        for (i in 0 until matches.size - 1 step 2) {
+            if (sb.isNotEmpty()) sb.append(";")
+            sb.append(roundFloat(matches[i])).append(",").append(roundFloat(matches[i + 1]))
+        }
+        return sb.toString()
+    }
+
+    fun parseCffXml(xml: String): GyoashIwbPackage {
+        val factory = DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+            isValidating = false
+            try {
+                setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+            } catch (_: Exception) {}
+        }
+        val builder = factory.newDocumentBuilder()
+        val doc = builder.parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)))
+
+        var title = "Imported Whiteboard Lesson"
+        val metaNodes = doc.getElementsByTagName("meta")
+        for (i in 0 until metaNodes.length) {
+            val el = metaNodes.item(i) as? Element ?: continue
+            if (el.getAttribute("name") == "title") {
+                val t = el.getAttribute("content")
+                if (t.isNotBlank()) title = t
+            }
+        }
+
+        val pageNodes = doc.getElementsByTagName("page")
+        val pagesList = mutableListOf<GyoashIwbPage>()
+
+        fun extractStrokes(container: Element): List<StrokeDto> {
+            val strokes = mutableListOf<StrokeDto>()
+
+            // Extract <path> elements
+            val pathNodes = container.getElementsByTagNameNS("*", "path")
+            for (i in 0 until pathNodes.length) {
+                val el = pathNodes.item(i) as? Element ?: continue
+                val d = el.getAttribute("d")
+                val points = parseSvgPathData(d)
+                if (points.isNotBlank()) {
+                    val color = parseSvgColor(el.getAttribute("stroke"), 0xFFFFFFFF.toInt())
+                    val width = el.getAttribute("stroke-width").toFloatOrNull() ?: 4f
+                    val opacity = el.getAttribute("opacity").toFloatOrNull() ?: 1.0f
+                    val isHighlighter = opacity < 0.6f
+                    strokes.add(
+                        StrokeDto(
+                            id = "stroke_${strokes.size}",
+                            points = points,
+                            colorValue = color,
+                            strokeWidth = width,
+                            isHighlighter = isHighlighter,
+                            strokeType = if (isHighlighter) StrokeType.HIGHLIGHTER else StrokeType.PEN
+                        )
+                    )
+                }
+            }
+
+            // Extract <rect> elements
+            val rectNodes = container.getElementsByTagNameNS("*", "rect")
+            for (i in 0 until rectNodes.length) {
+                val el = rectNodes.item(i) as? Element ?: continue
+                val widthAttr = el.getAttribute("width")
+                if (widthAttr.contains("%")) continue // Skip 100% background rect
+
+                val x = el.getAttribute("x").toFloatOrNull() ?: 0f
+                val y = el.getAttribute("y").toFloatOrNull() ?: 0f
+                val w = widthAttr.toFloatOrNull() ?: 0f
+                val h = el.getAttribute("height").toFloatOrNull() ?: 0f
+
+                if (w > 0f && h > 0f && !(x == 0f && y == 0f && w >= 1900f && h >= 1000f)) {
+                    val color = parseSvgColor(el.getAttribute("stroke"), 0xFFFFFFFF.toInt())
+                    val fill = parseSvgColor(el.getAttribute("fill"), 0)
+                    val width = el.getAttribute("stroke-width").toFloatOrNull() ?: 3f
+                    val pts = "${roundFloat(x)},${roundFloat(y)};${roundFloat(x + w)},${roundFloat(y)};${roundFloat(x + w)},${roundFloat(y + h)};${roundFloat(x)},${roundFloat(y + h)};${roundFloat(x)},${roundFloat(y)}"
+                    strokes.add(
+                        StrokeDto(
+                            id = "rect_${strokes.size}",
+                            points = pts,
+                            colorValue = color,
+                            strokeWidth = width,
+                            fillColor = fill,
+                            strokeType = StrokeType.RECTANGLE
+                        )
+                    )
+                }
+            }
+
+            // Extract <line> elements
+            val lineNodes = container.getElementsByTagNameNS("*", "line")
+            for (i in 0 until lineNodes.length) {
+                val el = lineNodes.item(i) as? Element ?: continue
+                val x1 = el.getAttribute("x1").toFloatOrNull() ?: 0f
+                val y1 = el.getAttribute("y1").toFloatOrNull() ?: 0f
+                val x2 = el.getAttribute("x2").toFloatOrNull() ?: 0f
+                val y2 = el.getAttribute("y2").toFloatOrNull() ?: 0f
+                val color = parseSvgColor(el.getAttribute("stroke"), 0xFFFFFFFF.toInt())
+                val width = el.getAttribute("stroke-width").toFloatOrNull() ?: 4f
+                strokes.add(
+                    StrokeDto(
+                        id = "line_${strokes.size}",
+                        points = "${roundFloat(x1)},${roundFloat(y1)};${roundFloat(x2)},${roundFloat(y2)}",
+                        colorValue = color,
+                        strokeWidth = width,
+                        strokeType = StrokeType.LINE
+                    )
+                )
+            }
+
+            // Extract <text> elements
+            val textNodes = container.getElementsByTagNameNS("*", "text")
+            for (i in 0 until textNodes.length) {
+                val el = textNodes.item(i) as? Element ?: continue
+                val x = el.getAttribute("x").toFloatOrNull() ?: 0f
+                val y = el.getAttribute("y").toFloatOrNull() ?: 0f
+                val text = el.textContent?.trim() ?: ""
+                if (text.isNotBlank()) {
+                    val color = parseSvgColor(el.getAttribute("fill"), 0xFFFFFFFF.toInt())
+                    val fontSize = el.getAttribute("font-size").toFloatOrNull() ?: 20f
+                    strokes.add(
+                        StrokeDto(
+                            id = "text_${strokes.size}",
+                            points = "${roundFloat(x)},${roundFloat(y)}",
+                            text = text,
+                            colorValue = color,
+                            strokeWidth = fontSize,
+                            strokeType = StrokeType.TEXT
+                        )
+                    )
+                }
+            }
+
+            return strokes
+        }
+
+        if (pageNodes.length == 0) {
+            val svgNodes = doc.getElementsByTagNameNS("*", "svg")
+            val container = if (svgNodes.length > 0) svgNodes.item(0) as Element else doc.documentElement
+            val strokes = extractStrokes(container)
+            pagesList.add(GyoashIwbPage(0, listOf(GyoashIwbLayer("layer_0", "Ink & Content", true, 1f, strokes))))
+        } else {
+            for (p in 0 until pageNodes.length) {
+                val pageEl = pageNodes.item(p) as Element
+                val strokes = extractStrokes(pageEl)
+                pagesList.add(GyoashIwbPage(p, listOf(GyoashIwbLayer("layer_$p", "Ink & Content", true, 1f, strokes))))
+            }
+        }
+
+        if (pagesList.isEmpty()) {
+            pagesList.add(GyoashIwbPage(0, listOf(GyoashIwbLayer("layer_0", "Ink & Content", true, 1f, emptyList()))))
+        }
+
+        return GyoashIwbPackage(
+            format = "GYOASH_IWB_V1",
+            version = 1,
+            app = "CFF-IWB Importer",
+            title = title,
+            metadata = GyoashIwbMetadata(
+                pageCount = pagesList.size,
+                activePage = 0,
+                canvasBackground = "dark",
+                isDarkCanvas = true,
+                showGrid = false
+            ),
+            pages = pagesList
+        )
+    }
+
+    fun parseIwbBytes(bytes: ByteArray): GyoashIwbPackage {
+        // Check if ZIP container signature (PK\x03\x04: 0x50, 0x4B, 0x03, 0x04)
+        if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte() && bytes[2] == 0x03.toByte() && bytes[3] == 0x04.toByte()) {
+            val entries = mutableMapOf<String, ByteArray>()
+            ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory) {
+                        val name = entry.name.replace('\\', '/')
+                        entries[name] = zis.readBytes()
+                    }
+                    entry = zis.nextEntry
+                }
+            }
+
+            // Priority 1: High-fidelity GYOASH proprietary package with all layers intact
+            val gyoashJsonBytes = entries["gyoash_lesson.json"]
+                ?: entries.entries.find { it.key.endsWith(".json") }?.value
+            if (gyoashJsonBytes != null) {
+                val json = String(gyoashJsonBytes, Charsets.UTF_8)
+                val pkg = runCatching { gson.fromJson(json, GyoashIwbPackage::class.java) }.getOrNull()
+                if (pkg != null && pkg.pages.isNotEmpty()) {
+                    return pkg
+                }
+            }
+
+            // Priority 2: Standard CFF-IWB content.xml (from SMART, Promethean, OpenBoard, BenQ, etc.)
+            val contentXmlBytes = entries["content.xml"]
+                ?: entries.entries.find { it.key.endsWith("content.xml") }?.value
+            if (contentXmlBytes != null) {
+                val xml = String(contentXmlBytes, Charsets.UTF_8)
+                return parseCffXml(xml)
+            }
+
+            throw IllegalArgumentException("IWB archive contains neither gyoash_lesson.json nor content.xml")
+        }
+
+        // Priority 3: Plain JSON text (backward compatibility with legacy .iwb exports)
+        val text = String(bytes, Charsets.UTF_8).trim()
+        if (text.startsWith("{")) {
+            return gson.fromJson(text, GyoashIwbPackage::class.java)
+                ?: throw IllegalArgumentException("Invalid GYOASH IWB JSON format")
+        }
+
+        throw IllegalArgumentException("Unrecognized IWB file format")
     }
 
     private fun dispatchFile(
@@ -857,10 +1262,9 @@ object WhiteboardExportManager {
     }
 
     fun importIwb(context: Context, uri: Uri): GyoashIwbPackage {
-        val json = context.contentResolver.openInputStream(uri)?.use { it.reader().readText() }
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: throw IllegalArgumentException("Could not read IWB file")
-        return gson.fromJson(json, GyoashIwbPackage::class.java)
-            ?: throw IllegalArgumentException("Invalid GYOASH IWB file format")
+        return parseIwbBytes(bytes)
     }
 
     fun launchShareIntent(

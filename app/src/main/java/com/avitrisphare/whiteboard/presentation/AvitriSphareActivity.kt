@@ -75,7 +75,6 @@ class AvitriSphareActivity : ComponentActivity() {
             var classroomId by remember { mutableStateOf<String?>("room_1") }
             var isDarkMode by remember { mutableStateOf(true) }
             var start by remember { mutableStateOf<String?>(null) }
-            val scope = rememberCoroutineScope()
 
             LaunchedEffect(Unit) {
                 val stored = session.snapshot()
@@ -83,21 +82,31 @@ class AvitriSphareActivity : ComponentActivity() {
                 schoolName = stored.schoolName
                 classroomName = stored.classroomName
                 classroomId = stored.classroomId
-                val savedId = session.demoNoteId()
-                val noteId = if (savedId != null) {
-                    val existing = withContext(Dispatchers.IO) { noteRepository.getNoteById(savedId) }
-                    if (existing != null) savedId else null
-                } else null
-                val resolvedId = noteId ?: run {
+                val incomingUri = intent?.data
+                if (incomingUri != null) {
                     val note = Note(
                         id = UUID.randomUUID().toString(),
-                        title = "Whiteboard"
+                        title = "Imported Lesson"
                     )
                     withContext(Dispatchers.IO) { noteRepository.insertNote(note) }
-                    session.saveDemoNoteId(note.id)
-                    note.id
+                    start = "canvas/${note.id}?importUri=${android.net.Uri.encode(incomingUri.toString())}"
+                } else {
+                    val savedId = session.demoNoteId()
+                    val noteId = if (savedId != null) {
+                        val existing = withContext(Dispatchers.IO) { noteRepository.getNoteById(savedId) }
+                        if (existing != null) savedId else null
+                    } else null
+                    val resolvedId = noteId ?: run {
+                        val note = Note(
+                            id = UUID.randomUUID().toString(),
+                            title = "Whiteboard"
+                        )
+                        withContext(Dispatchers.IO) { noteRepository.insertNote(note) }
+                        session.saveDemoNoteId(note.id)
+                        note.id
+                    }
+                    start = "canvas/$resolvedId"
                 }
-                start = "canvas/$resolvedId"
             }
             
             AvitriSphareTheme(darkTheme = isDarkMode) {
@@ -211,10 +220,18 @@ class AvitriSphareActivity : ComponentActivity() {
                         }
 
                         composable(
-                            route = "canvas/{noteId}",
-                            arguments = listOf(navArgument("noteId") { type = NavType.StringType })
+                            route = "canvas/{noteId}?importUri={importUri}",
+                            arguments = listOf(
+                                navArgument("noteId") { type = NavType.StringType },
+                                navArgument("importUri") {
+                                    type = NavType.StringType
+                                    nullable = true
+                                    defaultValue = null
+                                }
+                            )
                         ) { backStackEntry ->
                             val noteId = backStackEntry.arguments?.getString("noteId") ?: "new"
+                            val importUriStr = backStackEntry.arguments?.getString("importUri")
                             CanvasScreen(
                                 noteId = noteId,
                                 noteTitle = "",
@@ -222,7 +239,8 @@ class AvitriSphareActivity : ComponentActivity() {
                                     if (!navController.popBackStack()) finish()
                                 },
                                 demoMode = true,
-                                panelSession = session
+                                panelSession = session,
+                                initialImportUri = importUriStr?.let { android.net.Uri.parse(it) }
                             )
                         }
                     }
