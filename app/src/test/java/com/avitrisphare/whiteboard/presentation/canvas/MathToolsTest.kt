@@ -133,4 +133,59 @@ class MathToolsTest {
         assertEquals(CanvasBackground.GRAPH, CanvasBackground.fromKey("graph"))
         assertNotNull(rulerForStraightedge(listOf(newMathTool(MathToolKind.RULER, Offset(80f, 80f))), Offset(80f, 112f)))
     }
+
+    @Test
+    fun rulerCloseButtonHitTest() {
+        val ruler = PlacedMathTool(
+            kind = MathToolKind.RULER,
+            center = Offset(300f, 300f),
+            span = 440f
+        )
+        // half = 220f, halfT = 48f. Close button is at center + Offset(220 - 24, -48 + 22) = (496, 274)
+        val closeBtn = Offset(496f, 274f)
+        assertEquals(MathToolZone.CLOSE, hitTestMathTool(ruler, closeBtn))
+    }
+
+    @Test
+    fun rulerPhysicalEdgeSnappingAndLength() {
+        val ruler = PlacedMathTool(
+            kind = MathToolKind.RULER,
+            center = Offset(400f, 400f),
+            span = 400f,
+            rotationDeg = 0f
+        )
+        // halfT is 48f. Top edge is at y = 352f. Bottom edge is at y = 448f.
+        val topTouch = Offset(350f, 360f)
+        val bottomTouch = Offset(450f, 440f)
+
+        assertEquals(-1f, rulerEdgeForPoint(ruler, topTouch), 0.01f)
+        assertEquals(1f, rulerEdgeForPoint(ruler, bottomTouch), 0.01f)
+
+        val snappedTop = snapToRulerEdge(ruler, topTouch, edgeSign = -1f)
+        assertEquals(350f, snappedTop.x, 0.01f)
+        assertEquals(352f, snappedTop.y, 0.01f)
+
+        val snappedBottom = snapToRulerEdge(ruler, bottomTouch, edgeSign = 1f)
+        assertEquals(450f, snappedBottom.x, 0.01f)
+        assertEquals(448f, snappedBottom.y, 0.01f)
+
+        // Clamping to ruler span limits
+        val pastRightEdgeTouch = Offset(700f, 360f)
+        val snappedRight = snapToRulerEdge(ruler, pastRightEdgeTouch, edgeSign = -1f)
+        assertEquals(600f, snappedRight.x, 0.01f) // 400 + 200 = 600 max
+        assertEquals(352f, snappedRight.y, 0.01f)
+    }
+
+    @Test
+    fun rulerMagneticAngleSnapping() {
+        val ruler = PlacedMathTool(
+            kind = MathToolKind.RULER,
+            center = Offset(200f, 200f),
+            span = 400f
+        )
+        // Rotate dragging positive end to almost horizontal (e.g. angle around 1.2 degrees)
+        // Pivot is (0, 200). Drag point (400, 204) -> angle ~ 1.14 degrees -> snaps to 0.0
+        val rotated = rotateToolByEnd(ruler, Offset(400f, 204f), draggingPositiveEnd = true)
+        assertEquals(0f, rotated.rotationDeg, 0.01f)
+    }
 }

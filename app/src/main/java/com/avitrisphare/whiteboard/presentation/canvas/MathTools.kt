@@ -24,7 +24,7 @@ import kotlin.math.sin
 
 enum class MathToolKind { RULER, COMPASS, PROTRACTOR }
 
-enum class MathToolZone { NONE, MOVE, ROTATE_POSITIVE, ROTATE_NEGATIVE, PENCIL, SCALE }
+enum class MathToolZone { NONE, MOVE, ROTATE_POSITIVE, ROTATE_NEGATIVE, PENCIL, SCALE, CLOSE }
 
 data class PlacedMathTool(
     val id: String = UUID.randomUUID().toString(),
@@ -54,6 +54,7 @@ class MathGesture {
     var arcMode: Boolean = false
     var drawDir: Offset = Offset(1f, 0f)
     var rulerDrawing: Boolean = false
+    var rulerEdgeSign: Float = 1f
     var twoFinger: Boolean = false
 
     fun reset() {
@@ -69,24 +70,26 @@ class MathGesture {
         arcMode = false
         drawDir = Offset(1f, 0f)
         rulerDrawing = false
+        rulerEdgeSign = 1f
         twoFinger = false
     }
 }
 
-private const val RULER_THICKNESS = 64f
+private const val RULER_THICKNESS = 96f
 private const val RULER_EDGE_INSET = 18f
-private const val HANDLE_RADIUS = 26f
+private const val HANDLE_RADIUS = 24f
+private const val HANDLE_TOUCH_RADIUS = 46f
 private const val COMPASS_MIN_RADIUS = 40f
 private const val COMPASS_MAX_RADIUS = 460f
 private const val HINGE_LIFT = 52f
 const val MATH_TAP_SLOP = 16f
-const val RULER_EDGE_SLOP = 36f
+const val RULER_EDGE_SLOP = 38f
 private const val ARC_ANGLE_SLOP = 12f
 private const val ARC_RADIAL_SLOP = 28f
 private val RAD_TO_DEG = 180f / Math.PI.toFloat()
 
 fun defaultMathSpan(kind: MathToolKind): Float = when (kind) {
-    MathToolKind.RULER -> 420f
+    MathToolKind.RULER -> 440f
     MathToolKind.COMPASS -> 140f
     MathToolKind.PROTRACTOR -> 168f
 }
@@ -138,9 +141,31 @@ fun hitTestPlacedTools(tools: List<PlacedMathTool>, point: Offset): MathToolHit?
 private fun hitTestRuler(tool: PlacedMathTool, point: Offset): MathToolZone {
     val local = toLocal(point, tool.center, tool.rotationDeg)
     val half = tool.span / 2f
-    if (near(local, Offset(half, 0f), HANDLE_RADIUS)) return MathToolZone.ROTATE_POSITIVE
-    if (near(local, Offset(-half, 0f), HANDLE_RADIUS)) return MathToolZone.ROTATE_NEGATIVE
-    if (abs(local.x) <= half && abs(local.y) <= RULER_THICKNESS / 2f - RULER_EDGE_INSET) {
+    val halfT = RULER_THICKNESS / 2f
+
+    // Close button (top right inside ruler)
+    val closeBtnCenter = Offset(half - 24f, -halfT + 22f)
+    if (near(local, closeBtnCenter, 22f)) return MathToolZone.CLOSE
+
+    // If touching near the top edge or bottom edge (where ticks and numbers are),
+    // always return NONE so straightedge line drawing triggers seamlessly!
+    val distToTopEdge = abs(local.y - (-halfT))
+    val distToBottomEdge = abs(local.y - halfT)
+    if ((distToTopEdge <= RULER_EDGE_SLOP || distToBottomEdge <= RULER_EDGE_SLOP) &&
+        abs(local.x) <= half + RULER_EDGE_SLOP &&
+        abs(local.y) >= 16f) {
+        return MathToolZone.NONE
+    }
+
+    // Handles at positive (+half) and negative (-half) ends in the center strip:
+    // Dragging these ends extends length and rotates angle!
+    if (near(local, Offset(half, 0f), HANDLE_TOUCH_RADIUS) ||
+        (local.x >= half - 32f && abs(local.y) <= 24f)) return MathToolZone.ROTATE_POSITIVE
+    if (near(local, Offset(-half, 0f), HANDLE_TOUCH_RADIUS) ||
+        (local.x <= -half + 32f && abs(local.y) <= 24f)) return MathToolZone.ROTATE_NEGATIVE
+
+    // Ruler body for dragging/moving across canvas
+    if (abs(local.x) < half - 28f && abs(local.y) <= 24f) {
         return MathToolZone.MOVE
     }
     return MathToolZone.NONE
@@ -150,9 +175,24 @@ fun distanceToRulerEdge(tool: PlacedMathTool, point: Offset): Float {
     if (tool.kind != MathToolKind.RULER) return Float.MAX_VALUE
     val local = toLocal(point, tool.center, tool.rotationDeg)
     val half = tool.span / 2f
-    if (abs(local.x) > half) return Float.MAX_VALUE
+    if (abs(local.x) > half + RULER_EDGE_SLOP) return Float.MAX_VALUE
     val halfT = RULER_THICKNESS / 2f
     return minOf(abs(local.y - halfT), abs(local.y + halfT))
+}
+
+fun rulerEdgeForPoint(tool: PlacedMathTool, point: Offset): Float {
+    val local = toLocal(point, tool.center, tool.rotationDeg)
+    return if (local.y < 0f) -1f else 1f
+}
+
+fun snapToRulerEdge(tool: PlacedMathTool, screenPoint: Offset, edgeSign: Float): Offset {
+    val dir = direction(tool.rotationDeg)
+    val perp = perpendicular(tool.rotationDeg)
+    val local = toLocal(screenPoint, tool.center, tool.rotationDeg)
+    val half = tool.span / 2f
+    val halfT = RULER_THICKNESS / 2f
+    val clampedX = local.x.coerceIn(-half, half)
+    return tool.center + dir * clampedX + perp * (edgeSign * halfT)
 }
 
 fun rulerForStraightedge(tools: List<PlacedMathTool>, point: Offset): PlacedMathTool? {
@@ -215,12 +255,54 @@ fun endReach(tool: PlacedMathTool): Float {
 /** Rotates around the opposite end so the dragged end follows the finger. Span stays fixed. */
 fun rotateToolByEnd(tool: PlacedMathTool, pointer: Offset, draggingPositiveEnd: Boolean): PlacedMathTool {
     val pivot = endPoint(tool, positive = !draggingPositiveEnd)
-    val angle = atan2(pointer.y - pivot.y, pointer.x - pivot.x) * RAD_TO_DEG
-    val rotation = if (draggingPositiveEnd) angle else angle + 180f
-    val dir = direction(rotation)
+    val dx = pointer.x - pivot.x
+    val dy = pointer.y - pivot.y
+    if (dx * dx + dy * dy < 25f) return tool
+    val angle = atan2(dy, dx) * RAD_TO_DEG
+    val rawRotation = if (draggingPositiveEnd) angle else angle + 180f
+    var norm = (rawRotation % 360f + 360f) % 360f
+
+    // Magnetic angle snapping: snap to nearest 15° if within 2.2°
+    val snapInterval = 15f
+    val nearestSnap = (norm / snapInterval).roundToInt() * snapInterval
+    if (abs(norm - nearestSnap) <= 2.2f) {
+        norm = (nearestSnap % 360f + 360f) % 360f
+    }
+
+    val dir = direction(norm)
     val reach = endReach(tool)
     val center = if (draggingPositiveEnd) pivot + dir * reach else pivot - dir * reach
-    return tool.copy(center = center, rotationDeg = rotation)
+    return tool.copy(center = center, rotationDeg = norm)
+}
+
+/**
+ * Dragging either end of the ruler rotates AND extends/shortens the ruler.
+ * The opposite end remains anchored as the pivot point.
+ */
+fun dragRulerEnd(tool: PlacedMathTool, pointer: Offset, draggingPositiveEnd: Boolean): PlacedMathTool {
+    val pivot = endPoint(tool, positive = !draggingPositiveEnd)
+    val dx = pointer.x - pivot.x
+    val dy = pointer.y - pivot.y
+    if (dx * dx + dy * dy < 36f) return tool
+    val dist = hypot(dx, dy)
+    // Dynamic extension: min 180f (~4.5 cm), max 3600f (~90 cm)
+    val newSpan = dist.coerceIn(180f, 3600f)
+
+    val angle = atan2(dy, dx) * RAD_TO_DEG
+    val rawRotation = if (draggingPositiveEnd) angle else angle + 180f
+    var norm = (rawRotation % 360f + 360f) % 360f
+
+    // Magnetic angle snapping: snap to nearest 15° if within 2.5°
+    val snapInterval = 15f
+    val nearestSnap = (norm / snapInterval).roundToInt() * snapInterval
+    if (abs(norm - nearestSnap) <= 2.5f) {
+        norm = (nearestSnap % 360f + 360f) % 360f
+    }
+
+    val dir = direction(norm)
+    val reach = newSpan / 2f
+    val center = if (draggingPositiveEnd) pivot + dir * reach else pivot - dir * reach
+    return tool.copy(center = center, rotationDeg = norm, span = newSpan)
 }
 
 fun endPoint(tool: PlacedMathTool, positive: Boolean): Offset {
@@ -357,10 +439,11 @@ fun straightStroke(start: Offset, end: Offset, color: Int, width: Float): Stroke
 }
 
 fun measurementLabel(text: String, at: Offset, color: Int): Stroke {
+    val safeColor = if (color != 0) color else 0xFF1E293B.toInt()
     return Stroke(
         points = listOf(at),
-        colorValue = color,
-        strokeWidth = 4f,
+        colorValue = safeColor,
+        strokeWidth = 18f,
         strokeType = StrokeType.TEXT,
         text = text
     )
@@ -394,40 +477,78 @@ private fun DrawScope.drawRulerTool(
         val thickness = RULER_THICKNESS
         val left = tool.center.x - length / 2f
         val top = tool.center.y - thickness / 2f
-        val body = if (isDark) Color(0xE62A2F3A) else Color(0xE6FFFFFF)
-        val border = if (isDark) Color(0xFF4B5563) else Color(0xFF9CA3AF)
-        val tick = if (isDark) 0xFFD1D5DB.toInt() else 0xFF374151.toInt()
+        val body = if (isDark) Color(0xF21E293B) else Color(0xF4FFFFFF)
+        val border = if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1)
+        val tick = if (isDark) 0xFFCBD5E1.toInt() else 0xFF1E293B.toInt()
+        val tickSubtle = if (isDark) 0xFF94A3B8.toInt() else 0xFF64748B.toInt()
         val handle = Color(0xFF6366F1)
-        drawRoundRect(body, Offset(left, top), Size(length, thickness), CornerRadius(10f, 10f))
-        drawRoundRect(border, Offset(left, top), Size(length, thickness), CornerRadius(10f, 10f), style = DrawStroke(1.5f))
+
+        // Glassmorphic body & crisp border
+        drawRoundRect(body, Offset(left, top), Size(length, thickness), CornerRadius(12f, 12f))
+        drawRoundRect(border, Offset(left, top), Size(length, thickness), CornerRadius(12f, 12f), style = DrawStroke(1.5f))
+
+        // Center grip pill indicator (shows drag-to-move zone)
+        val gripY = tool.center.y
+        for (gx in listOf(-12f, 0f, 12f)) {
+            drawRoundRect(
+                color = if (isDark) Color(0xFF475569) else Color(0xFFE2E8F0),
+                topLeft = Offset(tool.center.x + gx - 2f, gripY - 14f),
+                size = Size(4f, 28f),
+                cornerRadius = CornerRadius(2f, 2f)
+            )
+        }
+
+        // Ticks and centimeter numbers along both edges
         val mm = (pxPerCm / 10f).coerceAtLeast(1.5f)
         var index = 0
-        var x = left + 6f
-        val usableRight = left + length - 6f
+        var x = left + 14f
+        val usableRight = left + length - 34f
         while (x <= usableRight) {
             val isCm = index % 10 == 0
             val isHalf = index % 5 == 0
             val tickHeight = when {
-                isCm -> thickness * 0.42f
-                isHalf -> thickness * 0.28f
-                else -> thickness * 0.16f
+                isCm -> thickness * 0.36f
+                isHalf -> thickness * 0.24f
+                else -> thickness * 0.14f
             }
-            val width = if (isCm) 2f else 1f
-            drawLine(Color(tick), Offset(x, top + 4f), Offset(x, top + 4f + tickHeight), width)
-            drawLine(Color(tick), Offset(x, top + thickness - 4f), Offset(x, top + thickness - 4f - tickHeight), width)
-            if (isCm && index > 0) {
-                drawLabel("${index / 10}", Offset(x, top + thickness / 2f + 4f), tick, 11f)
+            val width = if (isCm) 1.8f else 1f
+            val curColor = if (isCm) Color(tick) else Color(tickSubtle)
+            // Top edge ticks
+            drawLine(curColor, Offset(x, top + 2f), Offset(x, top + 2f + tickHeight), width)
+            // Bottom edge ticks
+            drawLine(curColor, Offset(x, top + thickness - 2f), Offset(x, top + thickness - 2f - tickHeight), width)
+
+            if (isCm) {
+                val cmVal = index / 10
+                drawLabel("$cmVal", Offset(x, top + thickness / 2f + 4.5f), tick, 11.5f)
             }
             index++
             x += mm
         }
-        drawLabel(formatCentimetres(length, pxPerCm), Offset(tool.center.x, top - 16f), tick, 13f)
+
+        // Length readout label above ruler
+        val rulerTitle = "Ruler  •  ${formatCentimetres(length, pxPerCm)}"
+        drawLabel(rulerTitle, Offset(tool.center.x, top - 18f), tick, 13f)
+
         if (segmentLabel != null) {
-            drawLabel(segmentLabel, Offset(tool.center.x, top + thickness + 18f), 0xFF4F46E5.toInt(), 14f)
+            drawLabel(segmentLabel, Offset(tool.center.x, top + thickness + 22f), 0xFF4F46E5.toInt(), 14f)
         }
+
+        // Close button (×) at top-right inside ruler
+        val closeCenter = Offset(left + length - 24f, top + 22f)
+        drawCircle(Color(0xFFEF4444).copy(alpha = 0.14f), 12f, closeCenter)
+        drawCircle(Color(0xFFEF4444).copy(alpha = 0.5f), 12f, closeCenter, style = DrawStroke(1.2f))
+        val xRadius = 4f
+        drawLine(Color(0xFFEF4444), closeCenter - Offset(xRadius, xRadius), closeCenter + Offset(xRadius, xRadius), 1.8f)
+        drawLine(Color(0xFFEF4444), closeCenter - Offset(-xRadius, xRadius), closeCenter + Offset(-xRadius, xRadius), 1.8f)
+
+        // Rotation & extension handles at both ends with intuitive extend/rotate styling
         listOf(Offset(left, tool.center.y), Offset(left + length, tool.center.y)).forEach { handleCenter ->
-            drawCircle(Color.White, HANDLE_RADIUS * 0.72f, handleCenter)
-            drawCircle(handle, HANDLE_RADIUS * 0.72f, handleCenter, style = DrawStroke(2.5f))
+            drawCircle(Color.White, HANDLE_RADIUS * 0.85f, handleCenter)
+            drawCircle(handle, HANDLE_RADIUS * 0.85f, handleCenter, style = DrawStroke(2.5f))
+            drawCircle(handle, 4f, handleCenter)
+            // Horizontal extension arrow indicator
+            drawLine(handle, handleCenter - Offset(7f, 0f), handleCenter + Offset(7f, 0f), 1.8f)
         }
     }
 }
@@ -519,11 +640,28 @@ private fun DrawScope.drawLabel(text: String, at: Offset, color: Int, textSize: 
 }
 
 fun DrawScope.drawMathReadout(text: String, at: Offset) {
+    val textPaint = Paint().apply {
+        textSize = 14f
+        isAntiAlias = true
+    }
+    val measuredW = textPaint.measureText(text)
+    val pillW = (measuredW + 28f).coerceAtLeast(64f)
+    val pillH = 28f
+    val left = at.x - pillW / 2f
+    val top = at.y - pillH / 2f
+
     drawRoundRect(
-        color = Color(0xF1111827),
-        topLeft = Offset(at.x - 36f, at.y - 22f),
-        size = Size(72f, 26f),
-        cornerRadius = CornerRadius(8f, 8f)
+        color = Color(0xF20F172A),
+        topLeft = Offset(left, top),
+        size = Size(pillW, pillH),
+        cornerRadius = CornerRadius(14f, 14f)
     )
-    drawLabel(text, Offset(at.x, at.y - 4f), 0xFFFFFFFF.toInt(), 13f)
+    drawRoundRect(
+        color = Color(0xFF6366F1).copy(alpha = 0.5f),
+        topLeft = Offset(left, top),
+        size = Size(pillW, pillH),
+        cornerRadius = CornerRadius(14f, 14f),
+        style = DrawStroke(1.2f)
+    )
+    drawLabel(text, Offset(at.x, at.y + 4.5f), 0xFFFFFFFF.toInt(), 13f)
 }

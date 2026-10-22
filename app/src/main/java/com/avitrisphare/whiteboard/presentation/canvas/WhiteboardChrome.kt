@@ -526,6 +526,10 @@ fun AvitriSphareWhiteboardChrome(
                         color = Color(0xFF6B7280)
                     )
                     Spacer(Modifier.height(8.dp))
+                    PopoverRow(Icons.Default.Straighten, if (rulerPlaced) "Hide ruler" else "Ruler", rulerPlaced) {
+                        onMathDragEnd(MathToolKind.RULER, Offset.Zero, false)
+                        panel = null
+                    }
                     PopoverRow(Icons.Default.GridOn, "Graph paper", state.canvasBackground == CanvasBackground.GRAPH) {
                         viewModel.toggleGraphPaper(); panel = null
                     }
@@ -798,7 +802,9 @@ fun AvitriSphareWhiteboardChrome(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { onDockBounds(it.boundsInRoot()) },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom
             ) {
