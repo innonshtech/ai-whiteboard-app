@@ -3,7 +3,10 @@ package com.avitrisphare.whiteboard.presentation.canvas
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.RenderEffect
+import android.graphics.Shader
 import android.graphics.SurfaceTexture
+import android.os.Build
 import android.media.MediaPlayer
 import android.net.Uri
 import android.view.MotionEvent
@@ -38,14 +41,15 @@ import java.util.concurrent.Executors
  * only the new stroke.
  */
 class BoardStageView(context: Context) : FrameLayout(context) {
-    private val grid = LayerView(context)
-    private val media = FrameLayout(context)
-    private val ink = LayerView(context)
-    private val live = LiveLayer(context)
     private val density = Density(
         resources.displayMetrics.density,
         resources.configuration.fontScale
     )
+    private val grid = LayerView(context)
+    private val media = FrameLayout(context)
+    private val ink = LayerView(context)
+    private val blurredInk = BlurredInkView(context)
+    private val live = LiveLayer(context)
     private val loader = Executors.newSingleThreadExecutor()
     private val images = HashMap<String, Bitmap>()
     private val mediaViews = HashMap<String, View>()
@@ -62,6 +66,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
     private var selected: Set<String> = emptySet()
     private var gridDirty = true
     private var inkDirty = true
+    private var frostedBounds: List<android.graphics.RectF> = emptyList()
     private var activeLive: LiveInk? = null
     private var documentBitmap: Bitmap? = null
     private var documentWidth = 0
@@ -103,13 +108,24 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         addView(media, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(marqueeOverlay, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(ink, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(blurredInk, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(live, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         grid.isClickable = false
         ink.isClickable = false
+        blurredInk.isClickable = false
         live.isClickable = false
+        blurredInk.setBackgroundColor(android.graphics.Color.TRANSPARENT)
         live.setBackgroundColor(android.graphics.Color.TRANSPARENT)
         isClickable = false
         ink.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+    }
+
+    fun setFrostedBounds(bounds: List<android.graphics.RectF>) {
+        if (this.frostedBounds == bounds) return
+        this.frostedBounds = bounds
+        ink.invalidate()
+        blurredInk.invalidate()
+        live.invalidate()
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean = false
@@ -146,6 +162,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         if (pageChanged || moved || inkChanged) {
             inkDirty = true
             ink.invalidate()
+            blurredInk.invalidate()
         }
         if (moved) live.invalidate()
     }
@@ -190,6 +207,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         previewing = true
         grid.invalidate()
         ink.invalidate()
+        blurredInk.invalidate()
         live.invalidate()
     }
 
@@ -201,6 +219,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         layoutMedia()
         grid.invalidate()
         ink.invalidate()
+        blurredInk.invalidate()
         live.invalidate()
     }
 
@@ -213,6 +232,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
             inkDirty = true
             grid.invalidate()
             ink.invalidate()
+            blurredInk.invalidate()
             live.invalidate()
         }
     }
@@ -228,6 +248,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         layoutMedia()
         grid.invalidate()
         ink.invalidate()
+        blurredInk.invalidate()
         live.invalidate()
     }
 
@@ -266,6 +287,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         inkDirty = true
         bindMedia(strokes)
         ink.invalidate()
+        blurredInk.invalidate()
     }
 
     fun clearGestureStrokes() {
@@ -498,6 +520,8 @@ class BoardStageView(context: Context) : FrameLayout(context) {
     private inner class LayerView(context: Context) : View(context) {
         private var bitmap: Bitmap? = null
 
+        fun currentBitmap(): Bitmap? = bitmap
+
         override fun onDraw(canvas: android.graphics.Canvas) {
             val width = width.coerceAtLeast(1)
             val height = height.coerceAtLeast(1)
@@ -508,7 +532,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
                 canvas.translate(offsetX, offsetY)
                 canvas.scale(ratio, ratio)
                 canvas.translate(-paintOffsetX, -paintOffsetY)
-                canvas.drawBitmap(existing, 0f, 0f, null)
+                drawBitmapWithFrostedClip(canvas, existing)
                 canvas.restore()
                 return
             }
@@ -533,9 +557,36 @@ class BoardStageView(context: Context) : FrameLayout(context) {
                 scope.draw(density, LayoutDirection.Ltr, Canvas(next.asImageBitmap()), Size(width.toFloat(), height.toFloat())) {
                     paintLayer()
                 }
-                if (this === grid) gridDirty = false else inkDirty = false
+                if (this === grid) gridDirty = false else {
+                    inkDirty = false
+                    blurredInk.invalidate()
+                }
             }
-            canvas.drawBitmap(bitmap!!, 0f, 0f, null)
+            val bmp = bitmap
+            if (bmp != null && !bmp.isRecycled) {
+                drawBitmapWithFrostedClip(canvas, bmp)
+            }
+        }
+
+        private fun drawBitmapWithFrostedClip(canvas: android.graphics.Canvas, bmp: Bitmap) {
+            if (this === ink && frostedBounds.isNotEmpty()) {
+                canvas.save()
+                val clipPath = android.graphics.Path()
+                val r = 22f * density.density
+                for (rect in frostedBounds) {
+                    clipPath.addRoundRect(rect, r, r, android.graphics.Path.Direction.CW)
+                }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    canvas.clipOutPath(clipPath)
+                } else {
+                    @Suppress("DEPRECATION")
+                    canvas.clipPath(clipPath, android.graphics.Region.Op.DIFFERENCE)
+                }
+                canvas.drawBitmap(bmp, 0f, 0f, null)
+                canvas.restore()
+            } else {
+                canvas.drawBitmap(bmp, 0f, 0f, null)
+            }
         }
 
         private fun DrawScope.paintLayer() {
@@ -563,6 +614,40 @@ class BoardStageView(context: Context) : FrameLayout(context) {
 
     }
 
+    private inner class BlurredInkView(context: Context) : View(context) {
+        init {
+            setWillNotDraw(false)
+            isClickable = false
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val blurPx = 6f * density.density
+                setRenderEffect(android.graphics.RenderEffect.createBlurEffect(blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP))
+            }
+        }
+
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            if (frostedBounds.isEmpty()) return
+            val b = ink.currentBitmap() ?: return
+            if (b.isRecycled) return
+
+            canvas.save()
+            val path = android.graphics.Path()
+            val r = 22f * density.density
+            for (rect in frostedBounds) {
+                path.addRoundRect(rect, r, r, android.graphics.Path.Direction.CW)
+            }
+            canvas.clipPath(path)
+
+            if (previewing) {
+                val ratio = if (paintScale == 0f) 1f else scale / paintScale
+                canvas.translate(offsetX, offsetY)
+                canvas.scale(ratio, ratio)
+                canvas.translate(-paintOffsetX, -paintOffsetY)
+            }
+            canvas.drawBitmap(b, 0f, 0f, null)
+            canvas.restore()
+        }
+    }
+
     /**
      * In-progress ink only. Committed strokes stay on the ink bitmap, so a pen
      * sample does not upload that bitmap again.
@@ -572,6 +657,12 @@ class BoardStageView(context: Context) : FrameLayout(context) {
             style = android.graphics.Paint.Style.STROKE
             strokeCap = android.graphics.Paint.Cap.ROUND
             strokeJoin = android.graphics.Paint.Join.ROUND
+        }
+        private val liveBlurPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.STROKE
+            strokeCap = android.graphics.Paint.Cap.ROUND
+            strokeJoin = android.graphics.Paint.Join.ROUND
+            maskFilter = android.graphics.BlurMaskFilter(6f * density.density, android.graphics.BlurMaskFilter.Blur.NORMAL)
         }
         private val path = android.graphics.Path()
         private val liveScope = CanvasDrawScope()
@@ -592,40 +683,75 @@ class BoardStageView(context: Context) : FrameLayout(context) {
             canvas.save()
             canvas.translate(offsetX, offsetY)
             canvas.scale(scale, scale)
-            if (stroke != null && stroke.points.isNotEmpty()) drawStroke(canvas, stroke)
-            if (active != null && active !== stroke && active.points.isNotEmpty()) drawStroke(canvas, active)
+
+            if (frostedBounds.isNotEmpty()) {
+                canvas.save()
+                for (rect in frostedBounds) {
+                    val invLeft = (rect.left - offsetX) / scale
+                    val invTop = (rect.top - offsetY) / scale
+                    val invRight = (rect.right - offsetX) / scale
+                    val invBottom = (rect.bottom - offsetY) / scale
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        canvas.clipOutRect(invLeft, invTop, invRight, invBottom)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        canvas.clipRect(invLeft, invTop, invRight, invBottom, android.graphics.Region.Op.DIFFERENCE)
+                    }
+                }
+                if (stroke != null && stroke.points.isNotEmpty()) drawStroke(canvas, stroke, paint)
+                if (active != null && active !== stroke && active.points.isNotEmpty()) drawStroke(canvas, active, paint)
+                canvas.restore()
+
+                canvas.save()
+                val clipPath = android.graphics.Path()
+                val r = 22f * density.density / scale
+                for (rect in frostedBounds) {
+                    val invLeft = (rect.left - offsetX) / scale
+                    val invTop = (rect.top - offsetY) / scale
+                    val invRight = (rect.right - offsetX) / scale
+                    val invBottom = (rect.bottom - offsetY) / scale
+                    clipPath.addRoundRect(invLeft, invTop, invRight, invBottom, r, r, android.graphics.Path.Direction.CW)
+                }
+                canvas.clipPath(clipPath)
+                if (stroke != null && stroke.points.isNotEmpty()) drawStroke(canvas, stroke, liveBlurPaint)
+                if (active != null && active !== stroke && active.points.isNotEmpty()) drawStroke(canvas, active, liveBlurPaint)
+                canvas.restore()
+            } else {
+                if (stroke != null && stroke.points.isNotEmpty()) drawStroke(canvas, stroke, paint)
+                if (active != null && active !== stroke && active.points.isNotEmpty()) drawStroke(canvas, active, paint)
+            }
             canvas.restore()
         }
 
-        private fun drawStroke(canvas: android.graphics.Canvas, stroke: Stroke) {
+        private fun drawStroke(canvas: android.graphics.Canvas, stroke: Stroke, p: android.graphics.Paint) {
             val points = stroke.points
-            paint.color = stroke.colorValue
-            paint.strokeWidth = fittedStrokeWidth(stroke)
+            p.color = stroke.colorValue
+            p.strokeWidth = fittedStrokeWidth(stroke) * (if (p === liveBlurPaint) 1.5f else 1f)
             if (points.size >= 2 && (
                     stroke.strokeType == StrokeType.RECTANGLE ||
                         stroke.strokeType == StrokeType.FRAME ||
                         stroke.strokeType == StrokeType.CIRCLE
                     )
             ) {
-                paint.alpha = 255
+                p.alpha = 255
                 val a = points.first()
                 val b = points.last()
                 if (stroke.strokeType == StrokeType.CIRCLE) {
-                    canvas.drawOval(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y), paint)
+                    canvas.drawOval(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y), p)
                 } else {
-                    canvas.drawRect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y), paint)
+                    canvas.drawRect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y), p)
                 }
                 return
             }
-            paint.alpha = if (stroke.strokeType == StrokeType.HIGHLIGHTER || stroke.isHighlighter) 102 else 255
+            p.alpha = if (stroke.strokeType == StrokeType.HIGHLIGHTER || stroke.isHighlighter) 102 else 255
             if (points.size == 1) {
-                val previous = paint.style
-                paint.style = android.graphics.Paint.Style.FILL
-                canvas.drawCircle(points[0].x, points[0].y, paint.strokeWidth / 2f, paint)
-                paint.style = previous
+                val previous = p.style
+                p.style = android.graphics.Paint.Style.FILL
+                canvas.drawCircle(points[0].x, points[0].y, p.strokeWidth / 2f, p)
+                p.style = previous
                 return
             }
-            canvas.drawPath(strokePath(points), paint)
+            canvas.drawPath(strokePath(points), p)
         }
 
         private fun strokePath(points: List<Offset>): android.graphics.Path {

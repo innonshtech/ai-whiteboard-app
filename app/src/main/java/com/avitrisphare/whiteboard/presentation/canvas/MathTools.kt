@@ -95,6 +95,155 @@ fun newMathTool(kind: MathToolKind, center: Offset): PlacedMathTool {
     return PlacedMathTool(kind = kind, center = center, span = defaultMathSpan(kind))
 }
 
+fun mathToolRadius(kind: MathToolKind, span: Float): Float = when (kind) {
+    MathToolKind.RULER -> hypot(span / 2f, RULER_THICKNESS / 2f) + 16f
+    MathToolKind.COMPASS -> (span + HINGE_LIFT).coerceAtLeast(160f) + 16f
+    MathToolKind.PROTRACTOR -> span + 20f
+}
+
+fun mathToolRadius(tool: PlacedMathTool): Float = mathToolRadius(tool.kind, tool.span)
+
+fun toCanvasPoint(local: Offset, center: Offset, rotationDeg: Float): Offset {
+    val dir = direction(rotationDeg)
+    val perp = perpendicular(rotationDeg)
+    return Offset(
+        center.x + dir.x * local.x + perp.x * local.y,
+        center.y + dir.y * local.x + perp.y * local.y
+    )
+}
+
+fun mathToolBoundingRect(tool: PlacedMathTool): Rect = when (tool.kind) {
+    MathToolKind.RULER -> {
+        val halfW = tool.span / 2f
+        val halfH = RULER_THICKNESS / 2f
+        val corners = listOf(
+            toCanvasPoint(Offset(-halfW, -halfH), tool.center, tool.rotationDeg),
+            toCanvasPoint(Offset(halfW, -halfH), tool.center, tool.rotationDeg),
+            toCanvasPoint(Offset(halfW, halfH), tool.center, tool.rotationDeg),
+            toCanvasPoint(Offset(-halfW, halfH), tool.center, tool.rotationDeg)
+        )
+        val minX = corners.minOf { it.x }
+        val maxX = corners.maxOf { it.x }
+        val minY = corners.minOf { it.y }
+        val maxY = corners.maxOf { it.y }
+        Rect(minX, minY, maxX, maxY)
+    }
+    MathToolKind.PROTRACTOR -> {
+        val corners = listOf(
+            toCanvasPoint(Offset(-tool.span, -tool.span), tool.center, tool.rotationDeg),
+            toCanvasPoint(Offset(tool.span, -tool.span), tool.center, tool.rotationDeg),
+            toCanvasPoint(Offset(tool.span, 14f), tool.center, tool.rotationDeg),
+            toCanvasPoint(Offset(-tool.span, 14f), tool.center, tool.rotationDeg)
+        )
+        val minX = corners.minOf { it.x }
+        val maxX = corners.maxOf { it.x }
+        val minY = corners.minOf { it.y }
+        val maxY = corners.maxOf { it.y }
+        Rect(minX, minY, maxX, maxY)
+    }
+    MathToolKind.COMPASS -> {
+        val needle = tool.center
+        val pencil = compassPencil(tool)
+        val hinge = compassHinge(tool)
+        val minX = minOf(needle.x, pencil.x, hinge.x) - 18f
+        val maxX = maxOf(needle.x, pencil.x, hinge.x) + 18f
+        val minY = minOf(needle.y, pencil.y, hinge.y) - 18f
+        val maxY = maxOf(needle.y, pencil.y, hinge.y) + 18f
+        Rect(minX, minY, maxX, maxY)
+    }
+}
+
+fun toolsOverlap(a: PlacedMathTool, b: PlacedMathTool, margin: Float = 0f): Boolean {
+    val ra = mathToolBoundingRect(a)
+    val rb = mathToolBoundingRect(b)
+    return ra.left < rb.right - margin && ra.right > rb.left + margin &&
+           ra.top < rb.bottom - margin && ra.bottom > rb.top + margin
+}
+
+fun separateFrom(candidate: PlacedMathTool, existing: PlacedMathTool, separationMargin: Float = 8f): Offset {
+    val ra = mathToolBoundingRect(candidate)
+    val rb = mathToolBoundingRect(existing)
+
+    val overlapX = minOf(ra.right, rb.right) - maxOf(ra.left, rb.left)
+    val overlapY = minOf(ra.bottom, rb.bottom) - maxOf(ra.top, rb.top)
+
+    if (overlapX <= 0f || overlapY <= 0f) return candidate.center
+
+    val raCenterX = (ra.left + ra.right) / 2f
+    val raCenterY = (ra.top + ra.bottom) / 2f
+    val rbCenterX = (rb.left + rb.right) / 2f
+    val rbCenterY = (rb.top + rb.bottom) / 2f
+
+    return if (overlapX < overlapY) {
+        val sign = if (raCenterX >= rbCenterX) 1f else -1f
+        val shift = (overlapX + separationMargin) * sign
+        Offset(candidate.center.x + shift, candidate.center.y)
+    } else {
+        val sign = if (raCenterY >= rbCenterY) 1f else -1f
+        val shift = (overlapY + separationMargin) * sign
+        Offset(candidate.center.x, candidate.center.y + shift)
+    }
+}
+
+fun findNonOverlappingPosition(
+    desiredCenter: Offset,
+    kind: MathToolKind,
+    span: Float,
+    existingTools: List<PlacedMathTool>,
+    canvasSize: Size = Size.Zero
+): Offset {
+    if (existingTools.isEmpty()) return desiredCenter
+
+    var current = PlacedMathTool(kind = kind, center = desiredCenter, span = span)
+
+    // If it doesn't overlap any existing tool, keep it exactly where the user set it!
+    if (!existingTools.any { toolsOverlap(current, it) }) {
+        return desiredCenter
+    }
+
+    val minX = 40f
+    val maxX = if (canvasSize.width > 0) canvasSize.width - 40f else 4000f
+    val minY = 60f
+    val maxY = if (canvasSize.height > 0) canvasSize.height - 60f else 3000f
+
+    // Try tight minimum separation relaxation (nudges just enough to clear overlap, keeping tools close)
+    for (iter in 0 until 5) {
+        val colliding = existingTools.firstOrNull { toolsOverlap(current, it) } ?: break
+        val newCenter = separateFrom(current, colliding)
+        val clampedCenter = Offset(newCenter.x.coerceIn(minX, maxX), newCenter.y.coerceIn(minY, maxY))
+        current = current.copy(center = clampedCenter)
+    }
+
+    if (!existingTools.any { toolsOverlap(current, it) }) {
+        return current.center
+    }
+
+    // Fallback: search in fine 20f steps nearby so it stays as close as possible
+    var testDist = 20f
+    val angles = listOf(0f, 180f, 90f, 270f, 45f, 135f, 225f, 315f)
+    while (testDist <= 800f) {
+        for (deg in angles) {
+            val rad = Math.toRadians(deg.toDouble())
+            val cx = (desiredCenter.x + testDist * Math.cos(rad)).toFloat().coerceIn(minX, maxX)
+            val cy = (desiredCenter.y + testDist * Math.sin(rad)).toFloat().coerceIn(minY, maxY)
+            val cand = current.copy(center = Offset(cx, cy))
+            if (!existingTools.any { toolsOverlap(cand, it) }) {
+                return cand.center
+            }
+        }
+        testDist += 20f
+    }
+
+    return current.center
+}
+
+fun resolveNonOverlappingPosition(
+    candidate: Offset,
+    candidateKind: MathToolKind,
+    candidateSpan: Float,
+    existingTools: List<PlacedMathTool>
+): Offset = findNonOverlappingPosition(candidate, candidateKind, candidateSpan, existingTools)
+
 fun direction(rotationDeg: Float): Offset {
     val rad = rotationDeg / RAD_TO_DEG
     return Offset(cos(rad), sin(rad))

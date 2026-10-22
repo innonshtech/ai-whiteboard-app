@@ -133,4 +133,61 @@ class MathToolsTest {
         assertEquals(CanvasBackground.GRAPH, CanvasBackground.fromKey("graph"))
         assertNotNull(rulerForStraightedge(listOf(newMathTool(MathToolKind.RULER, Offset(80f, 80f))), Offset(80f, 112f)))
     }
+
+    @Test
+    fun toolsDoNotOverlapWhenPlaced() {
+        val ruler = newMathTool(MathToolKind.RULER, Offset(400f, 400f))
+        val candidateProtractor = Offset(400f, 400f) // Dropped directly on top of ruler
+        val resolved = resolveNonOverlappingPosition(
+            candidate = candidateProtractor,
+            candidateKind = MathToolKind.PROTRACTOR,
+            candidateSpan = defaultMathSpan(MathToolKind.PROTRACTOR),
+            existingTools = listOf(ruler)
+        )
+        val placedProtractor = newMathTool(MathToolKind.PROTRACTOR, resolved)
+        assertFalse("Tools must not overlap", toolsOverlap(ruler, placedProtractor))
+        val distance = kotlin.math.hypot(resolved.x - ruler.center.x, resolved.y - ruler.center.y)
+        assertTrue("Tools should separate to clear overlap", distance > 20f)
+        assertTrue("Tools should stay close and not separate by major distance", distance < 200f)
+    }
+
+    @Test
+    fun multipleToolsPlacedConsecutivelyDoNotOverlap() {
+        val tools = mutableListOf<PlacedMathTool>()
+        val kinds = listOf(MathToolKind.RULER, MathToolKind.COMPASS, MathToolKind.PROTRACTOR)
+        val center = Offset(500f, 400f)
+        for (kind in kinds) {
+            val resolved = findNonOverlappingPosition(
+                desiredCenter = center,
+                kind = kind,
+                span = defaultMathSpan(kind),
+                existingTools = tools
+            )
+            tools.add(newMathTool(kind, resolved))
+        }
+        assertEquals(3, tools.size)
+        // Verify every pair does not overlap
+        for (i in 0 until tools.size) {
+            for (j in i + 1 until tools.size) {
+                val a = tools[i]
+                val b = tools[j]
+                assertFalse("Tool ${a.kind} and ${b.kind} should not overlap", toolsOverlap(a, b))
+            }
+        }
+    }
+
+    @Test
+    fun toolsCanSitCloseWithoutBeingRepelled() {
+        val ruler = newMathTool(MathToolKind.RULER, Offset(400f, 400f))
+        // Place protractor right next to ruler along Y axis (just 10px below ruler's bottom edge)
+        val rulerBounds = mathToolBoundingRect(ruler)
+        val closeCandidate = Offset(400f, rulerBounds.bottom + defaultMathSpan(MathToolKind.PROTRACTOR) + 10f)
+        val resolved = findNonOverlappingPosition(
+            desiredCenter = closeCandidate,
+            kind = MathToolKind.PROTRACTOR,
+            span = defaultMathSpan(MathToolKind.PROTRACTOR),
+            existingTools = listOf(ruler)
+        )
+        assertEquals("Tool should stay exactly where placed when not overlapping", closeCandidate, resolved)
+    }
 }

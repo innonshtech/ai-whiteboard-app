@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,9 +25,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -40,8 +43,11 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.CropSquare
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.Edit
@@ -102,6 +108,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import android.graphics.BlurMaskFilter
+import android.graphics.Paint
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -126,9 +138,75 @@ import com.avitrisphare.whiteboard.domain.model.Stroke
 import com.avitrisphare.whiteboard.domain.model.StrokeType
 import kotlinx.coroutines.launch
 
-private val DockColor = Color(0xFF1C2130)
-private val DockLabel = Color(0xFFC9CED6)
-private val PenGradient = listOf(Color(0xFF4C8DFF), Color(0xFF7A5CFF), Color(0xFFD946EF))
+private val DockColor = Color(0x66FFFFFF) // Figma: #FFFFFF 40%
+private val DockLabel = Color(0xFF475569)
+// Button gradient: linear-gradient(90deg, #22D3EE 0%, #3B82F6 50%, #A855F7 100%)
+private val ButtonGradient = listOf(
+    Color(0xFF22D3EE), // 0%
+    Color(0xFF3B82F6), // 50%
+    Color(0xFFA855F7)  // 100%
+)
+
+// Figma: #FFFFFF 40% translucent + #2563EB 20% frosted glass composite (#E4ECFC at 35% opacity for authentic glass translucency)
+private val DockBackgroundColor = Color(0x59E4ECFC)
+private val DockGlassBorder = BorderStroke(1.dp, Color.White.copy(alpha = 0.9f))
+
+// Figma: Drop shadow X: 0, Y: 8, Blur: 28, Spread: 0, Behind transparent areas: checked, Color: #2563EB 20% (#2563EB33)
+// We clip at top = 0 so the shadow casts downward and does NOT bleed upwards onto the canvas!
+private fun Modifier.figmaDropShadow(
+    cornerRadius: androidx.compose.ui.unit.Dp = 18.dp,
+    offsetY: androidx.compose.ui.unit.Dp = 8.dp,
+    blurRadius: androidx.compose.ui.unit.Dp = 20.dp,
+    shadowColor: Color = Color(0x332563EB)
+): Modifier = this.drawBehind {
+    val offsetYPx = offsetY.toPx()
+    val blurPx = blurRadius.toPx()
+    val cornerRadiusPx = cornerRadius.toPx()
+
+    drawIntoCanvas { canvas ->
+        canvas.save()
+        // Clip so shadow casts downwards and never spreads upwards onto the canvas
+        canvas.clipRect(
+            left = -blurPx * 2,
+            top = 0f,
+            right = size.width + blurPx * 2,
+            bottom = size.height + offsetYPx + blurPx * 2
+        )
+        val paint = Paint().apply {
+            color = shadowColor.toArgb()
+            isAntiAlias = true
+            if (blurPx > 0f) {
+                maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+            }
+        }
+        canvas.nativeCanvas.drawRoundRect(
+            0f,
+            offsetYPx,
+            size.width,
+            size.height + offsetYPx,
+            cornerRadiusPx,
+            cornerRadiusPx,
+            paint
+        )
+        canvas.restore()
+    }
+}
+
+private enum class ActiveDockTool {
+    SELECT,
+    PEN,
+    SHAPES,
+    ERASER,
+    LASER,
+    GEOMETRY,
+    RULER,
+    COMPASS,
+    PROTRACTOR,
+    MEDIA,
+    TOOLS,
+    SPLIT,
+    MORE
+}
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -161,6 +239,7 @@ fun AvitriSphareWhiteboardChrome(
     onMathDrag: (MathToolKind, Offset) -> Unit,
     onMathDragEnd: (MathToolKind, Offset, Boolean) -> Unit,
     onDockBounds: (Rect) -> Unit,
+    onFrostedBounds: (List<Rect>) -> Unit = {},
     onOpenDocument: () -> Unit,
     demoMode: Boolean = false,
     dockDismissNonce: Int = 0,
@@ -182,8 +261,19 @@ fun AvitriSphareWhiteboardChrome(
     val scope = rememberCoroutineScope()
     var panel by remember { mutableStateOf<String?>(null) }
     var pageMenuIndex by remember { mutableStateOf<Int?>(null) }
+    var pageToDeleteIndex by remember { mutableStateOf<Int?>(null) }
     var renamePageTitle by remember { mutableStateOf("") }
     var selectionColorTarget by remember { mutableStateOf("border") }
+
+    var topBarBounds by remember { mutableStateOf<Rect?>(null) }
+    var leftBarBounds by remember { mutableStateOf<Rect?>(null) }
+    var centerBarBounds by remember { mutableStateOf<Rect?>(null) }
+    var rightBarBounds by remember { mutableStateOf<Rect?>(null) }
+
+    androidx.compose.runtime.LaunchedEffect(topBarBounds, leftBarBounds, centerBarBounds, rightBarBounds) {
+        val list = listOfNotNull(topBarBounds, leftBarBounds, centerBarBounds, rightBarBounds)
+        onFrostedBounds(list)
+    }
 
     androidx.compose.runtime.LaunchedEffect(dockDismissNonce) {
         if (dockDismissNonce > 0) panel = null
@@ -222,10 +312,18 @@ fun AvitriSphareWhiteboardChrome(
         Surface(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .statusBarsPadding(),
-            shape = RoundedCornerShape(16.dp),
-            color = Color.White,
-            shadowElevation = 8.dp
+                .statusBarsPadding()
+                .onGloballyPositioned { topBarBounds = it.boundsInRoot() }
+                .figmaDropShadow(
+                    cornerRadius = 18.dp,
+                    offsetY = 6.dp,
+                    blurRadius = 16.dp,
+                    shadowColor = if (state.isDarkCanvas) Color(0x40000000) else Color(0x332563EB)
+                ),
+            shape = RoundedCornerShape(18.dp),
+            color = if (state.isDarkCanvas) Color(0x661E293B) else DockBackgroundColor,
+            border = if (state.isDarkCanvas) BorderStroke(1.dp, Color(0x40FFFFFF)) else DockGlassBorder,
+            shadowElevation = 0.dp
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -971,22 +1069,60 @@ fun AvitriSphareWhiteboardChrome(
                         strokes = strokes,
                         selected = index == state.pageIndex,
                         dark = state.isDarkCanvas,
+                        canDelete = !documentOpen && count > 1,
                         onClick = { viewModel.selectPage(index) },
+                        onDelete = { pageToDeleteIndex = index },
                         onLongClick = { pageMenuIndex = index }
                     )
                 }
                 if (state.document == null && state.pageCount < 50) {
-                    Box(
+                    Surface(
                         modifier = Modifier
                             .size(width = 72.dp, height = 52.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFF1C2130))
                             .clickable { viewModel.addPage() },
-                        contentAlignment = Alignment.Center
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (state.isDarkCanvas) Color(0xFF262626) else Color(0xFFF1F5F9),
+                        border = BorderStroke(1.dp, if (state.isDarkCanvas) Color(0xFF404040) else Color(0xFFCBD5E1)),
+                        shadowElevation = 0.dp
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Add page", tint = Color.White)
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "Add page",
+                                tint = Color(0xFF2563EB),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                     }
                 }
+            }
+
+            pageToDeleteIndex?.let { idx ->
+                val pageTitle = state.pageTitles.getOrElse(idx) { "Page ${idx + 1}" }
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { pageToDeleteIndex = null },
+                    title = { Text("Delete $pageTitle?", fontWeight = FontWeight.SemiBold) },
+                    text = { Text("Are you sure you want to remove $pageTitle? All drawings on this page will be deleted.") },
+                    confirmButton = {
+                        androidx.compose.material3.Button(
+                            onClick = {
+                                viewModel.deletePage(idx)
+                                pageToDeleteIndex = null
+                                Toast.makeText(context, "$pageTitle removed", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFEF4444)
+                            )
+                        ) {
+                            Text("Delete", color = Color.White)
+                        }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = { pageToDeleteIndex = null }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
 
             pageMenuIndex?.let { idx ->
@@ -1005,13 +1141,39 @@ fun AvitriSphareWhiteboardChrome(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom
             ) {
-                DockBar {
-                    DockItem(Icons.Default.Person, "Profile", panel == "profile") { toggle("profile") }
-                    DockItem(Icons.Default.Menu, "Main Menu") { panel = null; onOpenMenu() }
-                    DockItem(Icons.Default.Logout, "Exit") { panel = null; onExit() }
+                // 1) Left Bar: Profile, Main Menu, Exit
+                DockBar(
+                    modifier = Modifier.onGloballyPositioned { leftBarBounds = it.boundsInRoot() },
+                    isDark = state.isDarkCanvas
+                ) {
+                    DockItem(
+                        icon = Icons.Default.Person,
+                        label = "Profile",
+                        active = panel == "profile",
+                        tint = Color(0xFF2563EB)
+                    ) { toggle("profile") }
+
+                    DockItem(
+                        icon = Icons.Default.Menu,
+                        label = "Main Menu",
+                        tint = Color(0xFF2563EB)
+                    ) { panel = null; onOpenMenu() }
+
+                    DockItem(
+                        icon = Icons.Default.Logout,
+                        label = "Exit",
+                        tint = Color(0xFFEF4444)
+                    ) { panel = null; onExit() }
                 }
 
-                DockBar(modifier = Modifier.weight(1f, fill = false).padding(horizontal = 8.dp)) {
+                // 2) Center Bar: Main Tools
+                DockBar(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .padding(horizontal = 8.dp)
+                        .onGloballyPositioned { centerBarBounds = it.boundsInRoot() },
+                    isDark = state.isDarkCanvas
+                ) {
                     Row(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically
@@ -1022,141 +1184,251 @@ fun AvitriSphareWhiteboardChrome(
                             WhiteboardTool.DIAMOND,
                             WhiteboardTool.LINE,
                             WhiteboardTool.ARROW,
-                            WhiteboardTool.SHAPE
+                            WhiteboardTool.SHAPE,
+                            WhiteboardTool.TRIANGLE,
+                            WhiteboardTool.STAR,
+                            WhiteboardTool.ELLIPSE,
+                            WhiteboardTool.SQUARE,
+                            WhiteboardTool.HEXAGON,
+                            WhiteboardTool.ROUND_RECT,
+                            WhiteboardTool.CUBE,
+                            WhiteboardTool.CYLINDER,
+                            WhiteboardTool.CONE,
+                            WhiteboardTool.PYRAMID
                         )
-                        DockItem(Icons.Default.NearMe, "Select", state.currentTool == WhiteboardTool.SELECT) {
+
+                        val activeDockTool = when {
+                            panel == "ink" -> ActiveDockTool.PEN
+                            panel == "shapes" -> ActiveDockTool.SHAPES
+                            panel == "eraser" -> ActiveDockTool.ERASER
+                            panel == "geometry" -> ActiveDockTool.GEOMETRY
+                            panel == "media" -> ActiveDockTool.MEDIA
+                            panel == "utilities" -> ActiveDockTool.TOOLS
+                            panel == "split" -> ActiveDockTool.SPLIT
+                            panel == "more" || panel == "color" || panel == "background" -> ActiveDockTool.MORE
+                            state.currentTool in WRITING_TOOLS -> ActiveDockTool.PEN
+                            state.currentTool in shapeTools -> ActiveDockTool.SHAPES
+                            state.currentTool == WhiteboardTool.ERASER -> ActiveDockTool.ERASER
+                            state.currentTool == WhiteboardTool.LASER -> ActiveDockTool.LASER
+                            state.currentTool == WhiteboardTool.FRAME -> ActiveDockTool.GEOMETRY
+                            state.currentTool == WhiteboardTool.RULER -> ActiveDockTool.RULER
+                            state.currentTool == WhiteboardTool.COMPASS -> ActiveDockTool.COMPASS
+                            state.currentTool == WhiteboardTool.PROTRACTOR -> ActiveDockTool.PROTRACTOR
+                            state.currentTool == WhiteboardTool.TEXT || state.currentTool == WhiteboardTool.STICKY_NOTE -> ActiveDockTool.MEDIA
+                            else -> ActiveDockTool.SELECT
+                        }
+
+                        DockItem(
+                            icon = Icons.Default.NearMe,
+                            label = "Select",
+                            active = activeDockTool == ActiveDockTool.SELECT,
+                            tint = Color(0xFF0EA5E9)
+                        ) {
                             panel = null
                             viewModel.setTool(WhiteboardTool.SELECT)
                         }
                         DockItem(
                             icon = Icons.Default.Edit,
                             label = state.inkTool.label,
-                            active = state.currentTool == state.inkTool,
+                            active = activeDockTool == ActiveDockTool.PEN,
+                            tint = Color(0xFF2563EB),
                             swatch = state.selectedColor
                         ) {
                             viewModel.setTool(state.inkTool)
                             toggle("ink")
                         }
-                        DockItem(Icons.Default.Category, "Shapes", state.currentTool in shapeTools || panel == "shapes") {
+                        DockItem(
+                            icon = Icons.Default.Category,
+                            label = "Shapes",
+                            active = activeDockTool == ActiveDockTool.SHAPES,
+                            tint = Color(0xFF8B5CF6)
+                        ) {
                             toggle("shapes")
                         }
                         DockItem(
-                            Icons.Default.AutoFixNormal,
-                            "Eraser",
-                            state.currentTool == WhiteboardTool.ERASER || panel == "eraser"
+                            icon = Icons.Default.AutoFixNormal,
+                            label = "Eraser",
+                            active = activeDockTool == ActiveDockTool.ERASER,
+                            tint = Color(0xFFEC4899)
                         ) {
                             viewModel.setTool(WhiteboardTool.ERASER)
                             toggle("eraser")
                         }
-                        DockItem(Icons.Default.Highlight, "Laser", state.currentTool == WhiteboardTool.LASER) {
+                        DockItem(
+                            icon = Icons.Default.Highlight,
+                            label = "Laser",
+                            active = activeDockTool == ActiveDockTool.LASER,
+                            tint = Color(0xFFEAB308)
+                        ) {
                             panel = null
                             viewModel.setTool(WhiteboardTool.LASER)
                         }
                         DockItem(
-                            Icons.Default.ChangeHistory,
-                            "Geometry",
-                            state.isDrawToShapeEnabled || state.currentTool == WhiteboardTool.FRAME || panel == "geometry"
+                            icon = Icons.Default.ChangeHistory,
+                            label = "Geometry",
+                            active = activeDockTool == ActiveDockTool.GEOMETRY,
+                            tint = Color(0xFF10B981)
                         ) { toggle("geometry") }
                         DraggableDockItem(
                             icon = Icons.Default.Straighten,
                             label = "Ruler",
-                            active = rulerPlaced || state.currentTool == WhiteboardTool.RULER,
+                            active = activeDockTool == ActiveDockTool.RULER,
+                            tint = Color(0xFF6366F1),
                             onDrag = { onMathDrag(MathToolKind.RULER, it) },
-                            onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.RULER, at, moved) }
+                            onDragEnd = { at: Offset, moved: Boolean -> onMathDragEnd(MathToolKind.RULER, at, moved) }
                         )
                         DraggableDockItem(
                             icon = Icons.Default.Architecture,
                             label = "Compass",
-                            active = compassPlaced || state.currentTool == WhiteboardTool.COMPASS,
+                            active = activeDockTool == ActiveDockTool.COMPASS,
+                            tint = Color(0xFF6366F1),
                             onDrag = { onMathDrag(MathToolKind.COMPASS, it) },
-                            onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.COMPASS, at, moved) }
+                            onDragEnd = { at: Offset, moved: Boolean -> onMathDragEnd(MathToolKind.COMPASS, at, moved) }
                         )
                         DraggableDockItem(
                             icon = Icons.Default.Speed,
                             label = "Protractor",
-                            active = protractorPlaced || state.currentTool == WhiteboardTool.PROTRACTOR,
+                            active = activeDockTool == ActiveDockTool.PROTRACTOR,
+                            tint = Color(0xFF6366F1),
                             onDrag = { onMathDrag(MathToolKind.PROTRACTOR, it) },
-                            onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.PROTRACTOR, at, moved) }
+                            onDragEnd = { at: Offset, moved: Boolean -> onMathDragEnd(MathToolKind.PROTRACTOR, at, moved) }
                         )
                         DockItem(
-                            Icons.Default.Videocam,
-                            "Media",
-                            panel == "media" || state.currentTool == WhiteboardTool.TEXT || state.currentTool == WhiteboardTool.STICKY_NOTE
+                            icon = Icons.Default.Videocam,
+                            label = "Media",
+                            active = activeDockTool == ActiveDockTool.MEDIA,
+                            tint = Color(0xFF0EA5E9)
                         ) { toggle("media") }
                         DockItem(
-                            Icons.Default.Widgets,
-                            "Tools",
-                            isTimerVisible || isStopwatchVisible || isCalculatorVisible || isPeriodicTableVisible || panel == "utilities"
+                            icon = Icons.Default.Widgets,
+                            label = "Tools",
+                            active = activeDockTool == ActiveDockTool.TOOLS,
+                            tint = Color(0xFF8B5CF6)
                         ) { toggle("utilities") }
-                        DockItem(Icons.Default.Undo, "Undo", enabled = state.canUndo) {
+                        DockItem(
+                            icon = Icons.Default.Undo,
+                            label = "Undo",
+                            enabled = state.canUndo,
+                            tint = Color(0xFFF59E0B)
+                        ) {
                             panel = null
                             viewModel.undo()
                         }
-                        DockItem(Icons.Default.Redo, "Redo", enabled = state.canRedo) {
+                        DockItem(
+                            icon = Icons.Default.Redo,
+                            label = "Redo",
+                            enabled = state.canRedo,
+                            tint = Color(0xFFF97316)
+                        ) {
                             panel = null
                             viewModel.redo()
                         }
-                        DockItem(Icons.Default.Save, "Save") {
+                        DockItem(
+                            icon = Icons.Default.Save,
+                            label = "Save",
+                            tint = Color(0xFF10B981)
+                        ) {
                             panel = null
                             scope.launch {
                                 viewModel.saveNow()
                                 Toast.makeText(context, "Saved", Toast.LENGTH_SHORT).show()
                             }
                         }
-                        DockItem(Icons.Default.IosShare, "Export") {
+                        DockItem(
+                            icon = Icons.Default.IosShare,
+                            label = "Export",
+                            tint = Color(0xFF2563EB)
+                        ) {
                             panel = null
                             onExport()
                         }
-                        DockItem(Icons.Default.Dashboard, "Split", state.splitCount > 1 || panel == "split") {
+                        DockItem(
+                            icon = Icons.Default.Dashboard,
+                            label = "Split",
+                            active = activeDockTool == ActiveDockTool.SPLIT,
+                            tint = Color(0xFF6366F1)
+                        ) {
                             toggle("split")
                         }
-                        DockItem(Icons.Default.MoreHoriz, "More", panel == "more" || panel == "color" || panel == "background") {
+                        DockItem(
+                            icon = Icons.Default.MoreHoriz,
+                            label = "More",
+                            active = activeDockTool == ActiveDockTool.MORE,
+                            tint = Color(0xFF8B5CF6)
+                        ) {
                             toggle("more")
                         }
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    DockBar {
-                        DockItem(Icons.Default.ChevronLeft, "Prev", enabled = state.pageIndex > 0) {
+                // 3) Right Bar: Prev, Page Counter, Next (compact DockBar) + Add button
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DockBar(
+                        modifier = Modifier.onGloballyPositioned { rightBarBounds = it.boundsInRoot() },
+                        isDark = state.isDarkCanvas
+                    ) {
+                        DockItem(
+                            icon = Icons.Default.ChevronLeft,
+                            label = "Prev",
+                            enabled = state.pageIndex > 0,
+                            tint = Color(0xFF2563EB)
+                        ) {
                             viewModel.selectPage(state.pageIndex - 1)
                         }
+
                         Text(
-                            "${state.pageIndex + 1}/${state.pageCount.coerceAtLeast(1)}",
-                            color = Color.White,
+                            text = "${state.pageIndex + 1}/${state.pageCount.coerceAtLeast(1)}",
+                            color = Color(0xFF1E293B),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier
                                 .padding(horizontal = 4.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF2A3142))
+                                .background(Color(0xFFE2E8F0))
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
                         )
-                        DockItem(Icons.Default.ChevronRight, "Next", enabled = state.pageIndex < state.pageCount - 1) {
+
+                        DockItem(
+                            icon = Icons.Default.ChevronRight,
+                            label = "Next",
+                            enabled = state.pageIndex < state.pageCount - 1,
+                            tint = Color(0xFF2563EB)
+                        ) {
                             viewModel.selectPage(state.pageIndex + 1)
                         }
                     }
+
                     Spacer(Modifier.width(8.dp))
-                    Box(contentAlignment = Alignment.Center) {
-                        Box(
-                            modifier = Modifier
-                                .size(58.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.radialGradient(
-                                        listOf(Color(0xFF8B5CF6).copy(alpha = 0.55f), Color.Transparent)
-                                    )
-                                )
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(Brush.linearGradient(PenGradient))
-                                .clickable { toggle("add") },
-                            contentAlignment = Alignment.Center
+
+                    Box(
+                        modifier = Modifier
+                            .height(42.dp)
+                            .width(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Brush.horizontalGradient(ButtonGradient))
+                            .clickable { toggle("add") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "Add", tint = Color.White)
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "Add page",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.height(1.dp))
+                            Text(
+                                text = "Add",
+                                color = Color.White,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
+                            )
                         }
                     }
                 }
@@ -1168,18 +1440,26 @@ fun AvitriSphareWhiteboardChrome(
 @Composable
 private fun DockBar(
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    cornerRadius: androidx.compose.ui.unit.Dp = 22.dp,
+    isDark: Boolean = false,
+    content: @Composable RowScope.() -> Unit
 ) {
     Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(22.dp),
-        color = DockColor,
-        shadowElevation = 14.dp
+        modifier = modifier.figmaDropShadow(
+            cornerRadius = cornerRadius,
+            offsetY = 8.dp,
+            blurRadius = 20.dp,
+            shadowColor = if (isDark) Color(0x40000000) else Color(0x332563EB)
+        ),
+        shape = RoundedCornerShape(cornerRadius),
+        color = if (isDark) Color(0x661E293B) else DockBackgroundColor,
+        border = if (isDark) BorderStroke(1.dp, Color(0x40FFFFFF)) else DockGlassBorder,
+        shadowElevation = 0.dp
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            content = { content() }
+            content = content
         )
     }
 }
@@ -1190,6 +1470,7 @@ private fun DockItem(
     label: String,
     active: Boolean = false,
     enabled: Boolean = true,
+    tint: Color = Color(0xFF2563EB),
     swatch: Int? = null,
     onClick: () -> Unit
 ) {
@@ -1205,7 +1486,7 @@ private fun DockItem(
                 .size(30.dp)
                 .clip(RoundedCornerShape(9.dp))
                 .background(
-                    if (active) Brush.linearGradient(PenGradient)
+                    if (active) Brush.horizontalGradient(ButtonGradient)
                     else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                 ),
             contentAlignment = Alignment.Center
@@ -1213,23 +1494,26 @@ private fun DockItem(
             Icon(
                 icon,
                 contentDescription = label,
-                tint = if (enabled) Color.White else Color(0xFF6B7280),
+                tint = if (active) Color.White else if (enabled) tint else Color(0xFF94A3B8),
                 modifier = Modifier.size(16.dp)
             )
             if (swatch != null) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
+                        .padding(2.dp)
                         .size(8.dp)
                         .clip(CircleShape)
                         .background(Color(swatch))
                 )
             }
         }
+        Spacer(Modifier.height(2.dp))
         Text(
             text = label,
-            color = if (enabled) DockLabel else Color(0xFF6B7280),
+            color = if (!enabled) Color(0xFF94A3B8) else if (active) Color(0xFF1E293B) else DockLabel,
             fontSize = 9.sp,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1
         )
     }
@@ -1240,6 +1524,7 @@ private fun DraggableDockItem(
     icon: ImageVector,
     label: String,
     active: Boolean,
+    tint: Color = Color(0xFF6366F1),
     onDrag: (Offset) -> Unit,
     onDragEnd: (Offset, Boolean) -> Unit
 ) {
@@ -1279,14 +1564,26 @@ private fun DraggableDockItem(
                 .size(30.dp)
                 .clip(RoundedCornerShape(9.dp))
                 .background(
-                    if (active) Brush.linearGradient(PenGradient)
+                    if (active) Brush.horizontalGradient(ButtonGradient)
                     else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(16.dp))
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = if (active) Color.White else tint,
+                modifier = Modifier.size(16.dp)
+            )
         }
-        Text(text = label, color = DockLabel, fontSize = 9.sp, maxLines = 1)
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = label,
+            color = if (active) Color(0xFF1E293B) else DockLabel,
+            fontSize = 9.sp,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1
+        )
     }
 }
 
@@ -1297,7 +1594,7 @@ private fun DockPopover(content: @Composable () -> Unit) {
         color = Color.White,
         shadowElevation = 12.dp,
         modifier = Modifier
-            .padding(bottom = 4.dp)
+            .padding(bottom = 6.dp)
             .widthIn(min = 200.dp, max = 460.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -1361,7 +1658,9 @@ private fun PageThumbnail(
     strokes: List<Stroke>,
     selected: Boolean,
     dark: Boolean,
+    canDelete: Boolean = false,
     onClick: () -> Unit,
+    onDelete: () -> Unit = {},
     onLongClick: () -> Unit = {}
 ) {
     Column(
@@ -1416,6 +1715,26 @@ private fun PageThumbnail(
                     )
                 }
             }
+
+            if (canDelete) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(2.dp)
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFEF4444).copy(alpha = 0.92f))
+                        .clickable(onClick = onDelete),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Delete page",
+                        tint = Color.White,
+                        modifier = Modifier.size(11.dp)
+                    )
+                }
+            }
         }
         Text(
             text = title.take(12),
@@ -1441,16 +1760,49 @@ private fun PageActionsDialog(
         title = { Text("Page ${pageIndex + 1}") },
         text = {
             Column {
-                OutlinedTextField(value = draft, onValueChange = { draft = it }, label = { Text("Name") })
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { onDuplicate(); onDismiss() }
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Duplicate")
+                    }
+                    androidx.compose.material3.Button(
+                        onClick = { onDelete(); onDismiss() },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFEF4444)
+                        )
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Delete", color = Color.White)
+                    }
+                }
             }
         },
         confirmButton = {
-            Text("Save", modifier = Modifier.clickable { onRename(draft); onDismiss() })
+            androidx.compose.material3.Button(
+                onClick = { onRename(draft); onDismiss() }
+            ) {
+                Text("Save")
+            }
         },
         dismissButton = {
-            Row {
-                Text("Duplicate", modifier = Modifier.clickable { onDuplicate(); onDismiss() }.padding(end = 12.dp))
-                Text("Delete", modifier = Modifier.clickable { onDelete(); onDismiss() })
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text("Cancel")
             }
         }
     )

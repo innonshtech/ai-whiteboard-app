@@ -915,6 +915,7 @@ fun CanvasScreen(
     var canvasSize by remember { mutableStateOf(Size.Zero) }
     var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
     var dockBounds by remember { mutableStateOf<Rect?>(null) }
+    var frostedRects by remember { mutableStateOf<List<Rect>>(emptyList()) }
     var dockDismissNonce by remember { mutableIntStateOf(0) }
 
     // Math instruments live in screen space so centimetre marks stay physical size.
@@ -953,21 +954,6 @@ fun CanvasScreen(
         mathTools = mathTools.map { if (it.id == updated.id) updated else it }
     }
 
-    fun placeMathTool(kind: MathToolKind, center: Offset) {
-        val existing = mathTools.indexOfFirst { it.kind == kind }
-        if (existing >= 0) {
-            mathTools = mathTools.toMutableList().also { it[existing] = mathTools[existing].copy(center = center) }
-        } else {
-            mathTools = mathTools + newMathTool(kind, center)
-        }
-        val tool = when (kind) {
-            MathToolKind.RULER -> WhiteboardTool.RULER
-            MathToolKind.COMPASS -> WhiteboardTool.COMPASS
-            MathToolKind.PROTRACTOR -> WhiteboardTool.PROTRACTOR
-        }
-        viewModel.setTool(tool)
-    }
-
     fun removeMathTool(id: String) {
         val removed = mathTools.find { it.id == id } ?: return
         mathTools = mathTools.filter { it.id != id }
@@ -977,8 +963,72 @@ fun CanvasScreen(
             MathToolKind.PROTRACTOR -> WhiteboardTool.PROTRACTOR
         }
         if (viewModel.state.value.currentTool == active) {
+            val remaining = mathTools.lastOrNull()
+            if (remaining != null) {
+                val nextTool = when (remaining.kind) {
+                    MathToolKind.RULER -> WhiteboardTool.RULER
+                    MathToolKind.COMPASS -> WhiteboardTool.COMPASS
+                    MathToolKind.PROTRACTOR -> WhiteboardTool.PROTRACTOR
+                }
+                viewModel.setTool(nextTool)
+            } else {
+                viewModel.setTool(WhiteboardTool.SELECT)
+            }
+        }
+    }
+
+    fun removeAllMathTools() {
+        mathTools = emptyList()
+        val current = viewModel.state.value.currentTool
+        if (current == WhiteboardTool.RULER || current == WhiteboardTool.COMPASS || current == WhiteboardTool.PROTRACTOR) {
             viewModel.setTool(WhiteboardTool.SELECT)
         }
+    }
+
+    fun placeMathTool(kind: MathToolKind, center: Offset, isDrag: Boolean = false) {
+        val existingIndex = mathTools.indexOfFirst { it.kind == kind }
+
+        val tool = when (kind) {
+            MathToolKind.RULER -> WhiteboardTool.RULER
+            MathToolKind.COMPASS -> WhiteboardTool.COMPASS
+            MathToolKind.PROTRACTOR -> WhiteboardTool.PROTRACTOR
+        }
+
+        if (existingIndex >= 0) {
+            // Tool is already on the whiteboard:
+            if (isDrag) {
+                val otherTools = mathTools.filterIndexed { i, _ -> i != existingIndex }
+                val resolvedCenter = findNonOverlappingPosition(
+                    desiredCenter = center,
+                    kind = kind,
+                    span = mathTools[existingIndex].span,
+                    existingTools = otherTools,
+                    canvasSize = canvasSize
+                )
+                mathTools = mathTools.toMutableList().also {
+                    it[existingIndex] = it[existingIndex].copy(center = resolvedCenter)
+                }
+                viewModel.setTool(tool)
+            } else {
+                // Tapped in the dock when already active: toggle close!
+                removeMathTool(mathTools[existingIndex].id)
+                Toast.makeText(context, "${kind.name.lowercase().replaceFirstChar { it.uppercase() }} closed", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
+        // Tool is new: add it to the whiteboard alongside existing tools without overlapping
+        val targetCenter = if (isDrag) center else canvasCenter()
+        val resolvedCenter = findNonOverlappingPosition(
+            desiredCenter = targetCenter,
+            kind = kind,
+            span = defaultMathSpan(kind),
+            existingTools = mathTools,
+            canvasSize = canvasSize
+        )
+        val newTool = newMathTool(kind, resolvedCenter)
+        mathTools = mathTools + newTool
+        viewModel.setTool(tool)
     }
 
     fun rootToCanvas(root: Offset): Offset = root - canvasOrigin
@@ -1819,7 +1869,21 @@ fun CanvasScreen(
                                 viewModel.cancelCurrentStroke()
                                 removeMathTool(tool.id)
                                 Toast.makeText(context, "Tool removed", Toast.LENGTH_SHORT).show()
-                            } else if (tool != null && tool.kind == MathToolKind.COMPASS && mathGesture.zone == MathToolZone.PENCIL) {
+                            } else {
+                                if (tool != null && mathGesture.movedPx > MATH_TAP_SLOP) {
+                                    val otherTools = mathTools.filter { it.id != tool.id }
+                                    val resolved = findNonOverlappingPosition(
+                                        desiredCenter = tool.center,
+                                        kind = tool.kind,
+                                        span = tool.span,
+                                        existingTools = otherTools,
+                                        canvasSize = canvasSize
+                                    )
+                                    if (resolved != tool.center) {
+                                        replaceMathTool(tool.copy(center = resolved))
+                                    }
+                                }
+                                if (tool != null && tool.kind == MathToolKind.COMPASS && mathGesture.zone == MathToolZone.PENCIL) {
                                 val worldCenter = CanvasTransform.screenToWorld(
                                     tool.center,
                                     canvasScale,
@@ -1857,7 +1921,8 @@ fun CanvasScreen(
                                     )
                                 )
                             }
-                            mathReadout = null
+                        }
+                        mathReadout = null
                         } else if (!wasMultiTouch) {
                             val latest = viewModel.state.value
                             val moved = kotlin.math.hypot(
@@ -1965,6 +2030,7 @@ fun CanvasScreen(
                         document?.pageHeight ?: 0f
                     )
                     stage.setDocumentFrame(page.documentFrameX, page.documentFrameY, page.documentFrameScale)
+                    stage.setFrostedBounds(frostedRects.map { android.graphics.RectF(it.left, it.top, it.right, it.bottom) })
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -2133,10 +2199,14 @@ fun CanvasScreen(
                 val overToolbar = moved && droppedOnToolbar(root, dockBounds)
                 if (!overToolbar) {
                     val local = if (moved) rootToCanvas(root) else canvasCenter()
-                    placeMathTool(kind, local)
+                    placeMathTool(kind, local, isDrag = moved)
                 }
             },
             onDockBounds = { dockBounds = it },
+            onFrostedBounds = {
+                frostedRects = it
+                boardStage?.setFrostedBounds(it.map { r -> android.graphics.RectF(r.left, r.top, r.right, r.bottom) })
+            },
             onOpenDocument = {
                 documentPickerLauncher.launch(
                     arrayOf(
@@ -2498,19 +2568,25 @@ fun CanvasScreen(
                 canvasScale,
                 Offset(canvasOffsetX, canvasOffsetY)
             )
+            val dockTop = dockBounds?.top ?: Float.MAX_VALUE
+            val targetY = if (anchor.y + 70f >= dockTop) {
+                (anchor.y - 70f).coerceAtLeast(80f)
+            } else {
+                (anchor.y + 12f).coerceAtLeast(80f)
+            }
             Surface(
                 modifier = Modifier
-                    .offset { IntOffset(anchor.x.roundToInt().coerceAtLeast(8), (anchor.y + 12f).roundToInt().coerceAtLeast(8)) }
+                    .offset { IntOffset(anchor.x.roundToInt().coerceAtLeast(8), targetY.roundToInt()) }
                     .widthIn(max = 520.dp),
-                shape = RoundedCornerShape(18.dp),
-                color = Color(0xFF1C2130),
-                shadowElevation = 10.dp
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White,
+                shadowElevation = 8.dp
             ) {
                 Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                     if (smartOffer.lowConfidence) {
                         Text(
                             "Low confidence — please check",
-                            color = Color(0xFFFBBF24),
+                            color = Color(0xFFD97706),
                             fontSize = 12.sp,
                             modifier = Modifier.padding(bottom = 6.dp)
                         )
@@ -2524,8 +2600,8 @@ fun CanvasScreen(
                                     .clip(CircleShape)
                                     .background(Color(color))
                                     .border(
-                                        width = if (smartOffer.color == color) 2.dp else 0.dp,
-                                        color = Color.White,
+                                        width = if (smartOffer.color == color) 2.dp else 1.dp,
+                                        color = if (smartOffer.color == color) Color(0xFF3B82F6) else Color(0xFFE2E8F0),
                                         shape = CircleShape
                                     )
                                     .clickable { viewModel.recolorSmartWrite(color) }
@@ -2534,20 +2610,20 @@ fun CanvasScreen(
                         smartOffer.candidates.forEach { candidate ->
                             Text(
                                 text = candidate,
-                                color = Color(0xFF111827),
+                                color = Color(0xFF1E293B),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier
                                     .padding(end = 6.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(Color.White)
+                                    .background(Color(0xFFF1F5F9))
                                     .clickable { viewModel.acceptSmartWrite(candidate) }
                                     .padding(horizontal = 12.dp, vertical = 6.dp)
                             )
                         }
                         Text(
                             text = "Close",
-                            color = Color(0xFFD1D5DB),
+                            color = Color(0xFF64748B),
                             fontSize = 12.sp,
                             modifier = Modifier
                                 .clickable { viewModel.dismissSmartWrite() }
