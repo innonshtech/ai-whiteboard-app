@@ -159,7 +159,7 @@ data class CanvasState(
     val errorMessage: String? = null,
     val secondaryColor: Int = 0xFF3B82F6.toInt(),
     val useSecondaryPenColor: Boolean = false,
-    val inkSampleGapMm: Float = 0.4f,
+    val inkSampleGapMm: Float = DEFAULT_INK_SAMPLE_GAP_MM,
     val palmEraserEnabled: Boolean = false,
     val restrictEraserToSelection: Boolean = false,
     val pageTitles: List<String> = listOf("Page 1"),
@@ -1067,6 +1067,10 @@ class CanvasViewModel @Inject constructor(
             }
             return false
         }
+    }
+
+    fun selectStrokes(ids: Set<String>) {
+        _state.update { it.copy(selectedStrokeIds = ids) }
     }
 
     fun selectInRect(rect: Rect) {
@@ -2810,9 +2814,43 @@ class CanvasViewModel @Inject constructor(
                     activePage = pkg.metadata.activePage.coerceIn(0, pages.lastIndex)
                     undoStack.clear()
                     redoStack.clear()
+
+                    val effectiveTitle = pkg.title.ifBlank { "Imported Lesson" }
+                    val currentNoteId = _state.value.noteId.ifEmpty {
+                        val newId = java.util.UUID.randomUUID().toString()
+                        _state.update { it.copy(noteId = newId) }
+                        newId
+                    }
+
+                    // Restore split panes if saved in package
+                    if (pkg.splitCount != null && pkg.splitCount > 1 && !pkg.splitPanes.isNullOrEmpty()) {
+                        val restoredPanes = pkg.splitPanes.mapIndexed { idx, pane ->
+                            val kind = runCatching { PaneKind.valueOf(pane.kind ?: "BOARD") }.getOrDefault(PaneKind.BOARD)
+                            val tool = runCatching { WhiteboardTool.valueOf(pane.tool ?: "PEN") }.getOrDefault(WhiteboardTool.PEN)
+                            CanvasPane(
+                                id = idx,
+                                kind = kind,
+                                strokes = pane.strokes.orEmpty().map { it.toDomain() },
+                                source = pane.source.orEmpty(),
+                                label = pane.label.orEmpty(),
+                                pageIndex = pane.pageIndex ?: 0,
+                                pageCount = pane.pageCount ?: 0,
+                                tool = tool
+                            )
+                        }
+                        _state.update {
+                            it.copy(
+                                splitCount = pkg.splitCount,
+                                splitWeights = pkg.splitWeights ?: defaultWeights(pkg.splitCount),
+                                splitPanes = restoredPanes,
+                                splitActive = 0
+                            )
+                        }
+                    }
+
                     _state.update {
                         it.copy(
-                            noteTitle = pkg.title.ifBlank { "Imported Lesson" },
+                            noteTitle = effectiveTitle,
                             canvasBackground = background,
                             isDarkCanvas = pkg.metadata.isDarkCanvas,
                             showGrid = pkg.metadata.showGrid,
@@ -2827,8 +2865,20 @@ class CanvasViewModel @Inject constructor(
                             errorMessage = null
                         )
                     }
-                    scheduleSave()
-                    onResult(true, "Lesson '${pkg.title}' loaded with ${pages.size} pages and all layers intact!")
+
+                    // Persist to database & file
+                    withContext(Dispatchers.IO) {
+                        try {
+                            val existing = noteRepository.getNoteById(currentNoteId)
+                            if (existing != null) {
+                                noteRepository.updateNote(existing.copy(title = effectiveTitle, canvasBackground = background, updatedAt = System.currentTimeMillis()))
+                            } else {
+                                noteRepository.insertNote(com.avitrisphare.whiteboard.domain.model.Note(id = currentNoteId, title = effectiveTitle, canvasBackground = background))
+                            }
+                        } catch (_: Exception) {}
+                    }
+                    saveNow()
+                    onResult(true, "Lesson '$effectiveTitle' loaded with ${pages.size} page(s) and all layers intact!")
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {

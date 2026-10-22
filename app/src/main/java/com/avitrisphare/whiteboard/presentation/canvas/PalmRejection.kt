@@ -25,6 +25,15 @@ fun contactAreaCm2(majorPx: Float, minorPx: Float, xdpi: Float, ydpi: Float): Fl
     return (Math.PI * (majorCm / 2.0) * (minorCm / 2.0)).toFloat()
 }
 
+fun isPalmContactArea(
+    touchMajorPx: Float,
+    xdpi: Float,
+    touchMinorPx: Float = touchMajorPx,
+    ydpi: Float = xdpi
+): Boolean {
+    return contactAreaCm2(touchMajorPx, touchMinorPx, xdpi, ydpi) > PALM_AREA_CM2
+}
+
 fun isPalmContact(
     touchMajorPx: Float,
     xdpi: Float,
@@ -34,7 +43,7 @@ fun isPalmContact(
     ydpi: Float = xdpi
 ): Boolean {
     if (!stylusActive || isStylus) return false
-    return contactAreaCm2(touchMajorPx, touchMinorPx, xdpi, ydpi) > PALM_AREA_CM2
+    return isPalmContactArea(touchMajorPx, xdpi, touchMinorPx, ydpi)
 }
 
 /**

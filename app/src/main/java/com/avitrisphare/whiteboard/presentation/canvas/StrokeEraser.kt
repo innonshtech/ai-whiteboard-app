@@ -49,6 +49,36 @@ object StrokeEraser {
         return if (changed) out else strokes
     }
 
+    fun applySelection(
+        strokes: List<Stroke>,
+        selectedIds: Set<String>,
+        center: Offset,
+        radius: Float,
+        mode: EraserMode,
+        restrictToSelection: Boolean
+    ): Pair<List<Stroke>, Set<String>> {
+        if (!restrictToSelection) {
+            val erased = apply(strokes, center, radius, mode)
+            return erased to selectedIds
+        }
+        if (selectedIds.isEmpty()) {
+            return strokes to selectedIds
+        }
+        val pool = strokes.filter { it.id in selectedIds }
+        val kept = strokes.filter { it.id !in selectedIds }
+        if (pool.isEmpty()) {
+            return strokes to selectedIds
+        }
+        val erased = apply(pool, center, radius, mode)
+        if (erased === pool) {
+            return strokes to selectedIds
+        }
+        val originalPoolIds = pool.map { it.id }.toSet()
+        val newPieceIds = erased.map { it.id }.toSet()
+        val updatedSelectedIds = (selectedIds - originalPoolIds) + newPieceIds
+        return (kept + erased) to updatedSelectedIds
+    }
+
     private fun eraseOne(
         stroke: Stroke,
         center: Offset,
@@ -67,6 +97,10 @@ object StrokeEraser {
                 centerlineHits(points, center, reach)
             }
             return if (hit) emptyList() else listOf(stroke)
+        }
+
+        if (stroke.strokeType == StrokeType.TEXT) {
+            return if (circleTouchesRect(center, reach, stroke)) emptyList() else listOf(stroke)
         }
 
         if (stroke.strokeType in objectTypes) return listOf(stroke)
