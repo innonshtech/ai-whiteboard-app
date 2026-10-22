@@ -32,6 +32,7 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateRotation
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +51,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -96,6 +98,7 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NearMe
+import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -2148,6 +2151,129 @@ fun CanvasScreen(
                     drawMathReadout(readout.first, readout.second)
                 }
             }
+
+            val currentDoc = state.document
+            if (currentDoc != null && state.splitCount <= 1) {
+                val docWidth = if (currentDoc.pageWidth > 0f) currentDoc.pageWidth else 1600f
+                val docHeight = if (currentDoc.pageHeight > 0f) currentDoc.pageHeight else 2262f
+                val frameScale = state.documentFrameScale
+                val frameX = state.documentFrameX
+                val frameY = state.documentFrameY
+
+                val pdfScreenX = canvasOffsetX + (frameX * canvasScale)
+                val pdfScreenY = canvasOffsetY + (frameY * canvasScale)
+                val pdfScreenW = docWidth * frameScale * canvasScale
+                val pdfScreenH = docHeight * frameScale * canvasScale
+
+                // 1. Subtle dashed boundary showing PDF frame
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawRect(
+                        color = Color(0x733B82F6),
+                        topLeft = Offset(pdfScreenX, pdfScreenY),
+                        size = Size(pdfScreenW, pdfScreenH),
+                        style = DrawStroke(
+                            width = 2f,
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f))
+                        )
+                    )
+                }
+
+                // 2. Draggable Top Header Pill
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                (pdfScreenX + 12f).roundToInt().coerceAtLeast(10),
+                                (pdfScreenY - 42f).roundToInt().coerceAtLeast(10)
+                            )
+                        }
+                        .wrapContentSize()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xE61E2638))
+                        .border(1.dp, Color(0xFF3B82F6), RoundedCornerShape(8.dp))
+                        .pointerInput(canvasScale, state.documentFrameX, state.documentFrameY, state.documentFrameScale) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                val worldDx = dragAmount.x / canvasScale.coerceAtLeast(0.001f)
+                                val worldDy = dragAmount.y / canvasScale.coerceAtLeast(0.001f)
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX + worldDx,
+                                    state.documentFrameY + worldDy,
+                                    state.documentFrameScale
+                                )
+                            }
+                        }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.OpenWith,
+                            contentDescription = "Drag to reposition PDF",
+                            tint = Color(0xFF60A5FA),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            "PDF: Drag to move",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFF283248))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                "${(state.documentFrameScale * 100).roundToInt()}%",
+                                color = Color(0xFF93C5FD),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                // 3. Corner Resize Handle (Bottom-Right)
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                (pdfScreenX + pdfScreenW - 22f).roundToInt(),
+                                (pdfScreenY + pdfScreenH - 22f).roundToInt()
+                            )
+                        }
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF2563EB))
+                        .border(2.dp, Color.White, CircleShape)
+                        .pointerInput(canvasScale, state.documentFrameScale, docWidth) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                val worldDx = dragAmount.x / canvasScale.coerceAtLeast(0.001f)
+                                val currentW = docWidth * state.documentFrameScale
+                                val newW = (currentW + worldDx).coerceAtLeast(docWidth * 0.2f)
+                                val newScale = (newW / docWidth).coerceIn(0.2f, 3.0f)
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX,
+                                    state.documentFrameY,
+                                    newScale
+                                )
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.ZoomOutMap,
+                        contentDescription = "Drag to resize PDF",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
         }
         }
 
@@ -2422,29 +2548,126 @@ fun CanvasScreen(
                         }
                     }
 
-                    TextButton(onClick = {
-                        viewModel.setDocumentFrame(
-                            state.documentFrameX - 40f,
-                            state.documentFrameY,
-                            state.documentFrameScale
+                    // 4-Directional Move Controls
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF283248))
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            "Move:",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 4.dp)
                         )
-                    }) { Text("Move PDF ←", color = Color.White, fontSize = 11.sp) }
-                    TextButton(onClick = {
-                        viewModel.setDocumentFrame(
-                            state.documentFrameX,
-                            state.documentFrameY,
-                            state.documentFrameScale * 0.9f
+                        IconButton(
+                            onClick = {
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX - 60f,
+                                    state.documentFrameY,
+                                    state.documentFrameScale
+                                )
+                            },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Text("←", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        IconButton(
+                            onClick = {
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX + 60f,
+                                    state.documentFrameY,
+                                    state.documentFrameScale
+                                )
+                            },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Text("→", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        IconButton(
+                            onClick = {
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX,
+                                    state.documentFrameY - 60f,
+                                    state.documentFrameScale
+                                )
+                            },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Text("↑", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        IconButton(
+                            onClick = {
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX,
+                                    state.documentFrameY + 60f,
+                                    state.documentFrameScale
+                                )
+                            },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Text("↓", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(Modifier.width(4.dp))
+
+                    // PDF Zoom Controls
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF283248))
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        IconButton(
+                            onClick = {
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX,
+                                    state.documentFrameY,
+                                    (state.documentFrameScale * 0.9f).coerceIn(0.2f, 3.0f)
+                                )
+                            },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Shrink PDF", tint = Color.White, modifier = Modifier.size(14.dp))
+                        }
+                        Text(
+                            "${(state.documentFrameScale * 100).roundToInt()}%",
+                            color = Color(0xFF60A5FA),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 4.dp)
                         )
-                    }) { Text("PDF −", color = Color.White, fontSize = 11.sp) }
+                        IconButton(
+                            onClick = {
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX,
+                                    state.documentFrameY,
+                                    (state.documentFrameScale * 1.1f).coerceIn(0.2f, 3.0f)
+                                )
+                            },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Enlarge PDF", tint = Color.White, modifier = Modifier.size(14.dp))
+                        }
+                    }
+
+                    Spacer(Modifier.width(4.dp))
+
                     TextButton(onClick = {
-                        viewModel.setDocumentFrame(
-                            state.documentFrameX,
-                            state.documentFrameY,
-                            state.documentFrameScale * 1.1f
-                        )
-                    }) { Text("PDF +", color = Color.White, fontSize = 11.sp) }
-                    TextButton(onClick = { viewModel.resetDocumentFrame() }) {
-                        Text("Fit PDF", color = Color.White, fontSize = 11.sp)
+                        if (canvasSize.width > 0 && canvasSize.height > 0) {
+                            viewModel.fitToContent(canvasSize.width, canvasSize.height)
+                        } else {
+                            viewModel.resetDocumentFrame()
+                        }
+                    }) {
+                        Text("Fit PDF", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
                     }
                     TextButton(onClick = {
                         viewModel.exportAnnotatedPdf { uri ->

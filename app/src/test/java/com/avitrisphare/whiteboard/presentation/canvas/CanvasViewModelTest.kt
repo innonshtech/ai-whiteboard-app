@@ -136,5 +136,95 @@ class CanvasViewModelTest {
         assertEquals(initialStrokes, viewModel.state.value.strokes.size)
         assertFalse(viewModel.state.value.extractTextBusy)
     }
+
+    @Test
+    fun `move and resize document frame independently of ink strokes`() {
+        val stroke = Stroke(
+            points = listOf(Offset(50f, 60f), Offset(200f, 300f)),
+            colorValue = 0xFF123456.toInt()
+        )
+        viewModel.commitStroke(stroke)
+        assertEquals(1, viewModel.state.value.strokes.size)
+
+        // Move and resize document frame
+        viewModel.setDocumentFrame(120f, 250f, 1.4f)
+
+        val stateAfter = viewModel.state.value
+        assertEquals(120f, stateAfter.documentFrameX)
+        assertEquals(250f, stateAfter.documentFrameY)
+        assertEquals(1.4f, stateAfter.documentFrameScale, 0.001f)
+
+        // Verify existing ink is completely untouched
+        assertEquals(1, stateAfter.strokes.size)
+        assertEquals(stroke.points, stateAfter.strokes[0].points)
+        assertEquals(stroke.colorValue, stateAfter.strokes[0].colorValue)
+    }
+
+    @Test
+    fun `fitToContent resets document frame and centers document when document is open`() {
+        val doc = BoardDocument(
+            name = "lesson.pdf",
+            kind = DocumentKind.PDF,
+            path = "/sdcard/test.pdf",
+            pageWidth = 1000f,
+            pageHeight = 1500f
+        )
+        viewModel.setDocumentForTesting(doc)
+        viewModel.setDocumentFrame(80f, 160f, 1.8f)
+
+        // Verify document is moved and scaled
+        assertEquals(80f, viewModel.state.value.documentFrameX)
+        assertEquals(160f, viewModel.state.value.documentFrameY)
+        assertEquals(1.8f, viewModel.state.value.documentFrameScale, 0.001f)
+
+        // Trigger fitToContent
+        viewModel.fitToContent(2000f, 1500f)
+
+        val fittedState = viewModel.state.value
+        // Frame must be reset to origin and unit scale
+        assertEquals(0f, fittedState.documentFrameX)
+        assertEquals(0f, fittedState.documentFrameY)
+        assertEquals(1f, fittedState.documentFrameScale, 0.001f)
+
+        // Scale and offsets must be fitted to viewport
+        assertTrue("Scale must be positive", fittedState.scale > 0f)
+        assertTrue("Fitted X offset must be >= 0", fittedState.offsetX >= 0f)
+    }
+
+    @Test
+    fun `canvas pinch-zoom transforms viewport without altering document frame or stroke coordinates`() {
+        val doc = BoardDocument(
+            name = "lesson.pdf",
+            kind = DocumentKind.PDF,
+            path = "/sdcard/test.pdf",
+            pageWidth = 1000f,
+            pageHeight = 1500f
+        )
+        viewModel.setDocumentForTesting(doc)
+        viewModel.setDocumentFrame(100f, 200f, 1.25f)
+
+        val stroke = Stroke(
+            points = listOf(Offset(10f, 20f), Offset(30f, 40f)),
+            colorValue = 0xFF00FF00.toInt()
+        )
+        viewModel.commitStroke(stroke)
+
+        // Simulate canvas pinch-zoom (updating canvas-level scale and offset)
+        viewModel.updateTransform(2.5f, 350f, 450f)
+
+        val transformedState = viewModel.state.value
+        assertEquals(2.5f, transformedState.scale, 0.001f)
+        assertEquals(350f, transformedState.offsetX, 0.001f)
+        assertEquals(450f, transformedState.offsetY, 0.001f)
+
+        // Document frame parameters remain strictly independent and preserved
+        assertEquals(100f, transformedState.documentFrameX, 0.001f)
+        assertEquals(200f, transformedState.documentFrameY, 0.001f)
+        assertEquals(1.25f, transformedState.documentFrameScale, 0.001f)
+
+        // Strokes remain strictly preserved in world coordinates
+        assertEquals(1, transformedState.strokes.size)
+        assertEquals(stroke.points, transformedState.strokes[0].points)
+    }
 }
 

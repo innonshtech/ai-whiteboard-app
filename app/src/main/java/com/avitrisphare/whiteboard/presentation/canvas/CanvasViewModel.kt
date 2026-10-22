@@ -1475,6 +1475,10 @@ class CanvasViewModel @Inject constructor(
         setDocumentFrame(0f, 0f, 1f)
     }
 
+    fun setDocumentForTesting(doc: BoardDocument?) {
+        _state.update { it.copy(document = doc) }
+    }
+
     fun setPageBackground(background: CanvasBackground, customUri: String = "") {
         syncPageMetadataLists()
         pageBackgroundKeys[activePage] = background.key
@@ -1896,14 +1900,16 @@ class CanvasViewModel @Inject constructor(
         }
     }
 
-    private fun fitDocument(pageWidth: Float, pageHeight: Float): Triple<Float, Float, Float> {
-        if (viewportWidth <= 1f || viewportHeight <= 1f || pageWidth <= 1f || pageHeight <= 1f) {
+    private fun fitDocument(pageWidth: Float, pageHeight: Float, vw: Float = viewportWidth, vh: Float = viewportHeight): Triple<Float, Float, Float> {
+        val effectiveW = if (vw > 1f) vw else viewportWidth
+        val effectiveH = if (vh > 1f) vh else viewportHeight
+        if (effectiveW <= 1f || effectiveH <= 1f || pageWidth <= 1f || pageHeight <= 1f) {
             return Triple(_state.value.scale, _state.value.offsetX, _state.value.offsetY)
         }
-        val scale = kotlin.math.min(viewportWidth / pageWidth, viewportHeight / pageHeight)
+        val scale = kotlin.math.min(effectiveW / pageWidth, effectiveH / pageHeight)
             .coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE)
-        val offsetX = (viewportWidth - pageWidth * scale) / 2f
-        val offsetY = (viewportHeight - pageHeight * scale) / 2f
+        val offsetX = (effectiveW - pageWidth * scale) / 2f
+        val offsetY = (effectiveH - pageHeight * scale) / 2f
         return Triple(scale, offsetX, offsetY)
     }
 
@@ -2552,6 +2558,21 @@ class CanvasViewModel @Inject constructor(
 
     fun fitToContent(viewportWidth: Float, viewportHeight: Float) {
         if (viewportWidth <= 0f || viewportHeight <= 0f) return
+        val doc = _state.value.document
+        if (doc != null) {
+            resetDocumentFrame()
+            val pw = if (doc.pageWidth > 1f) doc.pageWidth else (_pageBitmap.value?.width?.toFloat() ?: 1600f)
+            val ph = if (doc.pageHeight > 1f) doc.pageHeight else (_pageBitmap.value?.height?.toFloat() ?: 2262f)
+            val fitted = fitDocument(pw, ph, viewportWidth, viewportHeight)
+            _state.update {
+                it.copy(
+                    scale = fitted.first,
+                    offsetX = fitted.second,
+                    offsetY = fitted.third
+                )
+            }
+            return
+        }
         val contentBounds = CanvasTransform.calculateContentBounds(_state.value.strokes)
         val (targetScale, targetX, targetY) = CanvasTransform.calculateFitTransform(
             contentBounds = contentBounds,
