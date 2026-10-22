@@ -65,6 +65,7 @@ enum class WhiteboardTool(val label: String, val shortcut: String) {
     RULER("Ruler", "U"),
     COMPASS("Compass", ""),
     PROTRACTOR("Protractor", ""),
+    SET_SQUARE("Set Square", ""),
     LASER("Laser pointer", "K"),
     BUCKET_FILL("Bucket fill", "B"),
     LASSO("Lasso selection", ""),

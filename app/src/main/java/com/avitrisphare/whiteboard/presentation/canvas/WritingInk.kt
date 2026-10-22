@@ -19,9 +19,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
@@ -188,12 +192,22 @@ private fun inkLook(type: StrokeType): InkLook = when (type) {
 @Composable
 fun InkToolPanel(state: CanvasState, viewModel: CanvasViewModel) {
     var showSmartWrite by remember { mutableStateOf(false) }
-    var hex by remember(state.selectedColor) {
-        mutableStateOf(String.format("%06X", state.selectedColor and 0xFFFFFF))
+    var editingSecondary by remember { mutableStateOf(false) }
+    val currentColor = if (editingSecondary) state.secondaryColor else state.selectedColor
+    var hex by remember(currentColor) {
+        mutableStateOf(String.format("%06X", currentColor and 0xFFFFFF))
     }
-    var red by remember(state.selectedColor) { mutableIntStateOf((state.selectedColor shr 16) and 0xFF) }
-    var green by remember(state.selectedColor) { mutableIntStateOf((state.selectedColor shr 8) and 0xFF) }
-    var blue by remember(state.selectedColor) { mutableIntStateOf(state.selectedColor and 0xFF) }
+    var red by remember(currentColor) { mutableIntStateOf((currentColor shr 16) and 0xFF) }
+    var green by remember(currentColor) { mutableIntStateOf((currentColor shr 8) and 0xFF) }
+    var blue by remember(currentColor) { mutableIntStateOf(currentColor and 0xFF) }
+
+    fun applyColor(c: Int) {
+        if (editingSecondary) {
+            viewModel.setSecondaryColor(c)
+        } else {
+            viewModel.setColor(c)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -299,54 +313,89 @@ fun InkToolPanel(state: CanvasState, viewModel: CanvasViewModel) {
                 fontWeight = FontWeight.Bold
             )
         }
-        Text("Two-colour pen", fontSize = 12.sp, color = Color(0xFF6B7280))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(Color(state.selectedColor))
-                    .clickable { viewModel.setColor(state.selectedColor) }
-            )
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(Color(state.secondaryColor))
-                    .clickable { viewModel.setSecondaryColor(state.secondaryColor) }
-            )
-            Text(
-                "Swap",
+        Spacer(Modifier.height(6.dp))
+        Text("Two-colour pen (One-tap swap)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF374151))
+        Spacer(Modifier.height(4.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Primary Swatch
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
+                    .background(if (!editingSecondary) Color(0xFFEEF2FF) else Color(0xFFF9FAFB))
+                    .clickable { editingSecondary = false }
+                    .padding(horizontal = 8.dp, vertical = 5.dp)
+            ) {
+                Box(
+                    Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(Color(state.selectedColor))
+                        .then(
+                            if (!editingSecondary) Modifier.border(2.5.dp, Color(0xFF6366F1), CircleShape)
+                            else Modifier.border(1.dp, Color(0xFFD1D5DB), CircleShape)
+                        )
+                )
+                Text("Primary (Active)", fontSize = 10.sp, fontWeight = if (!editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (!editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
+            }
+
+            // Swap Button
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
                     .background(Color(0xFFEEF2FF))
                     .clickable { viewModel.swapPenColors() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                fontSize = 12.sp
-            )
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Icon(Icons.Default.SwapHoriz, contentDescription = "Swap colors", tint = Color(0xFF4F46E5), modifier = Modifier.size(16.dp))
+                Text("Swap", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4F46E5))
+            }
+
+            // Secondary Swatch
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (editingSecondary) Color(0xFFEEF2FF) else Color(0xFFF9FAFB))
+                    .clickable { editingSecondary = true }
+                    .padding(horizontal = 8.dp, vertical = 5.dp)
+            ) {
+                Box(
+                    Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(Color(state.secondaryColor))
+                        .then(
+                            if (editingSecondary) Modifier.border(2.5.dp, Color(0xFF6366F1), CircleShape)
+                            else Modifier.border(1.dp, Color(0xFFD1D5DB), CircleShape)
+                        )
+                )
+                Text("Secondary", fontSize = 10.sp, fontWeight = if (editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
+            }
         }
-        Text("Ink quality (mm)", fontSize = 12.sp, color = Color(0xFF6B7280))
-        Slider(
-            value = state.inkSampleGapMm,
-            onValueChange = { viewModel.setInkSampleGapMm(it) },
-            valueRange = 0.15f..1.2f,
-            modifier = Modifier.fillMaxWidth()
+        Spacer(Modifier.height(8.dp))
+        Text(
+            if (editingSecondary) "Palette sets: Secondary Color" else "Palette sets: Primary (Active) Color",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color(0xFF4F46E5)
         )
-        Text("Colour", fontSize = 12.sp, color = Color(0xFF6B7280))
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(4.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             INK_PRESETS.forEach { color ->
                 Box(
                     modifier = Modifier
-                        .size(22.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
                         .background(Color(color))
-                        .clickable { viewModel.setColor(color) }
+                        .clickable { applyColor(color) }
                 )
             }
         }
         Spacer(Modifier.height(10.dp))
-        HueWheel(onPick = { viewModel.setColor(it) })
+        HueWheel(onPick = { applyColor(it) })
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
             value = hex,
@@ -355,15 +404,22 @@ fun InkToolPanel(state: CanvasState, viewModel: CanvasViewModel) {
                 hex = cleaned
                 if (cleaned.length == 6) {
                     cleaned.toIntOrNull(16)?.let { rgb ->
-                        viewModel.setColor(rgb or 0xFF000000.toInt())
+                        applyColor(rgb or 0xFF000000.toInt())
                     }
                 }
             },
             singleLine = true,
-            label = { Text("Hex #RRGGBB") },
+            label = { Text(if (editingSecondary) "Secondary Hex #RRGGBB" else "Primary Hex #RRGGBB") },
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(6.dp))
+        Text("Ink quality (mm)", fontSize = 12.sp, color = Color(0xFF6B7280))
+        Slider(
+            value = state.inkSampleGapMm,
+            onValueChange = { viewModel.setInkSampleGapMm(it) },
+            valueRange = 0.15f..1.2f,
+            modifier = Modifier.fillMaxWidth()
+        )
         RgbSlider("R", red, Color(0xFFEF4444)) {
             red = it
             viewModel.setColor(Color(it, green, blue).toArgb())

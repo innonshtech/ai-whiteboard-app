@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoFixHigh
@@ -147,6 +149,8 @@ fun AvitriSphareWhiteboardChrome(
     rulerPlaced: Boolean,
     compassPlaced: Boolean,
     protractorPlaced: Boolean,
+    setSquarePlaced: Boolean = false,
+    trianglePlaced: Boolean = false,
     onMathDrag: (MathToolKind, Offset) -> Unit,
     onMathDragEnd: (MathToolKind, Offset, Boolean) -> Unit,
     onDockBounds: (Rect) -> Unit,
@@ -506,11 +510,27 @@ fun AvitriSphareWhiteboardChrome(
                 }
                 "geometry" -> DockPopover {
                     Text(
-                        "Drag the ruler, compass, or protractor from the toolbar. Drag a tool back onto the toolbar to remove it.",
+                        "Drag any tool from the toolbar onto the board. Drag a tool back onto the toolbar to remove it.",
                         fontSize = 12.sp,
                         color = Color(0xFF6B7280)
                     )
                     Spacer(Modifier.height(8.dp))
+                    PopoverRow(Icons.Default.Straighten, "Ruler", rulerPlaced) {
+                        onMathDragEnd(MathToolKind.RULER, Offset.Zero, false); panel = null
+                    }
+                    PopoverRow(Icons.Default.Architecture, "Compass", compassPlaced) {
+                        onMathDragEnd(MathToolKind.COMPASS, Offset.Zero, false); panel = null
+                    }
+                    PopoverRow(Icons.Default.Speed, "Protractor (180°)", protractorPlaced) {
+                        onMathDragEnd(MathToolKind.PROTRACTOR, Offset.Zero, false); panel = null
+                    }
+                    PopoverRow(Icons.Default.Category, "Set Square (45°-45°-90°)", setSquarePlaced) {
+                        onMathDragEnd(MathToolKind.SET_SQUARE, Offset.Zero, false); panel = null
+                    }
+                    PopoverRow(Icons.Default.ChangeHistory, "Triangle (60°-60°-60°)", trianglePlaced) {
+                        onMathDragEnd(MathToolKind.TRIANGLE, Offset.Zero, false); panel = null
+                    }
+                    Spacer(Modifier.height(4.dp))
                     PopoverRow(Icons.Default.GridOn, "Graph paper", state.canvasBackground == CanvasBackground.GRAPH) {
                         viewModel.toggleGraphPaper(); panel = null
                     }
@@ -793,6 +813,18 @@ fun AvitriSphareWhiteboardChrome(
                             viewModel.setTool(state.inkTool)
                             toggle("ink")
                         }
+                        TwoColorPenQuickSwap(
+                            primaryColor = state.selectedColor,
+                            secondaryColor = state.secondaryColor,
+                            onSwap = {
+                                viewModel.swapPenColors()
+                                Toast.makeText(context, "Color swapped", Toast.LENGTH_SHORT).show()
+                            },
+                            onActiveClick = {
+                                viewModel.setTool(state.inkTool)
+                                toggle("ink")
+                            }
+                        )
                         DockItem(Icons.Default.Category, "Shapes", state.currentTool in shapeTools || panel == "shapes") {
                             toggle("shapes")
                         }
@@ -833,6 +865,20 @@ fun AvitriSphareWhiteboardChrome(
                             active = protractorPlaced || state.currentTool == WhiteboardTool.PROTRACTOR,
                             onDrag = { onMathDrag(MathToolKind.PROTRACTOR, it) },
                             onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.PROTRACTOR, at, moved) }
+                        )
+                        DraggableDockItem(
+                            icon = Icons.Default.Category,
+                            label = "Set Square",
+                            active = setSquarePlaced || state.currentTool == WhiteboardTool.SET_SQUARE,
+                            onDrag = { onMathDrag(MathToolKind.SET_SQUARE, it) },
+                            onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.SET_SQUARE, at, moved) }
+                        )
+                        DraggableDockItem(
+                            icon = Icons.Default.ChangeHistory,
+                            label = "Triangle",
+                            active = trianglePlaced || state.currentTool == WhiteboardTool.TRIANGLE,
+                            onDrag = { onMathDrag(MathToolKind.TRIANGLE, it) },
+                            onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.TRIANGLE, at, moved) }
                         )
                         DockItem(
                             Icons.Default.Videocam,
@@ -978,6 +1024,68 @@ private fun DockItem(
             color = if (enabled) DockLabel else Color(0xFF6B7280),
             fontSize = 9.sp,
             maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun TwoColorPenQuickSwap(
+    primaryColor: Int,
+    secondaryColor: Int,
+    onSwap: () -> Unit,
+    onActiveClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onSwap)
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .height(30.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(Color(0xFF232938))
+                .padding(horizontal = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                // Active Swatch (larger, with white border)
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(Color(primaryColor))
+                        .border(1.5.dp, Color.White, CircleShape)
+                        .clickable(onClick = onActiveClick)
+                )
+                // Swap Arrow Icon
+                Icon(
+                    imageVector = Icons.Default.SwapHoriz,
+                    contentDescription = "Swap colors",
+                    tint = Color(0xFFA5B4FC),
+                    modifier = Modifier.size(13.dp)
+                )
+                // Standby Swatch
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(Color(secondaryColor))
+                        .border(1.dp, Color(0x66FFFFFF), CircleShape)
+                        .clickable(onClick = onSwap)
+                )
+            }
+        }
+        Text(
+            text = "Swap",
+            color = Color(0xFFA5B4FC),
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Medium
         )
     }
 }
