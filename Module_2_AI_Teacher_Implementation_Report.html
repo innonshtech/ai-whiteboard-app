@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Module 2 — AI Teacher (IFP Panel Only) Master Implementation & Technical Specification Report</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border-color: #30363d;
+            --border-highlight: #3ecf8e;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --accent-green: #3ecf8e;
+            --accent-blue: #58a6ff;
+            --accent-purple: #bc8cff;
+            --accent-yellow: #d29922;
+            --accent-red: #f85149;
+            --accent-teal: #39c5bb;
+        }
+
+        @page {
+            size: A4;
+            margin: 20mm 15mm 20mm 15mm;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px;
+            font-size: 14px;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .header-banner {
+            border-bottom: 2px solid var(--accent-green);
+            padding-bottom: 24px;
+            margin-bottom: 36px;
+        }
+
+        .header-banner h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent-green);
+            margin: 0 0 10px 0;
+            letter-spacing: -0.5px;
+        }
+
+        .header-banner .subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+            margin: 0;
+        }
+
+        .meta-badges {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--accent-green);
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge.blue { color: var(--accent-blue); }
+        .badge.purple { color: var(--accent-purple); }
+
+        h2 {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            page-break-after: avoid;
+        }
+
+        h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--accent-green);
+            margin-top: 28px;
+            margin-bottom: 12px;
+            page-break-after: avoid;
+        }
+
+        h4 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--accent-blue);
+            margin-top: 16px;
+            margin-bottom: 8px;
+            page-break-after: avoid;
+        }
+
+        p, li {
+            color: var(--text-primary);
+        }
+
+        ul, ol {
+            padding-left: 24px;
+            margin-top: 8px;
+            margin-bottom: 16px;
+        }
+
+        li {
+            margin-bottom: 6px;
+        }
+
+        /* Callout Cards */
+        .callout {
+            background-color: var(--bg-secondary);
+            border-left: 4px solid var(--accent-green);
+            border-radius: 6px;
+            padding: 16px;
+            margin: 20px 0;
+            border-top: 1px solid var(--border-color);
+            border-right: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+            page-break-inside: avoid;
+        }
+
+        .callout.blue { border-left-color: var(--accent-blue); }
+        .callout.purple { border-left-color: var(--accent-purple); }
+        .callout.yellow { border-left-color: var(--accent-yellow); }
+
+        .callout-title {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Code Blocks */
+        pre {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            overflow-x: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12.5px;
+            line-height: 1.5;
+            color: #e6edf3;
+            margin: 16px 0;
+            page-break-inside: avoid;
+        }
+
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: rgba(110, 118, 129, 0.2);
+            color: var(--accent-green);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12.5px;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            color: inherit;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            font-size: 13px;
+            page-break-inside: avoid;
+        }
+
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-weight: 600;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:nth-child(even) {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        .highlight {
+            color: var(--accent-green);
+            font-weight: 600;
+        }
+
+        .price-tag {
+            color: var(--accent-yellow);
+            font-weight: 600;
+        }
+
+        .section-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+            margin: 40px 0;
+        }
+
+        @media print {
+            body {
+                background-color: #ffffff !important;
+                color: #1f2328 !important;
+                padding: 0 !important;
+            }
+            :root {
+                --bg-primary: #ffffff;
+                --bg-secondary: #f6f8fa;
+                --bg-tertiary: #eaeed2;
+                --border-color: #d0d7de;
+                --text-primary: #1f2328;
+                --text-secondary: #57609a;
+                --accent-green: #0969da;
+                --accent-blue: #0969da;
+            }
+            pre {
+                background-color: #f6f8fa !important;
+                color: #1f2328 !important;
+                border: 1px solid #d0d7de !important;
+            }
+            table {
+                background-color: #ffffff !important;
+                border: 1px solid #d0d7de !important;
+            }
+            th {
+                background-color: #f6f8fa !important;
+                color: #1f2328 !important;
+            }
+            td {
+                color: #1f2328 !important;
+            }
+            code {
+                color: #0969da !important;
+                background-color: #f3f4f6 !important;
+            }
+            .header-banner h1 { color: #0969da !important; }
+            h3 { color: #0969da !important; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Header Banner -->
+    <div class="header-banner">
+        <h1>🎓 Module 2 — AI Teacher (IFP Panel Only) Implementation & Technical Specification Report</h1>
+        <div class="subtitle">Complete End-to-End Architectural Design, Requirements, Feature Specifications, 3rd-Party Cost Breakdown & Canvas Integration Roadmap</div>
+        <div class="meta-badges">
+            <span class="badge">Target Platform: Android IFP Whiteboard Canvas</span>
+            <span class="badge blue">Architecture: Clean MVVM + Hilt DI + Jetpack Compose</span>
+            <span class="badge purple">AI Engine: Google Gemini 1.5 + ML Kit + Symja</span>
+        </div>
+    </div>
+
+    <!-- Section 1 -->
+    <h2>1. 🎓 Module 2 — AI Teacher (IFP Panel Only) Implementation Report</h2>
+
+    <div class="callout">
+        <div class="callout-title">📌 System Architecture Overview for IFP Panel Canvas</div>
+        <p>Each AI feature is designed specifically for <strong>IFP Panel Canvas Integration</strong>, leveraging Bloom's infinite canvas (&mathbb;R<sup>2</sup> space), vector stroke engine, state management (<code>CanvasViewModel.kt</code>), and touch/stylus pipeline (<code>CanvasScreen.kt</code>).</p>
+    </div>
+
+    <h3>🚀 Feature-by-Feature Implementation Specification</h3>
+
+    <h4>1. 📘 AI Lesson Planner (Interactive Curriculum Builder)</h4>
+    <p><strong>Feature Scope:</strong> Generates structured, multi-step lesson plans (Learning Objectives, Teaching Flow, Classroom Activities, Homework, and Key Outcomes) customized by Grade Level, Subject, and Duration.</p>
+    <ul>
+        <li><strong>Trigger:</strong> Teacher opens IFP Top Bar &rarr; Taps <strong>"AI Lesson Planner"</strong>.</li>
+        <li><strong>Input Panel:</strong> Modal drawer for entering <em>Topic</em> (e.g. "Photosynthesis"), <em>Grade</em> (e.g. "Grade 8"), and <em>Duration</em> (e.g. "45 mins").</li>
+        <li><strong>Canvas Output:</strong> Generates an expanded <strong>Lesson Board Frame</strong> (<code>StrokeType.FRAME</code>) on the canvas containing 5 interactive cards: Objectives, Teaching Flow Timeline, Activities, Homework, and Expected Outcomes.</li>
+    </ul>
+
+<pre><code>data class LessonPlanRequest(
+    val topic: String,
+    val gradeLevel: String,
+    val durationMinutes: Int
+)
+
+data class LessonPlanResponse(
+    val objectives: List&lt;String&gt;,
+    val teachingFlow: List&lt;FlowStep&gt;,
+    val activities: List&lt;String&gt;,
+    val homework: List&lt;String&gt;,
+    val outcomes: List&lt;String&gt;
+)
+
+// Canvas ViewModel Action: Places a framed structured layout on the infinite canvas
+fun insertLessonPlanToCanvas(plan: LessonPlanResponse, origin: Offset) {
+    val frameStroke = Stroke(
+        strokeType = StrokeType.FRAME,
+        points = listOf(origin, Offset(origin.x + 1200f, origin.y + 800f)),
+        text = "Lesson Plan: ${plan.topic}"
+    )
+    // Add nested activity and flow cards inside the frame bounding box
+}</code></pre>
+
+    <h4>2. 📊 AI PPT Generator (Editable Slide Deck & PPT/PDF Exporter)</h4>
+    <p><strong>Feature Scope:</strong> Generates editable slide presentations directly on the whiteboard canvas. Teachers can present slide-by-slide or edit text/diagrams using their stylus, then export the presentation as <code>.pptx</code> or <code>.pdf</code>.</p>
+    <ul>
+        <li><strong>Canvas Rendering:</strong> Generates 16:9 aspect ratio <strong>Slide Frames</strong> laid out horizontally across the infinite canvas.</li>
+        <li><strong>Presentation Mode:</strong> Fullscreen presenter bar on the IFP panel with <strong>Next / Previous Slide</strong> controls and live ink annotation overlays.</li>
+        <li><strong>Export Engine:</strong> One-tap export to <code>.pptx</code> (via Apache POI) or <code>.pdf</code> (via Android <code>PdfDocument</code> rendering).</li>
+    </ul>
+
+    <h4>3. 💡 AI Explain (Tiered Conceptual Explainer)</h4>
+    <p><strong>Feature Scope:</strong> Provides explanations for any concept on the canvas at 3 complexity levels (<strong>Beginner</strong>, <strong>Standard</strong>, <strong>Advanced</strong>) using real-world examples, storytelling, or analogies.</p>
+    <ul>
+        <li><strong>Trigger:</strong> Teacher circles or lasso-selects any text/ink on the board and selects <strong>"AI Explain"</strong>.</li>
+        <li><strong>Canvas Placement:</strong> Places an explanation callout card next to the selected concept.</li>
+    </ul>
+
+    <h4>4. 📝 AI Quiz Generator (Interactive On-Board Assessment)</h4>
+    <p><strong>Feature Scope:</strong> Generates customizable quizzes with multiple question formats (MCQ, True/False, Fill in the Blanks, HOTS [Higher Order Thinking Skills], Descriptive, and Difficulty Levels).</p>
+    <ul>
+        <li><strong>Teacher Reveal Button:</strong> Tapping "Show Answer & Solution" on the IFP panel reveals answer keys with step-by-step reasoning.</li>
+        <li><strong>Interactive Grading:</strong> Students write answers with stylus on the IFP, and teacher taps "Grade Ink with AI" to evaluate responses live.</li>
+    </ul>
+
+    <h4>5. 📄 AI Worksheet Generator (Printable Homework & Practice Papers)</h4>
+    <p><strong>Feature Scope:</strong> Creates printable worksheets, practice papers, and homework sheets complete with student headers, instructions, marks distribution, and answer keys.</p>
+    <ul>
+        <li><strong>Canvas Layout:</strong> Renders an A4-proportioned Canvas Frame (210mm &times; 297mm) complete with headers, Section A (MCQs), Section B (Short Answers), Section C (HOTS).</li>
+        <li><strong>Print/Export:</strong> One-tap print to Android network printer or export as PDF.</li>
+    </ul>
+
+    <h4>6. 🗺️ AI Mind Maps (Interactive Concept Maps, Flowcharts & Timelines)</h4>
+    <p><strong>Feature Scope:</strong> Generates vector mind maps, flow charts, historical timelines, and relationship maps from any topic or selected board notes.</p>
+    <ul>
+        <li><strong>Vector Synthesis:</strong> Central Topic Node &rarr; Sub-topic Nodes &rarr; Vector Connecting Arrows.</li>
+        <li><strong>Stylus Expansion:</strong> Double-tapping any node on the IFP panel asks AI to expand that branch into deeper sub-nodes.</li>
+    </ul>
+
+    <h4>7. 🎨 AI Diagram Generator (Text to Labeled, Editable Diagrams)</h4>
+    <p><strong>Feature Scope:</strong> Converts text prompts (e.g. "Human Digestive System", "Solar System", "Electric Motor", "Plant Cell") into fully labeled, interactive, and editable diagrams directly on the canvas.</p>
+    <ul>
+        <li><strong>"Hide Labels" Quiz Mode:</strong> Teacher taps "Hide Labels" for an interactive classroom quiz where students fill in labels using the stylus.</li>
+    </ul>
+
+    <h4>8. 🧮 AI Formula Solver (Math & Science Step-by-Step Solver with Graphing)</h4>
+    <p><strong>Feature Scope:</strong> Recognizes handwritten or typed equations (&int; (3x<sup>2</sup> + 2x) dx, E = mc<sup>2</sup>, 2x + 5 = 15), solves them step-by-step, provides explanations, and plots 2D/3D Cartesian graphs on the canvas.</p>
+
+    <h4>9. 📚 AI Summarizer (Revision Notes, Flashcards & Formula Sheets)</h4>
+    <p><strong>Feature Scope:</strong> Summarizes large sections of board notes into 4 structured review formats: <strong>Revision Notes</strong>, <strong>Interactive Flash Cards</strong>, <strong>Formula Cheatsheets</strong>, and <strong>Exam Key Points</strong>.</p>
+
+    <h4>10. 🌐 AI Translator (10 Indian Languages)</h4>
+    <p><strong>Feature Scope:</strong> Translates handwritten or typed text on the IFP canvas into <strong>10 Indian Languages</strong>: <strong>Hindi</strong>, <strong>Marathi</strong>, <strong>Gujarati</strong>, <strong>Tamil</strong>, <strong>Telugu</strong>, <strong>Kannada</strong>, <strong>Malayalam</strong>, <strong>Bengali</strong>, <strong>Punjabi</strong>, and <strong>Urdu</strong>.</p>
+
+    <h4>11. 🎙️ AI Voice Assistant (Hands-Free IFP Classroom Controller)</h4>
+    <p><strong>Feature Scope:</strong> Voice-activated assistant allowing teachers to command the IFP whiteboard hands-free while standing at the board (e.g., <em>"Create a 5-question quiz on Motion"</em>, <em>"Next slide"</em>, <em>"Explain this again simply"</em>, <em>"Generate homework sheet"</em>).</p>
+
+    <h3>📊 Complete Summary Matrix for IFP Panel Canvas</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>AI Teacher Service</th>
+                <th>IFP Canvas Element</th>
+                <th>Output Type</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>1</strong></td>
+                <td><strong>AI Lesson Planner</strong></td>
+                <td>Structured Frame (<code>StrokeType.FRAME</code>)</td>
+                <td>Multi-card teaching flow &amp; objectives</td>
+            </tr>
+            <tr>
+                <td><strong>2</strong></td>
+                <td><strong>AI PPT Generator</strong></td>
+                <td>16:9 Slide Deck Frames</td>
+                <td>Presentation slides + PPTX/PDF Export</td>
+            </tr>
+            <tr>
+                <td><strong>3</strong></td>
+                <td><strong>AI Explain</strong></td>
+                <td>Context Callout Cards</td>
+                <td>3-tier explanation (Beginner/Std/Adv)</td>
+            </tr>
+            <tr>
+                <td><strong>4</strong></td>
+                <td><strong>AI Quiz Generator</strong></td>
+                <td>Interactive Quiz Cards</td>
+                <td>MCQs, T/F, HOTS + Answer Keys</td>
+            </tr>
+            <tr>
+                <td><strong>5</strong></td>
+                <td><strong>AI Worksheet Generator</strong></td>
+                <td>A4 Printable Frame</td>
+                <td>Standardized exam &amp; practice papers</td>
+            </tr>
+            <tr>
+                <td><strong>6</strong></td>
+                <td><strong>AI Mind Maps</strong></td>
+                <td>Connected Vector Graph</td>
+                <td>Concept maps, flowcharts, timelines</td>
+            </tr>
+            <tr>
+                <td><strong>7</strong></td>
+                <td><strong>AI Diagram Generator</strong></td>
+                <td>Vector Graphic + Callout Labels</td>
+                <td>Labeled diagrams with Quiz Mode</td>
+            </tr>
+            <tr>
+                <td><strong>8</strong></td>
+                <td><strong>AI Formula Solver</strong></td>
+                <td>Math Step Card + Vector Plot</td>
+                <td>Step-by-step solution + 2D Cartesian Graph</td>
+            </tr>
+            <tr>
+                <td><strong>9</strong></td>
+                <td><strong>AI Summarizer</strong></td>
+                <td>Collapsible Revision Cards</td>
+                <td>Notes, Flash Cards, Formula Sheets</td>
+            </tr>
+            <tr>
+                <td><strong>10</strong></td>
+                <td><strong>AI Translator</strong></td>
+                <td>Bilingual Subtitle Text Blocks</td>
+                <td>10 Indian Languages Translation</td>
+            </tr>
+            <tr>
+                <td><strong>11</strong></td>
+                <td><strong>AI Voice Assistant</strong></td>
+                <td>Floating Audio Mic HUD</td>
+                <td>Voice-controlled IFP Canvas execution</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="section-divider"></div>
+
+    <!-- Section 2 -->
+    <h2>2. 🛠️ Deep Technical Implementation & Requirements Document</h2>
+
+    <h3>2.1 System & Environment Requirements</h3>
+    <ul>
+        <li><strong>Hardware:</strong> 65", 75", 86" 4K Touch IFP Displays (Android 8.0+ minimum, Android 12+ recommended, 4GB+ RAM, Octa-Core CPU).</li>
+        <li><strong>Dependencies:</strong> Hilt DI, Retrofit/Ktor, Google AI Client SDK for Android (Gemini 1.5 API), ML Kit Digital Ink Recognition & Text Recognition v2, Apache POI, Symja Math Engine.</li>
+    </ul>
+
+<pre><code>// app/build.gradle dependencies
+
+dependencies {
+    // 1. Core Architecture & DI
+    implementation 'com.google.dagger:hilt-android:2.48.1'
+    ksp 'com.google.dagger:hilt-android-compiler:2.48.1'
+    
+    // 2. Networking & Multimodal Gemini AI SDK
+    implementation 'com.google.ai.client.generativeai:generativeai:0.7.0'
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+    
+    // 3. On-Device ML Kit (Offline Fallback & Low-Latency Ink Processing)
+    implementation 'com.google.mlkit:digital-ink-recognition:18.1.0'
+    implementation 'com.google.mlkit:text-recognition:16.0.0'
+    
+    // 4. Slide Deck (.pptx) & PDF Export Engines
+    implementation 'org.apache.poi:poi-ooxml:5.2.3'
+    
+    // 5. Math Evaluation & Graphing Engine
+    implementation 'com.github.axet:symja_android_library:1.0.8'
+}</code></pre>
+
+    <h3>2.2 Technical Code Snippets</h3>
+
+    <h4>PPTX Slide Deck Exporter Engine</h4>
+<pre><code>class PptxExporter @Inject constructor(@ApplicationContext private val context: Context) {
+    fun exportDeckToPptx(deck: PresentationDeck, outputFile: File) {
+        val ppt = XMLSlideShow()
+        for (slideData in deck.slides) {
+            val slide = ppt.createSlide()
+            // Add Title Box
+            val titleBox = slide.createTextBox()
+            titleBox.anchor = java.awt.Rectangle(50, 50, 600, 50)
+            val p = titleBox.addNewTextParagraph()
+            val run = p.addNewTextRun()
+            run.text = slideData.title
+            run.fontSize = 28.0
+            
+            // Add Bullet Points
+            val bodyBox = slide.createTextBox()
+            bodyBox.anchor = java.awt.Rectangle(50, 120, 600, 300)
+            for (bullet in slideData.bulletPoints) {
+                val bp = bodyBox.addNewTextParagraph()
+                bp.isBullet = true
+                val brun = bp.addNewTextRun()
+                brun.text = bullet
+                brun.fontSize = 18.0
+            }
+        }
+        FileOutputStream(outputFile).use { ppt.write(it) }
+    }
+}</code></pre>
+
+    <h4>Radial Mind Map Layout Algorithm</h4>
+<pre><code>fun calculateMindMapLayout(rootNode: MindMapNode, center: Offset): List&lt;Stroke&gt; {
+    val strokes = mutableListOf&lt;Stroke&gt;()
+    val numBranches = rootNode.children.size
+    val radius = 300f
+    
+    // Draw Root Node
+    val rootStroke = Stroke(
+        strokeType = StrokeType.STICKY_NOTE,
+        points = listOf(center),
+        text = rootNode.title,
+        colorValue = 0xFF3ECF8E.toInt() // Brand Green
+    )
+    strokes.add(rootStroke)
+    
+    // Position Children Radially
+    rootNode.children.forEachIndexed { i, child -&gt;
+        val angle = (2 * Math.PI * i / numBranches).toFloat()
+        val childPos = Offset(
+            x = center.x + radius * kotlin.math.cos(angle),
+            y = center.y + radius * kotlin.math.sin(angle)
+        )
+        // Add connecting arrow stroke
+        strokes.add(Stroke(
+            strokeType = StrokeType.ARROW,
+            points = listOf(center, childPos),
+            colorValue = 0xFF898989.toInt()
+        ))
+        // Add child node stroke
+        strokes.add(Stroke(
+            strokeType = StrokeType.STICKY_NOTE,
+            points = listOf(childPos),
+            text = child.title,
+            colorValue = 0xFFFFE66D.toInt() // Yellow
+        ))
+    }
+    return strokes
+}</code></pre>
+
+    <h4>2D Cartesian Function Plotter Path Generator</h4>
+<pre><code>fun generateCartesianGraphPath(
+    function: (Float) -&gt; Float,
+    xMin: Float = -10f,
+    xMax: Float = 10f,
+    scale: Float = 40f, // Pixels per unit
+    origin: Offset
+): Path {
+    val path = Path()
+    var isFirst = true
+    var x = xMin
+    while (x &lt;= xMax) {
+        val y = function(x)
+        val screenX = origin.x + x * scale
+        val screenY = origin.y - y * scale // Invert Y for screen space
+        
+        if (isFirst) {
+            path.moveTo(screenX, screenY)
+            isFirst = false
+        } else {
+            path.lineTo(screenX, screenY)
+        }
+        x += 0.1f
+    }
+    return path
+}</code></pre>
+
+    <h4>Voice Command Intent Parser</h4>
+<pre><code>class VoiceCommandParser @Inject constructor() {
+    fun parseCommand(transcript: String): VoiceIntent {
+        val lower = transcript.lowercase()
+        return when {
+            lower.contains("create quiz") || lower.contains("make a quiz") -&gt; VoiceIntent.CreateQuiz
+            lower.contains("next slide") -&gt; VoiceIntent.NextSlide
+            lower.contains("previous slide") -&gt; VoiceIntent.PreviousSlide
+            lower.contains("explain again") || lower.contains("explain this") -&gt; VoiceIntent.ExplainSelection
+            lower.contains("generate homework") || lower.contains("worksheet") -&gt; VoiceIntent.CreateWorksheet
+            lower.contains("translate to hindi") -&gt; VoiceIntent.Translate("hi")
+            else -&gt; VoiceIntent.Unknown(transcript)
+        }
+    }
+}</code></pre>
+
+    <div class="section-divider"></div>
+
+    <!-- Section 3 -->
+    <h2>3. 📋 Specification of AI Requirements</h2>
+
+    <p>Here is the comprehensive specification of AI Requirements needed to power Module 2 — AI Teacher on the Whiteboard / IFP Panel:</p>
+
+    <h3>3.1 AI Model &amp; API Requirements</h3>
+    <ul>
+        <li><strong>Primary Engine:</strong> <strong>Google Gemini API</strong> (Gemini 1.5 Flash for low-latency speed; Gemini 1.5 Pro for complex diagrams &amp; reasoning).</li>
+        <li><strong>Capabilities:</strong> Multimodal Vision Input, Strict JSON Output Schema Mode, System Prompt Role Instruction, Token Streaming (<code>Flow&lt;String&gt;</code>).</li>
+        <li><strong>On-Device ML:</strong> Google ML Kit Digital Ink Recognition API (handwriting OCR) + Google ML Kit Text Recognition v2.</li>
+    </ul>
+
+    <h3>3.2 Multimodal Data Ingestion Requirements</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Input Type</th>
+                <th>Format</th>
+                <th>Source in App</th>
+                <th>AI Processing Goal</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Stylus Ink Geometry</strong></td>
+                <td>Raw Stroke Coordinates (x, y, t)</td>
+                <td><code>Stroke.kt</code></td>
+                <td>Recognize handwriting, formulas, &amp; freehand sketches</td>
+            </tr>
+            <tr>
+                <td><strong>Canvas Area Bounding Box</strong></td>
+                <td>Rendered PNG Bitmap (300 DPI)</td>
+                <td>Screen Crop Bounding Box</td>
+                <td>Visual understanding of drawings, math, &amp; diagrams</td>
+            </tr>
+            <tr>
+                <td><strong>Reference Documents</strong></td>
+                <td>Image (PNG/JPG) / PDF Bitmap</td>
+                <td><code>Note.sourceUri</code></td>
+                <td>Contextual Q&amp;A, lesson planning, &amp; summarization</td>
+            </tr>
+            <tr>
+                <td><strong>Teacher Voice Audio</strong></td>
+                <td>PCM 16kHz Audio Stream / Transcript</td>
+                <td>Android SpeechRecognizer / Mic HUD</td>
+                <td>Speech-to-Intent parsing for hands-free IFP control</td>
+            </tr>
+            <tr>
+                <td><strong>Text &amp; Markdown</strong></td>
+                <td>Raw UTF-8 String</td>
+                <td><code>Note.contentJson</code></td>
+                <td>Translation, quiz generation, &amp; mind mapping</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>3.3 Multilingual AI Requirements (10 Indian Languages)</h3>
+    <p>The AI engine must support <strong>10 Indian Languages</strong> with accurate educational terminology: <strong>Hindi</strong>, <strong>Marathi</strong>, <strong>Gujarati</strong>, <strong>Tamil</strong>, <strong>Telugu</strong>, <strong>Kannada</strong>, <strong>Malayalam</strong>, <strong>Bengali</strong>, <strong>Punjabi</strong>, and <strong>Urdu</strong>, preserving mathematical &amp; scientific formulas during translation.</p>
+
+    <h3>3.4 Performance &amp; Latency Requirements</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>AI Task</th>
+                <th>Latency Target</th>
+                <th>Execution Target</th>
+                <th>Fallback Strategy</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Handwriting OCR</strong></td>
+                <td>&lt; 150 ms</td>
+                <td>On-Device (ML Kit)</td>
+                <td>Cache locally</td>
+            </tr>
+            <tr>
+                <td><strong>Voice Command Intent</strong></td>
+                <td>&lt; 500 ms</td>
+                <td>On-Device / Cloud Speech API</td>
+                <td>Show intent suggestion on screen</td>
+            </tr>
+            <tr>
+                <td><strong>AI Explain / Formula Solve</strong></td>
+                <td>&lt; 1.5 seconds</td>
+                <td>Cloud (Gemini 1.5 Flash)</td>
+                <td>Local Symja engine for basic algebra</td>
+            </tr>
+            <tr>
+                <td><strong>AI Quiz / Mind Map</strong></td>
+                <td>&lt; 2.5 seconds</td>
+                <td>Cloud (Gemini 1.5 Flash)</td>
+                <td>Show skeleton loader on canvas</td>
+            </tr>
+            <tr>
+                <td><strong>AI PPT Deck / Diagram</strong></td>
+                <td>&lt; 4.0 seconds</td>
+                <td>Cloud (Gemini 1.5 Pro)</td>
+                <td>Stream slide-by-slide progress</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="section-divider"></div>
+
+    <!-- Section 4 -->
+    <h2>4. 💳 3rd-Party Accounts, API Keys, SDK Dependencies &amp; Cost Breakdown</h2>
+
+    <p>Here is the complete breakdown of all 3rd-Party Accounts, API Keys, SDK Dependencies, and Cost Estimations required to build and deploy Module 2 — AI Teacher:</p>
+
+    <h3>4.1 Third-Party Accounts &amp; Service Requirements</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Service / API</th>
+                <th>Purpose</th>
+                <th>Account Required</th>
+                <th>API Key Required?</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Google Gemini API</strong></td>
+                <td>AI Teacher Engine (Lesson Plan, PPT, Quiz, Mind Maps, Diagrams, Formula, etc.)</td>
+                <td><strong>Google AI Studio</strong> / <strong>GCP Billing Account</strong></td>
+                <td><strong>Yes</strong> (<code>GEMINI_API_KEY</code>)</td>
+            </tr>
+            <tr>
+                <td><strong>Google ML Kit</strong></td>
+                <td>Offline Handwriting OCR &amp; Text Recognition</td>
+                <td>None (Bundled in Android App)</td>
+                <td><strong>No</strong> (100% Local)</td>
+            </tr>
+            <tr>
+                <td><strong>Android Speech Engine</strong></td>
+                <td>Voice Assistant hands-free panel control</td>
+                <td>None (Built into Android OS)</td>
+                <td><strong>No</strong> (Local OS Service)</td>
+            </tr>
+            <tr>
+                <td><strong>Symja Math Engine</strong></td>
+                <td>Step-by-step symbolic math &amp; calculus evaluation</td>
+                <td>None (Open-Source Library)</td>
+                <td><strong>No</strong> (Runs in App)</td>
+            </tr>
+            <tr>
+                <td><strong>Apache POI</strong></td>
+                <td>PPTX Slide Deck generation &amp; export</td>
+                <td>None (Open-Source Library)</td>
+                <td><strong>No</strong> (Runs in App)</td>
+            </tr>
+            <tr>
+                <td><strong>Firebase (Optional)</strong></td>
+                <td>Secure API key distribution &amp; feature flags</td>
+                <td><strong>Firebase Console Account</strong></td>
+                <td><strong>Yes</strong> (<code>google-services.json</code>)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>4.2 Detailed API Pricing &amp; Model Cost Breakdown</h3>
+
+    <h4>1. Gemini 1.5 Flash (90% of Features)</h4>
+    <ul>
+        <li>🆓 <strong>Free Tier (Google AI Studio):</strong> 15 RPM, 1M TPM, 1,500 RPD &mdash; <span class="highlight">$0.00 / Month</span> (100% Free for Dev &amp; Small Scale!).</li>
+        <li>💳 <strong>Pay-As-You-Go Paid Tier (GCP Billing):</strong>
+            <ul>
+                <li>Input Text: $0.075 per 1M Tokens.</li>
+                <li>Input Image: $0.00001875 per image (~53 images per 1 cent).</li>
+                <li>Output Text: $0.30 per 1M Tokens.</li>
+            </ul>
+        </li>
+    </ul>
+
+    <h4>2. Gemini 1.5 Pro (10% of Features: Complex Labeled Diagrams &amp; PPT Decks)</h4>
+    <ul>
+        <li>🆓 <strong>Free Tier:</strong> 2 RPM, 50 RPD &mdash; <span class="highlight">$0.00 / Month</span>.</li>
+        <li>💳 <strong>Pay-As-You-Go Paid Tier:</strong> Input Text: $1.25 / 1M Tokens | Output Text: $5.00 / 1M Tokens.</li>
+    </ul>
+
+    <h4>3. On-Device &amp; Open-Source Libraries</h4>
+    <ul>
+        <li><strong>Google ML Kit Digital Ink Recognition:</strong> <span class="highlight">$0.00</span> (Free, runs on-device).</li>
+        <li><strong>Android Native SpeechRecognizer:</strong> <span class="highlight">$0.00</span> (Free).</li>
+        <li><strong>Symja Math Engine &amp; Apache POI:</strong> <span class="highlight">$0.00</span> (Open Source Apache 2.0).</li>
+    </ul>
+
+    <h3>4.3 Total Monthly Cost Estimations by Scale</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Deployment Scale</th>
+                <th>Daily Usage Volume</th>
+                <th>Total Monthly Cost</th>
+                <th>Per Panel Cost</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Dev &amp; Testing (1–3 IFP Panels)</strong></td>
+                <td>~200 Queries/Day</td>
+                <td><strong class="price-tag">$0.00 / Month</strong></td>
+                <td>$0.00</td>
+            </tr>
+            <tr>
+                <td><strong>Single School (10 IFP Panels)</strong></td>
+                <td>~1,000 Queries/Day</td>
+                <td><strong class="price-tag">~$18.00 / Month</strong></td>
+                <td>~$1.80 / panel / month</td>
+            </tr>
+            <tr>
+                <td><strong>School Network (100 IFP Panels)</strong></td>
+                <td>~10,000 Queries/Day</td>
+                <td><strong class="price-tag">~$160.00 – $190.00 / Month</strong></td>
+                <td>~$1.60 – $1.90 / panel / month</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="section-divider"></div>
+
+    <!-- Section 5 -->
+    <h2>5. 📄 Canvas AI Services Integration Report &amp; Architectural Roadmap</h2>
+
+    <div class="callout blue">
+        <div class="callout-title">🗺️ Executive Integration Blueprint</div>
+        <p>This section details the step-by-step technical plan to integrate all 11 AI Teacher services directly into the existing whiteboard canvas codebase (<code>CanvasScreen.kt</code>, <code>CanvasViewModel.kt</code>, <code>Stroke.kt</code>, <code>Note.kt</code>, <code>CanvasTransform.kt</code>, Hilt DI modules) when ready for development execution.</p>
+    </div>
+
+    <h3>5.1 Step-by-Step Canvas Implementation Strategy</h3>
+    
+    <h4>Step 1: Data Contracts &amp; Domain Models (<code>domain/model/</code>)</h4>
+    <p>Create domain entities for structured AI responses:</p>
+    <ul>
+        <li><code>LessonPlan</code>: Topic, objectives, flow steps, activities, homework.</li>
+        <li><code>PresentationDeck</code>: List of 16:9 slide items (title, bullet points, layout).</li>
+        <li><code>QuizQuestion</code>: Question text, options, answer key, solution, question type.</li>
+        <li><code>MindMapGraph</code>: Root node with radial children and vector arrow connectors.</li>
+        <li><code>LabeledDiagram</code>: Vector paths, title, label anchor points (x<sub>i</sub>, y<sub>i</sub>).</li>
+        <li><code>FormulaSolution</code>: Latex string, step-by-step algebra list, function curve y = f(x).</li>
+    </ul>
+
+    <h4>Step 2: AI Service &amp; Repository Layer (<code>data/repository/</code> &amp; <code>di/</code>)</h4>
+    <ul>
+        <li>Implement <code>AiTeacherRepositoryImpl</code> using the Google Generative AI SDK (<code>GenerativeModel</code>) for Gemini 1.5.</li>
+        <li>Enforce <strong>Strict JSON Output Schemas</strong> so Gemini returns validated JSON for canvas entities.</li>
+        <li>Inject <code>AiTeacherRepository</code> via Hilt DI in <code>AiTeacherModule.kt</code>.</li>
+    </ul>
+
+    <h4>Step 3: State Integration in <code>CanvasViewModel.kt</code></h4>
+    <p>Extend <code>CanvasState</code> with AI state flags:</p>
+<pre><code>data class CanvasState(
+    // Existing fields: strokes, scale, offsetX, offsetY, selectedStrokeIds...
+    val isAiLoading: Boolean = false,
+    val aiProgressText: String = "",
+    val activeAiModal: AiTeacherModalType? = null,
+    val isVoiceAssistantListening: Boolean = false,
+    val activePresentationMode: Boolean = false,
+    val currentSlideIndex: Int = 0
+)</code></pre>
+
+    <h4>Step 4: World Space Placement Math (<code>CanvasTransform.kt</code>)</h4>
+    <p>When AI generates an output (e.g. a Lesson Plan, Mind Map, or Diagram), it is placed directly in front of the teacher's current viewport in <strong>World Space Coordinates (x<sub>w</sub>, y<sub>w</sub>)</strong>:</p>
+    <p><code>Origin<sub>w</sub> = (-offsetX / scale + 50dp, -offsetY / scale + 50dp)</code></p>
+
+    <h3>5.2 Detailed How-To Plan for Each of the 11 AI Services</h3>
+
+    <h4>1. 📘 AI Lesson Planner on Canvas</h4>
+    <ol>
+        <li>Teacher taps <strong>"AI Lesson Planner"</strong> on the IFP dock.</li>
+        <li>Prompt modal collects Topic, Grade Level, and Duration.</li>
+        <li><code>CanvasViewModel</code> calls Gemini API and receives structured JSON.</li>
+        <li>Generates a master <code>StrokeType.FRAME</code> titled <code>"Lesson Plan: [Topic]"</code> with 5 nested card objects arranged vertically.</li>
+        <li>Teacher can drag, edit, or reorder any card using the stylus.</li>
+    </ol>
+
+    <h4>2. 📊 AI PPT Generator &amp; Slide Deck Engine</h4>
+    <ol>
+        <li>Teacher requests a 5-slide deck on a topic.</li>
+        <li>Generates 5 horizontal 16:9 Slide Frames (<code>StrokeType.FRAME</code>) on the canvas separated by 40dp gaps.</li>
+        <li><strong>Presentation Mode:</strong> Fullscreen toolbar appears with Next Slide / Prev Slide buttons, smoothly panning canvas viewport from slide to slide.</li>
+        <li><strong>Export:</strong> One-click export button calls <code>PptxExporter</code> (Apache POI) to generate <code>.pptx</code> or <code>.pdf</code>.</li>
+    </ol>
+
+    <h4>3. 💡 AI Explain (3-Tier Conceptual Explainer)</h4>
+    <ol>
+        <li>Teacher uses Lasso to select any handwritten text or drawing on the board.</li>
+        <li>Floating Lasso bar shows <strong>"AI Explain"</strong> &rarr; Selects level (Beginner, Standard, Advanced) and style (Analogy, Story, Real World).</li>
+        <li>Renders a callout card alongside the selected concept with styled markdown text.</li>
+    </ol>
+
+    <h4>4. 📝 AI Quiz Generator &amp; Interactive Grading</h4>
+    <ol>
+        <li>Teacher generates a quiz (MCQ, True/False, Fill in Blanks, HOTS).</li>
+        <li>Renders interactive question cards on the canvas.</li>
+        <li><strong>Show/Hide Answer:</strong> Teacher taps a button on the card to reveal answer keys.</li>
+        <li><strong>AI Ink Grading:</strong> Students write answers on the IFP with stylus; teacher taps "Grade Ink with AI", which crops handwritten answer, runs OCR, and displays evaluation feedback.</li>
+    </ol>
+
+    <h4>5. 📄 AI Worksheet Generator (Printable A4 Layout)</h4>
+    <ol>
+        <li>Teacher requests a homework sheet or practice paper.</li>
+        <li>Creates an A4-proportioned Canvas Frame (210mm &times; 297mm) containing formatted headers, mark distributions, and questions.</li>
+        <li>Integrated with Android <code>PrintManager</code> to print directly to a classroom network printer.</li>
+    </ol>
+
+    <h4>6. 🗺️ AI Mind Maps &amp; Vector Concept Trees</h4>
+    <ol>
+        <li>Teacher enters a topic (e.g. "Photosynthesis").</li>
+        <li>Radial Layout Algorithm calculates node coordinates in World Space:
+            <br/><code>x<sub>n</sub> = x<sub>center</sub> + R &middot; cos(&theta;<sub>n</sub>), y<sub>n</sub> = y<sub>center</sub> + R &middot; sin(&theta;<sub>n</sub>)</code></li>
+        <li>Renders central topic box, sub-topic sticky notes, and connecting arrow strokes (<code>StrokeType.ARROW</code>).</li>
+        <li>Double-tapping any node requests Gemini to expand that specific branch.</li>
+    </ol>
+
+    <h4>7. 🎨 AI Diagram Generator with "Hide Labels" Quiz Mode</h4>
+    <ol>
+        <li>Teacher requests a diagram (e.g., "Human Digestive System").</li>
+        <li>Generates vector paths / illustration + callout line pointers + text label blocks.</li>
+        <li><strong>"Hide Labels" Mode:</strong> Toggling "Hide Labels" hides text labels, leaving blank box pointers so students write labels on the IFP screen with stylus.</li>
+    </ol>
+
+    <h4>8. 🧮 AI Formula Solver &amp; 2D Function Plotter</h4>
+    <ol>
+        <li>Teacher circles a handwritten math equation (&int; x<sup>2</sup> dx or y = x<sup>2</sup> - 4).</li>
+        <li>ML Kit / Gemini parses formula &rarr; Symja evaluates step-by-step algebra.</li>
+        <li>Plots 2D Cartesian function graph curve directly on canvas using <code>Canvas.drawPath()</code>.</li>
+    </ol>
+
+    <h4>9. 📚 AI Summarizer</h4>
+    <ol>
+        <li>Teacher selects a region of board notes &rarr; Taps <strong>"AI Summarizer"</strong>.</li>
+        <li>Generates 4 tabbed canvas cards: Revision Notes, Interactive Flash Cards, Formula Sheet, Exam Key Points.</li>
+    </ol>
+
+    <h4>10. 🌐 AI Translator (10 Indian Languages)</h4>
+    <ol>
+        <li>Teacher selects canvas text &rarr; Chooses target language (Hindi, Marathi, Gujarati, Tamil, Telugu, Kannada, Malayalam, Bengali, Punjabi, Urdu).</li>
+        <li>Performs in-place text translation or renders bilingual subtitle blocks underneath.</li>
+    </ol>
+
+    <h4>11. 🎙️ AI Voice Assistant (Hands-Free IFP Controller)</h4>
+    <ol>
+        <li>Microphone HUD stays docked in bottom corner of IFP panel.</li>
+        <li>Listens for voice triggers (<em>"Create a 5-question quiz on Motion"</em>, <em>"Next slide"</em>, <em>"Explain again"</em>, <em>"Translate to Hindi"</em>).</li>
+        <li>Speech-to-Intent parser directly triggers <code>CanvasViewModel</code> methods hands-free.</li>
+    </ol>
+
+    <h3>5.3 Fallback &amp; Offline Operational Strategy</h3>
+    <ul>
+        <li><strong>Online Mode:</strong> Uses Google Gemini 1.5 Flash / Pro API for full multimodal reasoning.</li>
+        <li><strong>Offline Mode:</strong> Automatically falls back to <strong>Google ML Kit</strong> for local handwriting OCR and <strong>Symja Engine</strong> for math solving when disconnected.</li>
+        <li><strong>Non-Destructive Canvas History:</strong> All AI-placed canvas elements are recorded in the <code>CanvasViewModel</code> Undo/Redo stack, allowing teachers to revert any AI action with 1 tap.</li>
+    </ul>
+
+</div>
+</body>
+</html>

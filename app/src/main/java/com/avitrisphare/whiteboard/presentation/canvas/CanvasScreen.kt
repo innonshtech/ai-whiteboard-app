@@ -139,6 +139,20 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
+import com.avitrisphare.whiteboard.presentation.canvas.utility.CalculatorFloatingPanel
+import com.avitrisphare.whiteboard.presentation.canvas.utility.CalculatorUiState
+import com.avitrisphare.whiteboard.presentation.canvas.utility.PeriodicTableFloatingPanel
+import com.avitrisphare.whiteboard.presentation.canvas.utility.PeriodicTableUiState
+import com.avitrisphare.whiteboard.presentation.canvas.utility.StopwatchFloatingPanel
+import com.avitrisphare.whiteboard.presentation.canvas.utility.StopwatchUiState
+import com.avitrisphare.whiteboard.presentation.canvas.utility.TimerFloatingPanel
+import com.avitrisphare.whiteboard.presentation.canvas.utility.TimerUiState
+import com.avitrisphare.whiteboard.presentation.canvas.utility.UtilityToolKind
+import com.avitrisphare.whiteboard.presentation.canvas.export.ExportLessonDialog
+import com.avitrisphare.whiteboard.presentation.canvas.export.ExportFormat
+import com.avitrisphare.whiteboard.presentation.canvas.export.ExportDestination
+import com.avitrisphare.whiteboard.presentation.canvas.export.ExportResult
+import com.avitrisphare.whiteboard.presentation.canvas.export.WhiteboardExportManager
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -222,6 +236,33 @@ fun List<Offset>.toSmoothedPath(): Path {
     }
     path.lineTo(last().x, last().y)
     return path
+}
+
+private fun decodeMediaBitmap(context: Context, uriString: String, maxDim: Int = 2048): android.graphics.Bitmap? {
+    return try {
+        val openStream: () -> java.io.InputStream? = {
+            when {
+                uriString.startsWith("/") -> java.io.File(uriString).inputStream()
+                uriString.startsWith("http://") || uriString.startsWith("https://") -> {
+                    val conn = java.net.URL(uriString).openConnection()
+                    conn.connectTimeout = 8000
+                    conn.getInputStream()
+                }
+                else -> context.contentResolver.openInputStream(Uri.parse(uriString))
+            }
+        }
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        openStream()?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (bounds.outWidth / sample > maxDim || bounds.outHeight / sample > maxDim) {
+            sample *= 2
+        }
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        openStream()?.use { BitmapFactory.decodeStream(it, null, opts) }
+    } catch (_: Exception) {
+        null
+    }
 }
 
 fun DrawScope.renderStroke(
@@ -461,7 +502,17 @@ fun DrawScope.renderStroke(
                 drawText(label, origin.x, origin.y + paint.textSize, paint)
             }
         }
-        StrokeType.IMAGE, StrokeType.VIDEO, StrokeType.WEB_EMBED -> Unit
+        StrokeType.IMAGE -> {
+            if (stroke.imageUri.isNotBlank()) {
+                val bmp = decodeMediaBitmap(context, stroke.imageUri)
+                if (bmp != null) {
+                    val b = stroke.bounds
+                    val destRect = android.graphics.Rect(b.left.toInt(), b.top.toInt(), b.right.toInt(), b.bottom.toInt())
+                    drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
+                }
+            }
+        }
+        StrokeType.VIDEO, StrokeType.WEB_EMBED -> Unit
         StrokeType.STICKY_NOTE -> {
             val origin = pointsList.first()
             val scale = (stroke.strokeWidth / 20f).coerceIn(0.75f, 3f)
@@ -782,6 +833,11 @@ fun CanvasScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     var showEditTitleDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var showExportLessonDialog by remember { mutableStateOf(false) }
+    var isExporting by remember { mutableStateOf(false) }
+    var exportProgress by remember { mutableFloatStateOf(0f) }
+    var exportStatusMessage by remember { mutableStateOf("") }
+    var exportResult by remember { mutableStateOf<ExportResult?>(null) }
     var showTextInputDialog by remember { mutableStateOf(false) }
     var showStickyInputDialog by remember { mutableStateOf(false) }
     var showWebEmbedDialog by remember { mutableStateOf(false) }
@@ -793,6 +849,25 @@ fun CanvasScreen(
     var stickyColorSelected by remember { mutableStateOf(STICKY_COLORS.first()) }
     var exportedUri by remember { mutableStateOf<Uri?>(null) }
     var lassoPoints by remember { mutableStateOf(listOf<Offset>()) }
+    var timerState by remember { mutableStateOf(TimerUiState()) }
+    var stopwatchState by remember { mutableStateOf(StopwatchUiState()) }
+    var calculatorState by remember { mutableStateOf(CalculatorUiState()) }
+    var periodicTableState by remember { mutableStateOf(PeriodicTableUiState()) }
+    var toolZOrder by remember {
+        mutableStateOf(
+            listOf(
+                UtilityToolKind.TIMER,
+                UtilityToolKind.STOPWATCH,
+                UtilityToolKind.CALCULATOR,
+                UtilityToolKind.PERIODIC_TABLE
+            )
+        )
+    }
+    val bringToolToFront: (UtilityToolKind) -> Unit = { tool ->
+        if (toolZOrder.lastOrNull() != tool) {
+            toolZOrder = toolZOrder.filter { it != tool } + tool
+        }
+    }
 
     var canvasScale by remember { mutableFloatStateOf(1f) }
     val liveInkTick = remember { mutableIntStateOf(0) }
@@ -953,6 +1028,16 @@ fun CanvasScreen(
             offset = Offset(canvasOffsetX, canvasOffsetY)
         )
         viewModel.addLocalVideo(uri.toString(), centerWorld)
+    }
+
+    val iwbPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.importIwbFile(context, uri) { _, msg ->
+                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     LaunchedEffect(state.scale, state.offsetX, state.offsetY) {
@@ -2259,10 +2344,11 @@ fun CanvasScreen(
             onOpenMenu = { showSidebar = true },
             onInsertImage = { imagePickerLauncher.launch("image/*") },
             onExport = {
-                viewModel.exportAsPng(context) { uri ->
-                    exportedUri = uri
-                    showExportDialog = true
-                }
+                exportResult = null
+                showExportLessonDialog = true
+            },
+            onOpenIwb = {
+                iwbPickerLauncher.launch(arrayOf("*/*"))
             },
             onLive = { showLiveCollabDialog = true },
             onHelp = { showHelpDialog = true },
@@ -2362,8 +2448,75 @@ fun CanvasScreen(
                 val next = if (state.uiLocaleTag == "hi") "en" else "hi"
                 panelSession?.setUiLocaleTag(next)
                 viewModel.setUiLocaleTag(next)
+            },
+            isTimerVisible = timerState.isVisible,
+            onToggleTimer = {
+                val next = !timerState.isVisible
+                timerState = timerState.copy(isVisible = next)
+                if (next) bringToolToFront(UtilityToolKind.TIMER)
+            },
+            isStopwatchVisible = stopwatchState.isVisible,
+            onToggleStopwatch = {
+                val next = !stopwatchState.isVisible
+                stopwatchState = stopwatchState.copy(isVisible = next)
+                if (next) bringToolToFront(UtilityToolKind.STOPWATCH)
+            },
+            isCalculatorVisible = calculatorState.isVisible,
+            onToggleCalculator = {
+                val next = !calculatorState.isVisible
+                calculatorState = calculatorState.copy(isVisible = next)
+                if (next) bringToolToFront(UtilityToolKind.CALCULATOR)
+            },
+            isPeriodicTableVisible = periodicTableState.isVisible,
+            onTogglePeriodicTable = {
+                val next = !periodicTableState.isVisible
+                periodicTableState = periodicTableState.copy(isVisible = next)
+                if (next) bringToolToFront(UtilityToolKind.PERIODIC_TABLE)
             }
         )
+
+        // Floating Utility Panels (Timer, Stopwatch, Calculator, Periodic Table)
+        // Dynamically rendered in toolZOrder so whichever tool is clicked appears at the top
+        toolZOrder.forEach { toolKind ->
+            when (toolKind) {
+                UtilityToolKind.TIMER -> {
+                    if (timerState.isVisible) {
+                        TimerFloatingPanel(
+                            state = timerState,
+                            onStateChange = { timerState = it },
+                            onBringToFront = { bringToolToFront(UtilityToolKind.TIMER) }
+                        )
+                    }
+                }
+                UtilityToolKind.STOPWATCH -> {
+                    if (stopwatchState.isVisible) {
+                        StopwatchFloatingPanel(
+                            state = stopwatchState,
+                            onStateChange = { stopwatchState = it },
+                            onBringToFront = { bringToolToFront(UtilityToolKind.STOPWATCH) }
+                        )
+                    }
+                }
+                UtilityToolKind.CALCULATOR -> {
+                    if (calculatorState.isVisible) {
+                        CalculatorFloatingPanel(
+                            state = calculatorState,
+                            onStateChange = { calculatorState = it },
+                            onBringToFront = { bringToolToFront(UtilityToolKind.CALCULATOR) }
+                        )
+                    }
+                }
+                UtilityToolKind.PERIODIC_TABLE -> {
+                    if (periodicTableState.isVisible) {
+                        PeriodicTableFloatingPanel(
+                            state = periodicTableState,
+                            onStateChange = { periodicTableState = it },
+                            onBringToFront = { bringToolToFront(UtilityToolKind.PERIODIC_TABLE) }
+                        )
+                    }
+                }
+            }
+        }
 
         val openDocument = state.document
         if (openDocument != null) {
@@ -2940,30 +3093,26 @@ fun CanvasScreen(
                             }
                         )
 
-                        // 2. Save to... (Highlighted in User's Screenshot)
+                        // 2. Export lesson (PDF, PNG ZIP, IWB)
                         SidebarMenuItem(
-                            icon = Icons.Default.Save,
-                            label = "Save to...",
+                            icon = Icons.Default.IosShare,
+                            label = "Export lesson...",
+                            shortcut = "Ctrl+Shift+E",
                             isSelected = true,
                             onClick = {
                                 showSidebar = false
-                                viewModel.exportNoteJson { path ->
-                                    Toast.makeText(context, "Saved to $path", Toast.LENGTH_SHORT).show()
-                                }
+                                exportResult = null
+                                showExportLessonDialog = true
                             }
                         )
 
-                        // 3. Export image... (Ctrl+Shift+E)
+                        // 3. Open GYOASH Lesson (.iwb)...
                         SidebarMenuItem(
-                            icon = Icons.Default.Image,
-                            label = "Export image...",
-                            shortcut = "Ctrl+Shift+E",
+                            icon = Icons.Default.FolderOpen,
+                            label = "Open GYOASH Lesson (.iwb)...",
                             onClick = {
                                 showSidebar = false
-                                viewModel.exportAsPng(context) { uri ->
-                                    exportedUri = uri
-                                    showExportDialog = true
-                                }
+                                iwbPickerLauncher.launch(arrayOf("*/*"))
                             }
                         )
 
@@ -3283,11 +3432,24 @@ fun CanvasScreen(
                         "Place protractor" to { showCommandPalette = false; placeMathTool(MathToolKind.PROTRACTOR, canvasCenter()) },
                         "Place set square" to { showCommandPalette = false; placeMathTool(MathToolKind.SET_SQUARE, canvasCenter()) },
                         "Place triangle" to { showCommandPalette = false; placeMathTool(MathToolKind.TRIANGLE, canvasCenter()) },
+                        "Countdown Timer" to { showCommandPalette = false; timerState = timerState.copy(isVisible = true); bringToolToFront(UtilityToolKind.TIMER) },
+                        "Stopwatch" to { showCommandPalette = false; stopwatchState = stopwatchState.copy(isVisible = true); bringToolToFront(UtilityToolKind.STOPWATCH) },
+                        "Scientific Calculator" to { showCommandPalette = false; calculatorState = calculatorState.copy(isVisible = true); bringToolToFront(UtilityToolKind.CALCULATOR) },
+                        "Periodic Table" to { showCommandPalette = false; periodicTableState = periodicTableState.copy(isVisible = true); bringToolToFront(UtilityToolKind.PERIODIC_TABLE) },
                         "Graph paper" to { showCommandPalette = false; viewModel.toggleGraphPaper() },
                         "Standard eraser" to { showCommandPalette = false; viewModel.setEraserMode(EraserMode.STANDARD) },
                         "Smart eraser" to { showCommandPalette = false; viewModel.setEraserMode(EraserMode.SMART) },
                         "Clear page" to { showCommandPalette = false; showClearDialog = true },
                         "Export as PNG" to { showCommandPalette = false; viewModel.exportAsPng(context) { exportedUri = it; showExportDialog = true } },
+                        "Export lesson (PDF/ZIP/IWB)" to {
+                            showCommandPalette = false
+                            exportResult = null
+                            showExportLessonDialog = true
+                        },
+                        "Open GYOASH Lesson (.iwb)" to {
+                            showCommandPalette = false
+                            iwbPickerLauncher.launch(arrayOf("*/*"))
+                        },
                         "Reset Zoom (100%)" to { showCommandPalette = false; viewModel.resetTransform() },
                         "Fit to Content" to { showCommandPalette = false; viewModel.fitToContent(canvasSize.width, canvasSize.height) }
                     ).filter { it.first.contains(commandSearchQuery, ignoreCase = true) }
@@ -3767,6 +3929,48 @@ fun CanvasScreen(
                 }
             },
             containerColor = LocalAvitriSphareColors.current.surface
+        )
+    }
+    // Export lesson dialog (PDF, PNG ZIP, IWB)
+    if (showExportLessonDialog) {
+        val allPages = viewModel.getAllPages()
+        ExportLessonDialog(
+            initialTitle = state.noteTitle,
+            pageCount = allPages.size.coerceAtLeast(1),
+            isExporting = isExporting,
+            exportProgress = exportProgress,
+            exportStatusMessage = exportStatusMessage,
+            exportResult = exportResult,
+            onDismiss = {
+                showExportLessonDialog = false
+                exportResult = null
+                isExporting = false
+            },
+            onStartExport = { title, format, destination ->
+                isExporting = true
+                exportProgress = 0.05f
+                exportStatusMessage = "Starting export for ${format.displayName}..."
+                viewModel.exportLesson(
+                    context = context,
+                    lessonTitle = title,
+                    format = format,
+                    destination = destination,
+                    onProgress = { progress, message ->
+                        exportProgress = progress
+                        exportStatusMessage = message
+                    },
+                    onResult = { result ->
+                        isExporting = false
+                        exportResult = result
+                    }
+                )
+            },
+            onOpenFile = { result ->
+                WhiteboardExportManager.openExportedFile(context, result)
+            },
+            onShareFile = { result ->
+                WhiteboardExportManager.launchShareIntent(context, result, state.noteTitle)
+            }
         )
     }
 }

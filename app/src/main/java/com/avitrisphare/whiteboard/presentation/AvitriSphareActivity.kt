@@ -59,10 +59,20 @@ class AvitriSphareActivity : ComponentActivity() {
 
         setContent {
             val session = remember { PanelSessionStore(this@AvitriSphareActivity) }
-            var teacher by remember { mutableStateOf<PanelTeacher?>(null) }
-            var schoolName by remember { mutableStateOf("School") }
-            var classroomName by remember { mutableStateOf("Classroom") }
-            var classroomId by remember { mutableStateOf<String?>(null) }
+            val defaultTeacher = remember {
+                PanelTeacher(
+                    id = "teacher_1",
+                    name = "Teacher",
+                    email = "teacher@school.local",
+                    subject = "Class",
+                    accessToken = "offline_token",
+                    refreshToken = null
+                )
+            }
+            var teacher by remember { mutableStateOf<PanelTeacher?>(defaultTeacher) }
+            var schoolName by remember { mutableStateOf("Smart Classroom") }
+            var classroomName by remember { mutableStateOf("Interactive Panel") }
+            var classroomId by remember { mutableStateOf<String?>("room_1") }
             var isDarkMode by remember { mutableStateOf(true) }
             var start by remember { mutableStateOf<String?>(null) }
             val scope = rememberCoroutineScope()
@@ -162,10 +172,6 @@ class AvitriSphareActivity : ComponentActivity() {
                                     },
                                     onOpenBoards = { navController.navigate("dashboard") },
                                     onLogout = {
-                                        val token = signedIn.accessToken
-                                        scope.launch {
-                                            panelApi.logout(token)
-                                        }
                                         session.logout()
                                         teacher = null
                                         if (!navController.popBackStack()) finish()
