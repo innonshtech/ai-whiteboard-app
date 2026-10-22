@@ -28,6 +28,10 @@ import com.avitrisphare.whiteboard.domain.model.Stroke
 import com.avitrisphare.whiteboard.domain.model.StrokeType
 import com.avitrisphare.whiteboard.domain.model.isPlacedMedia
 import com.avitrisphare.whiteboard.domain.repository.NoteRepository
+import com.avitrisphare.whiteboard.presentation.canvas.export.ExportDestination
+import com.avitrisphare.whiteboard.presentation.canvas.export.ExportFormat
+import com.avitrisphare.whiteboard.presentation.canvas.export.ExportResult
+import com.avitrisphare.whiteboard.presentation.canvas.export.WhiteboardExportManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -2732,6 +2736,105 @@ class CanvasViewModel @Inject constructor(
             val file = File(context.filesDir, "export_${_state.value.noteTitle.replace(" ", "_")}.whiteboard")
             file.writeText(json)
             withContext(Dispatchers.Main) { onSaved(file.absolutePath) }
+        }
+    }
+
+    fun getAllPages(): List<List<Stroke>> {
+        commitActivePage()
+        return pages.map { it.toList() }
+    }
+
+    fun exportLesson(
+        context: Context,
+        lessonTitle: String,
+        format: ExportFormat,
+        destination: ExportDestination,
+        onProgress: (Float, String) -> Unit,
+        onResult: (ExportResult) -> Unit
+    ) {
+        viewModelScope.launch {
+            commitActivePage()
+            val effectivePages = pages.map { it.toList() }
+            val currentState = _state.value
+            val rendered = renderedPages.toMap()
+            try {
+                val result = WhiteboardExportManager.exportWhiteboard(
+                    context = context,
+                    lessonTitle = lessonTitle,
+                    pages = effectivePages,
+                    canvasBackground = currentState.canvasBackground,
+                    isDarkCanvas = currentState.isDarkCanvas,
+                    showGrid = currentState.showGrid,
+                    document = currentState.document,
+                    renderedPages = rendered,
+                    scale = currentState.scale,
+                    offsetX = currentState.offsetX,
+                    offsetY = currentState.offsetY,
+                    activePage = activePage,
+                    splitCount = currentState.splitCount,
+                    splitWeights = currentState.splitWeights,
+                    splitPanes = currentState.splitPanes,
+                    format = format,
+                    destination = destination,
+                    onProgress = onProgress
+                )
+                withContext(Dispatchers.Main) {
+                    onResult(result)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onProgress(0f, "Export failed: ${e.message}")
+                    Toast.makeText(context, "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    fun importIwbFile(context: Context, uri: Uri, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val pkg = WhiteboardExportManager.importIwb(context, uri)
+                val restoredPages = pkg.pages.map { page ->
+                    page.layers.flatMap { layer -> layer.strokes.map { it.toDomain() } }
+                }
+                val background = CanvasBackground.fromKey(pkg.metadata.canvasBackground)
+
+                withContext(Dispatchers.Main) {
+                    commitActivePage()
+                    pages.clear()
+                    if (restoredPages.isEmpty()) {
+                        pages.add(emptyList())
+                    } else {
+                        pages.addAll(restoredPages)
+                    }
+                    activePage = pkg.metadata.activePage.coerceIn(0, pages.lastIndex)
+                    undoStack.clear()
+                    redoStack.clear()
+                    _state.update {
+                        it.copy(
+                            noteTitle = pkg.title.ifBlank { "Imported Lesson" },
+                            canvasBackground = background,
+                            isDarkCanvas = pkg.metadata.isDarkCanvas,
+                            showGrid = pkg.metadata.showGrid,
+                            strokes = pages[activePage],
+                            pageIndex = activePage,
+                            pageCount = pages.size,
+                            pagePreviews = pages.toList(),
+                            scale = pkg.metadata.scale.coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE),
+                            offsetX = pkg.metadata.offsetX,
+                            offsetY = pkg.metadata.offsetY,
+                            document = null,
+                            errorMessage = null
+                        )
+                    }
+                    scheduleSave()
+                    onResult(true, "Lesson '${pkg.title}' loaded with ${pages.size} pages and all layers intact!")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onResult(false, "Failed to load GYOASH IWB: ${e.message}")
+                }
+            }
         }
     }
 }
