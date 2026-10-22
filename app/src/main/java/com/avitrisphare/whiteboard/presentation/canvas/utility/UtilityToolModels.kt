@@ -95,5 +95,6 @@ data class PeriodicTableUiState(
     val isMinimized: Boolean = false,
     val isVisible: Boolean = false,
     val position: Offset = Offset(40f, 80f),
-    val zoomScale: Float = 1.0f
+    val zoomScale: Float = 1.0f,
+    val isDarkMode: Boolean = true
 )
