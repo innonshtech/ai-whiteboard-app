@@ -66,7 +66,7 @@ private val boxShapes = setOf(
     StrokeType.SPHERE
 )
 
-private val lockedAspect = setOf(
+val lockedAspect = setOf(
     StrokeType.SQUARE,
     StrokeType.CIRCLE,
     StrokeType.SPHERE,
@@ -101,6 +101,17 @@ fun hitShapeHandle(stroke: Stroke, point: Offset, slop: Float): ShapeHandleHit? 
                 hypot(point.x - stroke.points[vertex].x, point.y - stroke.points[vertex].y)
             } ?: return null
             if (near(stroke.points[index])) ShapeHandleHit(ShapeHandle.VERTEX, index) else null
+        }
+        stroke.strokeType == StrokeType.SQUARE -> {
+            if (stroke.points.size < 2) return null
+            val b = strokeSelectionBounds(stroke)
+            when {
+                near(Offset(b.left, b.top)) -> ShapeHandleHit(ShapeHandle.TOP_LEFT)
+                near(Offset(b.right, b.top)) -> ShapeHandleHit(ShapeHandle.TOP_RIGHT)
+                near(Offset(b.right, b.bottom)) -> ShapeHandleHit(ShapeHandle.BOTTOM_RIGHT)
+                near(Offset(b.left, b.bottom)) -> ShapeHandleHit(ShapeHandle.BOTTOM_LEFT)
+                else -> null
+            }
         }
         else -> {
             if (stroke.points.size < 2) return null
@@ -168,7 +179,7 @@ private fun resizeBox(box: Box, handle: ShapeHandle, point: Offset, lockAspect: 
     return Box(left, top, right, bottom)
 }
 
-private fun lockToSquare(anchor: Offset, point: Offset): Offset {
+fun lockToSquare(anchor: Offset, point: Offset): Offset {
     val dx = point.x - anchor.x
     val dy = point.y - anchor.y
     val side = max(abs(dx), abs(dy)).coerceAtLeast(12f)

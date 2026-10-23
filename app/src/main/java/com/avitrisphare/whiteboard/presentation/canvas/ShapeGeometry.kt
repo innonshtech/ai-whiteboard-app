@@ -48,6 +48,7 @@ data class ShapeSpec(
 val ALL_SHAPES: List<ShapeSpec> = listOf(
     // 2D Shapes
     ShapeSpec(StrokeType.RECTANGLE, "Rectangle", ShapeCategory.SHAPES_2D),
+    ShapeSpec(StrokeType.SQUARE, "Square", ShapeCategory.SHAPES_2D),
     ShapeSpec(StrokeType.ROUNDED_RECTANGLE, "Rounded Rect", ShapeCategory.SHAPES_2D, supportsRadius = true),
     ShapeSpec(StrokeType.CIRCLE, "Circle", ShapeCategory.SHAPES_2D),
     ShapeSpec(StrokeType.ELLIPSE, "Ellipse", ShapeCategory.SHAPES_2D),
@@ -247,6 +248,23 @@ fun DrawScope.renderExtendedShape(
     )
 
     when (stroke.strokeType) {
+        StrokeType.SQUARE -> {
+            val side = minOf(box.width, box.height)
+            val sqBox = Rect(box.left, box.top, box.left + side, box.top + side)
+            if (hasFill) {
+                drawRect(
+                    color = effectiveFillColor,
+                    topLeft = sqBox.topLeft,
+                    size = sqBox.size
+                )
+            }
+            drawRect(
+                color = effectiveStrokeColor,
+                topLeft = sqBox.topLeft,
+                size = sqBox.size,
+                style = solidStroke
+            )
+        }
         StrokeType.ROUNDED_RECTANGLE -> {
             val r = (if (stroke.cornerRadius > 0f) stroke.cornerRadius else 24f) / safeScale
             if (hasFill) {
