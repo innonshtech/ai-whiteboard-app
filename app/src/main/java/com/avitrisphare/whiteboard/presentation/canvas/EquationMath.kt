@@ -14,6 +14,7 @@ sealed class Formula {
     data class Row(val parts: List<Formula>) : Formula()
     data class Atom(val text: String) : Formula()
     data class Sup(val base: Formula, val exponent: Formula) : Formula()
+    data class Sub(val base: Formula, val subscript: Formula) : Formula()
     data class Frac(val numerator: Formula, val denominator: Formula) : Formula()
     data class Sqrt(val body: Formula) : Formula()
 }
@@ -56,10 +57,26 @@ private val superscripts = mapOf(
     '⁹' to "9"
 )
 
+private val subscripts = mapOf(
+    '₀' to "0",
+    '₁' to "1",
+    '₂' to "2",
+    '₃' to "3",
+    '₄' to "4",
+    '₅' to "5",
+    '₆' to "6",
+    '₇' to "7",
+    '₈' to "8",
+    '₉' to "9"
+)
+
 /** Turns a vision reading into LaTeX the formula renderer and the solver can share. */
 fun normalizeMathReading(raw: String): String {
     var text = raw.trim()
     if (text.isEmpty()) return ""
+    subscripts.forEach { (symbol, digit) ->
+        text = text.replace(symbol.toString(), "_{$digit}")
+    }
     superscripts.forEach { (symbol, digit) ->
         text = text.replace(symbol.toString(), "^{$digit}")
     }
@@ -71,21 +88,169 @@ fun normalizeMathReading(raw: String): String {
         .replace("μ", "\\mu ").replace("σ", "\\sigma ").replace("Ω", "\\omega ")
         .replace("ω", "\\omega ")
     greekWords.forEach { (word, command) ->
-        text = Regex("\\b$word\\b", RegexOption.IGNORE_CASE).replace(text) { command }
+        text = Regex("(?<!\\\\)\\b$word\\b", RegexOption.IGNORE_CASE).replace(text) { command }
     }
-    text = text.replace(Regex("([A-Za-z])([0-9])(?![0-9])")) { match ->
+    // Normalize dashes or double-equals recognized as equality
+    text = text.replace(Regex("(?<=\\s)(?:--|==|__)(?=\\s|$)"), "=")
+
+    // Convert caret powers: x^2 -> x^{2}, Y^2 -> Y^{2}, a^n -> a^{n}
+    text = text.replace(Regex("(?<![A-Za-z0-9_\\\\])([A-Za-z0-9])\\s*\\^\\s*([A-Za-z0-9]+)")) { match ->
         "${match.groupValues[1]}^{${match.groupValues[2]}}"
     }
-    text = text.replace(Regex("sqrt\\s*\\(([^)]+)\\)", RegexOption.IGNORE_CASE)) { match ->
+
+    // Convert isolated single-letter variable followed by digit 2..9 into power x^{N} (e.g. x2 -> x^{2}, or x 2 -> x^{2})
+    text = text.replace(Regex("(?<![A-Za-z0-9_\\\\])\\b([A-Za-z])([2-9])\\b(?![A-Za-z0-9_])")) { match ->
+        "${match.groupValues[1]}^{${match.groupValues[2]}}"
+    }
+    text = text.replace(Regex("(?<![A-Za-z0-9_\\\\])\\b([A-Za-z])\\s+([2-9])\\b(?=\\s*([+\\-*/=<>≤≥)]|$))")) { match ->
+        "${match.groupValues[1]}^{${match.groupValues[2]}}"
+    }
+    // Convert isolated single-letter variable followed by 0 or 1 into subscript x_{0}, x_{1}
+    text = text.replace(Regex("(?<![A-Za-z0-9_\\\\])\\b([A-Za-z])([01])\\b(?![A-Za-z0-9_])")) { match ->
+        "${match.groupValues[1]}_{${match.groupValues[2]}}"
+    }
+    // Convert isolated 't' or 'T' between two terms into '+' (e.g. 'a t b' -> 'a + b')
+    text = text.replace(Regex("(?<=\\b[a-zA-Z0-9])\\s+[tT]\\s+(?=[a-zA-Z0-9]\\b)")) {
+        " + "
+    }
+    text = text.replace(Regex("\\\\?sqrt\\s*\\(([^)]+)\\)", RegexOption.IGNORE_CASE)) { match ->
         "\\sqrt{${match.groupValues[1]}}"
     }
-    text = text.replace(Regex("\\\\sqrt\\s+([A-Za-z0-9]+)")) { match ->
+    text = text.replace(Regex("\\\\?sqrt\\s+([A-Za-z0-9]+)", RegexOption.IGNORE_CASE)) { match ->
         "\\sqrt{${match.groupValues[1]}}"
     }
-    text = text.replace(Regex("([A-Za-z0-9]+)\\s*/\\s*([A-Za-z0-9]+)")) { match ->
+    text = text.replace(Regex("(?<![A-Za-z0-9_\\\\])([A-Za-z0-9]+)\\s*/\\s*([A-Za-z0-9]+)(?![A-Za-z0-9_\\\\])")) { match ->
         "\\frac{${match.groupValues[1]}}{${match.groupValues[2]}}"
     }
+    // Clean up spacing around binary operators
+    text = text.replace(Regex("\\s*([+=])\\s*"), " $1 ")
     return text.replace(Regex("\\s+"), " ").trim()
+}
+
+/** Computes the horizontal and vertical distance between two rectangular bounding boxes. */
+fun boundingBoxDistance(r1: Rect, r2: Rect): Pair<Float, Float> {
+    val dx = when {
+        r1.right < r2.left -> r2.left - r1.right
+        r2.right < r1.left -> r1.left - r2.right
+        else -> 0f
+    }
+    val dy = when {
+        r1.bottom < r2.top -> r2.top - r1.bottom
+        r2.bottom < r1.top -> r1.top - r2.bottom
+        else -> 0f
+    }
+    return Pair(dx, dy)
+}
+
+/**
+ * Clusters handwriting strokes belonging to the same mathematical expression.
+ * Uses transitive spatial proximity to ensure terms, exponents, fraction parts,
+ * and signs are grouped together even if drawn slightly spaced or out of sequence.
+ */
+fun clusterMathStrokes(
+    strokes: List<Stroke>,
+    horizontalGap: Float = 450f,
+    verticalGap: Float = 300f
+): List<Stroke> {
+    if (strokes.isEmpty()) return emptyList()
+    val remaining = strokes.toMutableList()
+    val cluster = mutableListOf<Stroke>()
+    val seed = remaining.removeAt(remaining.lastIndex)
+    cluster.add(seed)
+
+    var added = true
+    while (added) {
+        added = false
+        val iterator = remaining.iterator()
+        while (iterator.hasNext()) {
+            val candidate = iterator.next()
+            val isNear = cluster.any { member ->
+                val (dx, dy) = boundingBoxDistance(member.bounds, candidate.bounds)
+                dx <= horizontalGap && dy <= verticalGap
+            }
+            if (isNear) {
+                cluster.add(candidate)
+                iterator.remove()
+                added = true
+            }
+        }
+    }
+    val orderMap = strokes.mapIndexed { idx, s -> s.id to idx }.toMap()
+    return cluster.sortedBy { orderMap[it.id] ?: Int.MAX_VALUE }
+}
+
+/**
+ * Splits strokes into a base group and a superscript group if the rightmost stroke(s)
+ * are positioned in the superscript quadrant (top-right, noticeably smaller height).
+ */
+fun detectSuperscriptStrokes(strokes: List<Stroke>): Pair<List<Stroke>, List<Stroke>>? {
+    if (strokes.size < 2) return null
+
+    val sortedByX = strokes.sortedBy { it.bounds.left }
+    val lastStroke = sortedByX.last()
+    val baseStrokes = strokes.filter { it.id != lastStroke.id }
+    if (baseStrokes.isEmpty()) return null
+
+    val baseBounds = unionStrokeBounds(baseStrokes)
+    val supBounds = lastStroke.bounds
+
+    // Conditions for spatial superscript on IFP canvas:
+    val isRight = supBounds.left >= baseBounds.left + baseBounds.width * 0.25f
+    val isHigh = supBounds.top < baseBounds.top + baseBounds.height * 0.65f &&
+            supBounds.bottom <= baseBounds.top + baseBounds.height * 0.95f
+    val isSmaller = supBounds.height <= baseBounds.height * 0.85f &&
+            supBounds.width <= baseBounds.width * 0.90f
+
+    if (isRight && isHigh && isSmaller) {
+        return Pair(baseStrokes, listOf(lastStroke))
+    }
+    return null
+}
+
+/**
+ * Selects the best candidate for math recognition. If the top candidate is a plain
+ * single letter/word (e.g. "y") because an English text LM preferred it over a formula,
+ * but another candidate includes digits/exponents (e.g. "y2", "Y2", "y²"), choose the math candidate.
+ */
+fun selectBestMathGuess(guesses: List<HandwritingGuess>, totalStrokes: Int): HandwritingGuess? {
+    if (guesses.isEmpty()) return null
+    if (guesses.size == 1) return guesses.first()
+
+    val mathRegex = Regex("[A-Za-z0-9][²³⁴⁵⁶⁷⁸⁹]|\\^[0-9]+|\\b[A-Za-z]\\s*[0-9]+\\b|[+\\-*/=<>≤≥√∫]")
+    val mathCandidates = guesses.filter { guess ->
+        guess.text.contains(mathRegex) || guess.text.any { it in "²³⁴⁵⁶⁷⁸⁹^+-*/=<>≤≥√∫" }
+    }
+
+    if (mathCandidates.isNotEmpty()) {
+        val top = guesses.first()
+        val topHasMath = top.text.contains(mathRegex) || top.text.any { it in "²³⁴⁵⁶⁷⁸⁹^+-*/=<>≤≥√∫" }
+        if (!topHasMath) {
+            val threshold = if (totalStrokes >= 2 && top.text.length <= 1) 0.65f else 0.35f
+            val bestMath = mathCandidates.firstOrNull { it.score >= top.score - threshold }
+            if (bestMath != null) {
+                return bestMath
+            }
+        }
+    }
+
+    return guesses.first()
+}
+
+/** Computes the bounding rectangle encompassing all provided strokes. */
+fun unionStrokeBounds(strokes: List<Stroke>): Rect {
+    if (strokes.isEmpty()) return Rect.Zero
+    var left = Float.POSITIVE_INFINITY
+    var top = Float.POSITIVE_INFINITY
+    var right = Float.NEGATIVE_INFINITY
+    var bottom = Float.NEGATIVE_INFINITY
+    strokes.forEach { stroke ->
+        val b = stroke.bounds
+        left = minOf(left, b.left)
+        top = minOf(top, b.top)
+        right = maxOf(right, b.right)
+        bottom = maxOf(bottom, b.bottom)
+    }
+    return Rect(left, top, right, bottom)
 }
 
 /** A long horizontal stroke with ink fully above and below it is a fraction bar. */
@@ -212,12 +377,21 @@ private class LatexCursor(val source: String) {
 
     fun parsePower(): Formula {
         var base = parseAtom()
-        skip()
-        if (index < source.length && source[index] == '^') {
-            index++
+        while (true) {
             skip()
-            val exponent = if (index < source.length && source[index] == '{') parseGroup() else parseAtom()
-            base = Formula.Sup(base, exponent)
+            if (index < source.length && source[index] == '^') {
+                index++
+                skip()
+                val exponent = if (index < source.length && source[index] == '{') parseGroup() else parseAtom()
+                base = Formula.Sup(base, exponent)
+            } else if (index < source.length && source[index] == '_') {
+                index++
+                skip()
+                val sub = if (index < source.length && source[index] == '{') parseGroup() else parseAtom()
+                base = Formula.Sub(base, sub)
+            } else {
+                break
+            }
         }
         return base
     }
@@ -291,6 +465,7 @@ private fun mathMlBody(formula: Formula): String {
         is Formula.Row -> "<mrow>${formula.parts.joinToString("") { mathMlBody(it) }}</mrow>"
         is Formula.Atom -> atomMathMl(formula.text)
         is Formula.Sup -> "<msup>${mathMlBody(formula.base)}${mathMlBody(formula.exponent)}</msup>"
+        is Formula.Sub -> "<msub>${mathMlBody(formula.base)}${mathMlBody(formula.subscript)}</msub>"
         is Formula.Frac -> "<mfrac>${mathMlBody(formula.numerator)}${mathMlBody(formula.denominator)}</mfrac>"
         is Formula.Sqrt -> "<msqrt>${mathMlBody(formula.body)}</msqrt>"
     }
@@ -309,7 +484,10 @@ private fun atomMathMl(text: String): String {
 private fun layoutFormula(formula: Formula, size: Float): Glyph {
     return when (formula) {
         is Formula.Atom -> {
-            val width = if (formula.text == "∫") size * 0.85f else formula.text.length.coerceAtLeast(1) * size * 0.72f
+            val isOp = formula.text in listOf("+", "-", "=", "×", "÷", "<", ">", "≤", "≥", "±")
+            val opPad = if (isOp) size * 0.22f else 0f
+            val baseCharWidth = if (isOp) size * 0.65f else size * 0.58f
+            val width = if (formula.text == "∫") size * 0.85f else (formula.text.length.coerceAtLeast(1) * baseCharWidth + opPad * 2f)
             val height = if (formula.text == "∫") size * 1.7f else size * 1.2f
             val baseline = if (formula.text == "∫") size * 1.2f else size
             Glyph(width, height, baseline)
@@ -327,6 +505,11 @@ private fun layoutFormula(formula: Formula, size: Float): Glyph {
             val base = layoutFormula(formula.base, size)
             val exponent = layoutFormula(formula.exponent, size * 0.62f)
             Glyph(base.width + exponent.width, base.height + exponent.height * 0.35f, base.baseline + exponent.height * 0.35f)
+        }
+        is Formula.Sub -> {
+            val base = layoutFormula(formula.base, size)
+            val sub = layoutFormula(formula.subscript, size * 0.62f)
+            Glyph(base.width + sub.width, base.height + sub.height * 0.35f, base.baseline)
         }
         is Formula.Frac -> {
             val numerator = layoutFormula(formula.numerator, size * 0.72f)
@@ -349,8 +532,10 @@ private fun drawPlaced(canvas: Canvas, formula: Formula, left: Float, top: Float
         is Formula.Atom -> {
             paint.style = Paint.Style.FILL
             paint.textSize = if (formula.text == "∫") size * 1.45f else size
+            val isOp = formula.text in listOf("+", "-", "=", "×", "÷", "<", ">", "≤", "≥", "±")
+            val opPad = if (isOp) size * 0.22f else 0f
             val box = layoutFormula(formula, size)
-            canvas.drawText(formula.text, left, top + box.baseline, paint)
+            canvas.drawText(formula.text, left + opPad, top + box.baseline, paint)
         }
         is Formula.Row -> {
             var cursor = left
@@ -366,6 +551,11 @@ private fun drawPlaced(canvas: Canvas, formula: Formula, left: Float, top: Float
             val base = layoutFormula(formula.base, size)
             drawPlaced(canvas, formula.base, left, top + layoutFormula(formula, size).baseline - base.baseline, size, paint)
             drawPlaced(canvas, formula.exponent, left + base.width, top, size * 0.62f, paint)
+        }
+        is Formula.Sub -> {
+            val base = layoutFormula(formula.base, size)
+            drawPlaced(canvas, formula.base, left, top + layoutFormula(formula, size).baseline - base.baseline, size, paint)
+            drawPlaced(canvas, formula.subscript, left + base.width, top + base.baseline * 0.4f, size * 0.62f, paint)
         }
         is Formula.Frac -> {
             val numerator = layoutFormula(formula.numerator, size * 0.72f)

@@ -54,6 +54,11 @@ class MathToolsTest {
             span = 80f
         )
         assertEquals(MathToolZone.PENCIL, hitTestMathTool(compass, compassPencil(compass)))
+        assertEquals(MathToolZone.CLOSE, hitTestMathTool(compass, compassCloseBtn(compass)))
+        assertEquals(MathToolZone.ROTATE, hitTestMathTool(compass, compassTopRotateBtn(compass)))
+        assertEquals(MathToolZone.SCALE, hitTestMathTool(compass, compassScaleBtn(compass)))
+        assertEquals(MathToolZone.SPREAD, hitTestMathTool(compass, compassSpreadBtn(compass)))
+        assertEquals(MathToolZone.MOVE, hitTestMathTool(compass, compass.center))
         val radiusGesture = MathGesture().apply {
             startSpan = compass.span
             movedPx = 40f
@@ -66,7 +71,7 @@ class MathToolsTest {
             startSpan = widened.span
             startAngleDeg = widened.rotationDeg
             lastAngleDeg = widened.rotationDeg
-            movedPx = 30f
+            movedPx = 45f
         }
         val swept = dragCompassPencil(widened, Offset(240f, 100f), sweep)
         assertTrue(sweep.arcMode)
@@ -86,17 +91,53 @@ class MathToolsTest {
 
     @Test
     fun protractorMarksDegreesFromTheBaseline() {
-        val tool = PlacedMathTool(
+        val protractor = PlacedMathTool(
             kind = MathToolKind.PROTRACTOR,
+            center = Offset(0f, 0f),
+            span = 150f,
+            pointerAngleDeg = 90f
+        )
+        assertEquals(0f, protractorAngle(protractor, Offset(120f, 0f))!!, 0.5f)
+        assertEquals(90f, protractorAngle(protractor, Offset(0f, -120f))!!, 0.5f)
+        assertEquals(180f, protractorAngle(protractor, Offset(-120f, 0f))!!, 0.5f)
+        assertEquals("90°", formatDegrees(90.2f))
+
+        val pSpan = protractor.span
+        val shelfY = (pSpan * 0.22f).coerceIn(48f, 64f) * 0.5f
+        assertEquals(MathToolZone.CLOSE, hitTestMathTool(protractor, Offset(-0.75f * pSpan, shelfY)))
+        assertEquals(MathToolZone.ANGLE_MODE_1, hitTestMathTool(protractor, Offset(-0.45f * pSpan, shelfY)))
+        assertEquals(MathToolZone.ANGLE_MODE_ARC_LEFT, hitTestMathTool(protractor, Offset(-0.15f * pSpan, shelfY)))
+        assertEquals(MathToolZone.ANGLE_MODE_ARC, hitTestMathTool(protractor, Offset(0.15f * pSpan, shelfY)))
+        assertEquals(MathToolZone.ANGLE_MODE_2, hitTestMathTool(protractor, Offset(0.45f * pSpan, shelfY)))
+        assertEquals(MathToolZone.SCALE, hitTestMathTool(protractor, Offset(0.75f * pSpan, shelfY)))
+        assertEquals(MathToolZone.ROTATE, hitTestMathTool(protractor, Offset(0f, -pSpan - 28f)))
+        assertEquals(MathToolZone.ANGLE_ARM, hitTestMathTool(protractor, Offset(0f, -pSpan)))
+        assertEquals(MathToolZone.MOVE, hitTestMathTool(protractor, Offset(60f, -60f)))
+
+        val setSquare = PlacedMathTool(
+            kind = MathToolKind.SET_SQUARE,
             center = Offset(0f, 0f),
             span = 150f
         )
-        assertEquals(0f, protractorAngle(tool, Offset(120f, 0f))!!, 0.5f)
-        assertEquals(90f, protractorAngle(tool, Offset(0f, -120f))!!, 0.5f)
-        assertEquals(180f, protractorAngle(tool, Offset(-120f, 0f))!!, 0.5f)
-        assertNull(protractorAngle(tool, Offset(0f, 40f)))
-        assertEquals(MathToolZone.SCALE, hitTestMathTool(tool, Offset(0f, -150f)))
-        assertEquals("90°", formatDegrees(90.2f))
+        val half = setSquare.span / 2f
+        assertEquals(MathToolZone.CLOSE, hitTestMathTool(setSquare, Offset(-half * 0.55f, -half * 0.45f)))
+        assertEquals(MathToolZone.PENCIL, hitTestMathTool(setSquare, Offset(-half * 0.35f, half * 0.35f)))
+        assertEquals(MathToolZone.ROTATE, hitTestMathTool(setSquare, Offset(-half, -half - 28f)))
+        assertEquals(MathToolZone.SCALE, hitTestMathTool(setSquare, Offset(half * 0.65f, half * 0.65f)))
+        assertEquals(MathToolZone.MOVE, hitTestMathTool(setSquare, Offset(-60f, 60f)))
+
+        val triangle = PlacedMathTool(
+            kind = MathToolKind.TRIANGLE,
+            center = Offset(0f, 0f),
+            span = 150f
+        )
+        val side = triangle.span * 1.8f
+        val h = side * 0.8660254f
+        assertEquals(MathToolZone.CLOSE, hitTestMathTool(triangle, Offset(0f, -h * 0.35f)))
+        assertEquals(MathToolZone.PENCIL, hitTestMathTool(triangle, Offset(0f, 0f)))
+        assertEquals(MathToolZone.ROTATE, hitTestMathTool(triangle, Offset(0f, -h * 0.6667f - 28f)))
+        assertEquals(MathToolZone.SCALE, hitTestMathTool(triangle, Offset(side * 0.18f, h * 0.10f)))
+        assertEquals(MathToolZone.MOVE, hitTestMathTool(triangle, Offset(-70f, 30f)))
     }
 
     @Test
@@ -132,6 +173,63 @@ class MathToolsTest {
         assertEquals(CanvasBackground.DOTTED, CanvasBackground.GRAPH.withGraphPaperToggled())
         assertEquals(CanvasBackground.GRAPH, CanvasBackground.fromKey("graph"))
         assertNotNull(rulerForStraightedge(listOf(newMathTool(MathToolKind.RULER, Offset(80f, 80f))), Offset(80f, 112f)))
+    }
+
+    @Test
+    fun toolsDoNotOverlapWhenPlaced() {
+        val ruler = newMathTool(MathToolKind.RULER, Offset(400f, 400f))
+        val candidateProtractor = Offset(400f, 400f) // Dropped directly on top of ruler
+        val resolved = resolveNonOverlappingPosition(
+            candidate = candidateProtractor,
+            candidateKind = MathToolKind.PROTRACTOR,
+            candidateSpan = defaultMathSpan(MathToolKind.PROTRACTOR),
+            existingTools = listOf(ruler)
+        )
+        val placedProtractor = newMathTool(MathToolKind.PROTRACTOR, resolved)
+        assertFalse("Tools must not overlap", toolsOverlap(ruler, placedProtractor))
+        val distance = kotlin.math.hypot(resolved.x - ruler.center.x, resolved.y - ruler.center.y)
+        assertTrue("Tools should separate to clear overlap", distance > 20f)
+        assertTrue("Tools should stay close and not separate by major distance", distance < 200f)
+    }
+
+    @Test
+    fun multipleToolsPlacedConsecutivelyDoNotOverlap() {
+        val tools = mutableListOf<PlacedMathTool>()
+        val kinds = listOf(MathToolKind.RULER, MathToolKind.COMPASS, MathToolKind.PROTRACTOR)
+        val center = Offset(500f, 400f)
+        for (kind in kinds) {
+            val resolved = findNonOverlappingPosition(
+                desiredCenter = center,
+                kind = kind,
+                span = defaultMathSpan(kind),
+                existingTools = tools
+            )
+            tools.add(newMathTool(kind, resolved))
+        }
+        assertEquals(3, tools.size)
+        // Verify every pair does not overlap
+        for (i in 0 until tools.size) {
+            for (j in i + 1 until tools.size) {
+                val a = tools[i]
+                val b = tools[j]
+                assertFalse("Tool ${a.kind} and ${b.kind} should not overlap", toolsOverlap(a, b))
+            }
+        }
+    }
+
+    @Test
+    fun toolsCanSitCloseWithoutBeingRepelled() {
+        val ruler = newMathTool(MathToolKind.RULER, Offset(400f, 400f))
+        // Place protractor right next to ruler along Y axis (just 10px below ruler's bottom edge)
+        val rulerBounds = mathToolBoundingRect(ruler)
+        val closeCandidate = Offset(400f, rulerBounds.bottom + defaultMathSpan(MathToolKind.PROTRACTOR) + 10f)
+        val resolved = findNonOverlappingPosition(
+            desiredCenter = closeCandidate,
+            kind = MathToolKind.PROTRACTOR,
+            span = defaultMathSpan(MathToolKind.PROTRACTOR),
+            existingTools = listOf(ruler)
+        )
+        assertEquals("Tool should stay exactly where placed when not overlapping", closeCandidate, resolved)
     }
 
     @Test

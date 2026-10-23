@@ -19,6 +19,7 @@ import com.google.mlkit.vision.digitalink.DigitalInkRecognitionModel
 import com.google.mlkit.vision.digitalink.DigitalInkRecognitionModelIdentifier
 import com.google.mlkit.vision.digitalink.DigitalInkRecognizerOptions
 import com.google.mlkit.vision.digitalink.Ink
+import com.google.mlkit.vision.digitalink.RecognitionContext
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.devanagari.DevanagariTextRecognizerOptions
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -127,19 +128,20 @@ fun readableHandwriting(strokes: List<Stroke>): List<Stroke> {
     }
 }
 
-fun handwritingCluster(strokes: List<Stroke>, gap: Float = 72f): List<Stroke> {
-    val ink = strokes.filter { it.strokeType in HANDWRITING_TYPES && it.points.size >= 2 }
+fun handwritingCluster(strokes: List<Stroke>, gap: Float = 140f): List<Stroke> {
+    val ink = strokes.filter { it.strokeType in HANDWRITING_TYPES && it.points.isNotEmpty() }
     if (ink.isEmpty()) return emptyList()
     val grouped = ArrayList<Stroke>()
     grouped.add(ink.last())
     var bounds = ink.last().bounds
     for (index in ink.lastIndex - 1 downTo 0) {
         val stroke = ink[index]
+        val dynamicGap = maxOf(gap, bounds.height * 1.25f)
         val near = Rect(
-            bounds.left - gap,
-            bounds.top - gap,
-            bounds.right + gap,
-            bounds.bottom + gap
+            bounds.left - dynamicGap,
+            bounds.top - dynamicGap,
+            bounds.right + dynamicGap,
+            bounds.bottom + dynamicGap
         )
         if (!near.overlaps(stroke.bounds)) break
         grouped.add(0, stroke)
@@ -218,15 +220,45 @@ class HandwritingReader(@Suppress("UNUSED_PARAMETER") context: Context) {
         return recognizeAfterDownload(strokes, language)
     }
 
+    suspend fun readMath(strokes: List<Stroke>): List<HandwritingGuess> {
+        if (strokes.isEmpty()) return emptyList()
+
+        // 1. Unbiased on-device Digital Ink Recognition (primary engine)
+        // No preContext bias so letters like Y, y, a, b are never falsely coerced into x.
+        val inkGuesses = recognizeDownloadedInk(
+            strokes,
+            SmartWriteLanguage("en", "English", SmartWriteScript.LATIN),
+            preContext = null
+        )
+        if (inkGuesses.isNotEmpty()) {
+            return inkGuesses
+        }
+
+        prefetch(SmartWriteLanguage("en", "English", SmartWriteScript.LATIN))
+
+        // 2. Fallback: Vision Text Recognition (OCR) on rendered bitmap
+        val fromOcr = recognizeImage(strokes, SmartWriteScript.LATIN)
+        if (fromOcr.isNotEmpty()) {
+            return fromOcr
+        }
+
+        // 3. Fallback: Wait for downloaded Digital Ink model
+        return recognizeAfterDownload(
+            strokes,
+            SmartWriteLanguage("en", "English", SmartWriteScript.LATIN)
+        )
+    }
+
     private suspend fun recognizeDownloadedInk(
         strokes: List<Stroke>,
-        language: SmartWriteLanguage
+        language: SmartWriteLanguage,
+        preContext: String? = null
     ): List<HandwritingGuess> {
         val model = inkModel(language) ?: return emptyList()
         return try {
             val manager = RemoteModelManager.getInstance()
             if (!manager.isModelDownloaded(model).awaitResult()) return emptyList()
-            recognizeInk(model, strokes)
+            recognizeInk(model, strokes, preContext)
         } catch (_: Exception) {
             emptyList()
         }
@@ -250,16 +282,24 @@ class HandwritingReader(@Suppress("UNUSED_PARAMETER") context: Context) {
 
     private suspend fun recognizeInk(
         model: DigitalInkRecognitionModel,
-        strokes: List<Stroke>
+        strokes: List<Stroke>,
+        preContext: String? = null
     ): List<HandwritingGuess> {
         val client = DigitalInkRecognition.getClient(
             DigitalInkRecognizerOptions.builder(model).build()
         )
-        val result = client.recognize(inkFrom(strokes)).awaitResult()
+        val ink = inkFrom(strokes)
+        val task = if (preContext != null) {
+            val context = RecognitionContext.builder().setPreContext(preContext).build()
+            client.recognize(ink, context)
+        } else {
+            client.recognize(ink)
+        }
+        val result = task.awaitResult()
         return result.candidates.mapNotNull { candidate ->
             val text = candidate.text.trim()
             if (text.isEmpty()) null else HandwritingGuess(text, candidate.score ?: 0.9f)
-        }.distinctBy { it.text }.take(3)
+        }.distinctBy { it.text }.take(10)
     }
 
     private suspend fun recognizeImage(
@@ -317,30 +357,42 @@ internal fun renderHandwriting(strokes: List<Stroke>): Bitmap? {
         bottom = max(bottom, bounds.bottom)
     }
     if (right <= left || bottom <= top) return null
-    val pad = 24f
-    val targetHeight = 220f
-    val scale = targetHeight / (bottom - top + pad * 2f)
-    val width = ((right - left + pad * 2f) * scale).toInt().coerceIn(48, 2400)
-    val height = ((bottom - top + pad * 2f) * scale).toInt().coerceIn(48, 800)
+    val pad = 32f
+    val targetHeight = 360f
+    val scale = (targetHeight / (bottom - top + pad * 2f)).coerceIn(0.5f, 2.5f)
+    val width = ((right - left + pad * 2f) * scale).toInt().coerceIn(64, 3000)
+    val height = ((bottom - top + pad * 2f) * scale).toInt().coerceIn(64, 1200)
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     canvas.drawColor(AndroidColor.WHITE)
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
         color = AndroidColor.BLACK
     }
+    val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = AndroidColor.BLACK
+    }
     strokes.forEach { stroke ->
-        if (stroke.points.size < 2) return@forEach
-        paint.strokeWidth = (stroke.strokeWidth * scale).coerceAtLeast(4f)
+        if (stroke.points.isEmpty()) return@forEach
+        val strokeWidth = (stroke.strokeWidth * scale).coerceAtLeast(4f)
+        if (stroke.points.size == 1) {
+            val point = stroke.points.first()
+            val x = (point.x - left + pad) * scale
+            val y = (point.y - top + pad) * scale
+            canvas.drawCircle(x, y, strokeWidth / 2f, dotPaint)
+            return@forEach
+        }
+        strokePaint.strokeWidth = strokeWidth
         val path = Path()
         stroke.points.forEachIndexed { index, point ->
             val x = (point.x - left + pad) * scale
             val y = (point.y - top + pad) * scale
             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        canvas.drawPath(path, paint)
+        canvas.drawPath(path, strokePaint)
     }
     return bitmap
 }
@@ -358,17 +410,21 @@ private fun inkFrom(strokes: List<Stroke>): Ink {
     }
     val scale = 180f / (bottom - top).coerceAtLeast(1f)
     val builder = Ink.builder()
+    var timeMs = 100L
     strokes.forEach { stroke ->
         if (stroke.points.isEmpty()) return@forEach
         val strokeBuilder = Ink.Stroke.builder()
         stroke.points.forEach { point ->
-            strokeBuilder.addPoint(Ink.Point.create((point.x - left) * scale, (point.y - top) * scale))
+            strokeBuilder.addPoint(Ink.Point.create((point.x - left) * scale, (point.y - top) * scale, timeMs))
+            timeMs += 10L
         }
         if (stroke.points.size == 1) {
             val point = stroke.points.first()
-            strokeBuilder.addPoint(Ink.Point.create((point.x - left) * scale + 1f, (point.y - top) * scale))
+            strokeBuilder.addPoint(Ink.Point.create((point.x - left) * scale + 1f, (point.y - top) * scale, timeMs))
+            timeMs += 10L
         }
         builder.addStroke(strokeBuilder.build())
+        timeMs += 50L
     }
     return builder.build()
 }

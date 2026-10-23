@@ -52,6 +52,23 @@ class PanelApi(
     }
 
     /**
+     * Sends a base64-encoded PNG of the selected strokes to the backend.
+     * The backend holds Vision API credentials; the app never touches them.
+     * Returns [ApiCall.Err] on network failure, timeout, or missing latex.
+     */
+    suspend fun recognizeEquation(
+        imageBase64: String,
+        accessToken: String
+    ): ApiCall<MathRecognitionResponse> {
+        if (imageBase64.isBlank()) return ApiCall.Err("No image to recognize")
+        val body = gson.toJson(mapOf("image" to imageBase64))
+        return when (val http = post("/api/v1/math/recognize-equation", body, accessToken)) {
+            is HttpResult.Failed -> ApiCall.Err(http.message)
+            is HttpResult.Body -> parseMathRecognitionResponse(http.json)
+        }
+    }
+
+    /**
      * Class home cards. Lessons and assigned classes come from avitrisphare.webapi.
      * Attendance and homework use the same paths as the teacher app; if those
      * routes are not on the server yet, the cards stay on empty labels.

@@ -18,10 +18,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,10 +41,14 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun FormulaCard(
     solution: FormulaSolution,
-    onSolve: () -> Unit,
+    onSolve: (String) -> Unit,
     onDismiss: () -> Unit,
+    onRetry: () -> Unit = {},
+    onDraftChange: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var draft by remember(solution.latex) { mutableStateOf(solution.latex) }
+
     Surface(
         modifier = modifier.widthIn(max = 560.dp),
         shape = RoundedCornerShape(18.dp),
@@ -47,7 +58,7 @@ fun FormulaCard(
         Column(
             modifier = Modifier
                 .padding(18.dp)
-                .heightIn(max = 420.dp)
+                .heightIn(max = 480.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -64,14 +75,38 @@ fun FormulaCard(
                         fontSize = 11.sp
                     )
                 }
+                TextButton(onClick = onRetry) {
+                    Text("Retry", color = Color(0xFF93C5FD))
+                }
                 TextButton(onClick = onDismiss) {
                     Text("Close", color = Color(0xFFC7D2FE))
                 }
             }
-            FormulaPreview(solution.latex, Modifier.fillMaxWidth().height(84.dp))
-            Spacer(Modifier.height(8.dp))
-            Text("LaTeX", color = Color(0xFF94A3B8), fontSize = 11.sp)
-            Text(solution.latex, color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 13.sp)
+            FormulaPreview(draft, Modifier.fillMaxWidth().height(84.dp))
+            Spacer(Modifier.height(10.dp))
+            Text("Edit LaTeX", color = Color(0xFF94A3B8), fontSize = 11.sp)
+            Spacer(Modifier.height(4.dp))
+            OutlinedTextField(
+                value = draft,
+                onValueChange = {
+                    draft = it
+                    onDraftChange(it)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = LocalTextStyle.current.copy(
+                    color = Color.White,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.sp
+                ),
+                singleLine = false,
+                maxLines = 3,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF6366F1),
+                    unfocusedBorderColor = Color(0xFF334155),
+                    focusedContainerColor = Color(0xFF0F172A),
+                    unfocusedContainerColor = Color(0xFF0F172A)
+                )
+            )
             Spacer(Modifier.height(8.dp))
             Text("MathML", color = Color(0xFF94A3B8), fontSize = 11.sp)
             Text(solution.mathml, color = Color(0xFFCBD5E1), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
@@ -92,7 +127,8 @@ fun FormulaCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!solution.solved) {
                     Button(
-                        onClick = onSolve,
+                        onClick = { onSolve(draft) },
+                        enabled = draft.isNotBlank(),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
                     ) {
                         Text("Solve this")
@@ -113,7 +149,11 @@ private fun FormulaPreview(latex: String, modifier: Modifier = Modifier) {
             typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
         }
         drawContext.canvas.nativeCanvas.let { native ->
-            drawFormula(native, parseFormula(latex), 16f, 12f, 32f, paint)
+            try {
+                drawFormula(native, parseFormula(latex), 16f, 12f, 32f, paint)
+            } catch (_: Exception) {
+                // Safeguard against incomplete tokens during active typing
+            }
         }
     }
 }

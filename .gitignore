@@ -31,5 +31,18 @@ Thumbs.db
 # Schema exports
 app/schemas/
 
+# Environment and secrets
+*.env*
+.env
+.env.*
+
+# Documents and reports
+*.pdf
+
+# Local test screenshots
+board_*.png
+live_*.png
+
 # Worktrees
 .worktrees/
+

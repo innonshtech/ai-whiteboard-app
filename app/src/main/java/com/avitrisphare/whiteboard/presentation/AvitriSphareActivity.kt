@@ -26,6 +26,7 @@ import com.avitrisphare.whiteboard.core.theme.AvitriSphareTheme
 import com.avitrisphare.whiteboard.data.remote.ClassBriefing
 import com.avitrisphare.whiteboard.data.remote.PanelApi
 import com.avitrisphare.whiteboard.data.remote.PanelTeacher
+import com.avitrisphare.whiteboard.data.remote.VerifiedLicense
 import com.avitrisphare.whiteboard.domain.model.Note
 import com.avitrisphare.whiteboard.domain.repository.NoteRepository
 import com.avitrisphare.whiteboard.presentation.canvas.CanvasScreen
@@ -217,6 +218,16 @@ class AvitriSphareActivity : ComponentActivity() {
                                     }
                                 )
                             }
+                        }
+
+                        composable("canvas") {
+                            CanvasScreen(
+                                noteId = "default",
+                                noteTitle = "",
+                                onNavigateBack = {
+                                    navController.popBackStack()
+                                }
+                            )
                         }
 
                         composable(

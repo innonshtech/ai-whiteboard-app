@@ -27,11 +27,12 @@ class CanvasViewModelTest {
     private lateinit var viewModel: CanvasViewModel
     private val context = mockk<Context>(relaxed = true)
     private val repository = mockk<NoteRepository>(relaxed = true)
+    private val panelApi = mockk<com.avitrisphare.whiteboard.data.remote.PanelApi>(relaxed = true)
 
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
-        viewModel = CanvasViewModel(context, repository)
+        viewModel = CanvasViewModel(context, repository, panelApi)
     }
 
     @After

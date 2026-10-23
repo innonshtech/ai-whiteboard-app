@@ -18,7 +18,7 @@ android {
         applicationId "com.avitrisphare.whiteboard"
         minSdk 24
         targetSdk 34
-        versionCode 1
+        versionCode 1001
         versionName "1.0"
 
         // Emulator alias for the host machine. A physical panel should set

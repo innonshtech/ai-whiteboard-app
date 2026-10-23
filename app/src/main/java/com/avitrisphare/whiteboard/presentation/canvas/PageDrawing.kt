@@ -115,7 +115,7 @@ private fun DrawScope.drawSelectionBox(strokes: List<Stroke>) {
     )
 }
 
-private fun DrawScope.inPageSpace(
+fun DrawScope.inPageSpace(
     offsetX: Float,
     offsetY: Float,
     scale: Float,
