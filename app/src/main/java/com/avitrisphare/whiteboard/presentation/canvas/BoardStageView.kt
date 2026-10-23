@@ -54,6 +54,8 @@ class BoardStageView(context: Context) : FrameLayout(context) {
     private var strokes: List<Stroke> = emptyList()
     private var gestureStrokes: List<Stroke>? = null
     private var pageBackground = CanvasBackground.DOTTED
+    private var customBackgroundUri: String? = null
+    private var customBackgroundBitmap: Bitmap? = null
     private var showGrid = false
     private var dark = false
     private var scale = 1f
@@ -122,22 +124,35 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         scale: Float,
         offsetX: Float,
         offsetY: Float,
-        selected: Set<String>
+        selected: Set<String>,
+        customBackgroundUri: String = ""
     ) {
         if (previewing) return
-        val pageChanged = background != this.pageBackground || showGrid != this.showGrid || dark != this.dark
+        val customBgChanged = customBackgroundUri != this.customBackgroundUri
+        val pageChanged = background != this.pageBackground || showGrid != this.showGrid || dark != this.dark || customBgChanged
         val moved = scale != this.scale || offsetX != this.offsetX || offsetY != this.offsetY
-        val inkChanged = this.strokes !== strokes || this.selected !== selected
+        val inkChanged = this.strokes !== strokes || this.strokes != strokes || this.selected !== selected || this.selected != selected
         this.pageBackground = background
+        this.customBackgroundUri = customBackgroundUri
         this.showGrid = showGrid
         this.dark = dark
         this.scale = scale
         this.offsetX = offsetX
         this.offsetY = offsetY
         this.selected = selected
-        if (gestureStrokes == null) this.strokes = strokes
+        if (customBgChanged) {
+            customBackgroundBitmap = if (customBackgroundUri.isNotBlank()) {
+                decodeFile(customBackgroundUri)
+            } else {
+                null
+            }
+        }
+        if (gestureStrokes != null && gestureStrokes !== strokes) {
+            gestureStrokes = null
+        }
+        this.strokes = ArrayList(strokes)
         if (inkChanged || pageChanged) {
-            bindMedia(if (gestureStrokes == null) strokes else this.strokes)
+            bindMedia(this.strokes)
         }
         if (pageChanged || moved) {
             gridDirty = true
@@ -540,7 +555,15 @@ class BoardStageView(context: Context) : FrameLayout(context) {
 
         private fun DrawScope.paintLayer() {
             if (this@LayerView === grid) {
-                drawPageGrid(pageBackground, showGrid, dark, scale, offsetX, offsetY)
+                if (pageBackground == CanvasBackground.CUSTOM && customBackgroundBitmap != null && !customBackgroundBitmap!!.isRecycled) {
+                    drawImage(
+                        image = customBackgroundBitmap!!.asImageBitmap(),
+                        dstOffset = IntOffset.Zero,
+                        dstSize = IntSize(size.width.toInt(), size.height.toInt())
+                    )
+                } else {
+                    drawPageGrid(pageBackground, showGrid, dark, scale, offsetX, offsetY)
+                }
                 val page = documentBitmap
                 if (page != null && !page.isRecycled && documentWidth > 0 && documentHeight > 0) {
                     withTransform({

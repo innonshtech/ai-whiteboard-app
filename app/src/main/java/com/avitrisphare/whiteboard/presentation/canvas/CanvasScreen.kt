@@ -755,7 +755,8 @@ fun BackgroundSwatch(type: CanvasBackground, isSelected: Boolean, onClick: () ->
             .size(36.dp)
             .clip(CircleShape)
             .border(borderWidth, borderColor, CircleShape)
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             when (type) {
@@ -792,8 +793,16 @@ fun BackgroundSwatch(type: CanvasBackground, isSelected: Boolean, onClick: () ->
                     drawRect(Color(0x99FFFFFF), style = DrawStroke(2f))
                     drawLine(Color.White, Offset(size.width / 2f, 0f), Offset(size.width / 2f, size.height), 2f)
                 }
-                CanvasBackground.CUSTOM -> drawRect(Color(0xFFE5E7EB))
+                CanvasBackground.CUSTOM -> drawRect(Color(0xFFE2E8F0))
             }
+        }
+        if (type == CanvasBackground.CUSTOM) {
+            Icon(
+                imageVector = Icons.Default.Image,
+                contentDescription = "Custom image background",
+                tint = Color(0xFF475569),
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }
@@ -1019,6 +1028,14 @@ fun CanvasScreen(
         }
     }
 
+    val customBgPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.setPageBackground(CanvasBackground.CUSTOM, it.toString())
+        }
+    }
+
     val videoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -1048,10 +1065,18 @@ fun CanvasScreen(
         }
     }
 
-    LaunchedEffect(state.scale, state.offsetX, state.offsetY) {
+    LaunchedEffect(state.splitCount, state.scale, state.offsetX, state.offsetY) {
         canvasScale = state.scale
         canvasOffsetX = state.offsetX
         canvasOffsetY = state.offsetY
+        boardStage?.setTransform(state.scale, state.offsetX, state.offsetY)
+        if (state.splitCount == 1) {
+            eraserSession.active = false
+            eraserSession.cursor = null
+            eraserSession.changed = false
+            eraserSession.strokes = emptyList()
+            boardStage?.clearGestureStrokes()
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -2043,7 +2068,8 @@ fun CanvasScreen(
                         scale = page.scale,
                         offsetX = page.offsetX,
                         offsetY = page.offsetY,
-                        selected = page.selectedStrokeIds
+                        selected = page.selectedStrokeIds,
+                        customBackgroundUri = page.pageCustomBackgroundUris.getOrElse(page.pageIndex) { "" }
                     )
                     stage.currentStroke = page.currentStroke
                     val document = page.document
@@ -2283,6 +2309,7 @@ fun CanvasScreen(
             onExit = onNavigateBack,
             onOpenMenu = { showSidebar = true },
             onInsertImage = { imagePickerLauncher.launch("image/*") },
+            onPickCustomBackground = { customBgPickerLauncher.launch("image/*") },
             onExport = {
                 exportResult = null
                 showExportLessonDialog = true
@@ -2520,30 +2547,40 @@ fun CanvasScreen(
                                     Text("Stop", color = Color(0xFFFF6B6B))
                                 }
                             }
-                        } else if (state.pdfOcrDocument == null) {
-                            TextButton(
-                                onClick = { viewModel.makePdfEditableCurrentPage() },
-                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF60A5FA))
-                            ) {
-                                Text("OCR this page", fontWeight = FontWeight.SemiBold)
-                            }
-                            TextButton(
-                                onClick = { viewModel.makePdfEditable() },
-                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF93C5FD))
-                            ) {
-                                Text("OCR all pages", fontWeight = FontWeight.SemiBold)
-                            }
                         } else {
-                            TextButton(
-                                onClick = { viewModel.togglePdfSearchPanel() },
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = if (state.showPdfSearchPanel) Color(0xFF34D399) else Color(0xFF60A5FA)
-                                )
-                            ) {
-                                Text(
-                                    if (state.showPdfSearchPanel) "Hide Text" else "Search & Text",
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                            val currentOcrDoc = state.pdfOcrDocument
+                            val hasOcrForCurrentPage = currentOcrDoc?.pages?.any { it.pageIndex == state.pageIndex } == true
+                            if (currentOcrDoc != null) {
+                                TextButton(
+                                    onClick = { viewModel.togglePdfSearchPanel() },
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = if (state.showPdfSearchPanel) Color(0xFF34D399) else Color(0xFF60A5FA)
+                                    )
+                                ) {
+                                    Text(
+                                        if (state.showPdfSearchPanel) "Hide Text" else "Search & Text",
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                            if (!hasOcrForCurrentPage) {
+                                TextButton(
+                                    onClick = { viewModel.makePdfEditableCurrentPage() },
+                                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF60A5FA))
+                                ) {
+                                    Text("OCR this page", fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                            if (currentOcrDoc == null || currentOcrDoc.pages.size < state.pageCount) {
+                                TextButton(
+                                    onClick = { viewModel.makePdfEditable() },
+                                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF93C5FD))
+                                ) {
+                                    Text(
+                                        if (currentOcrDoc == null) "OCR all pages" else "OCR all",
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
                             }
                         }
                     }
@@ -2705,12 +2742,19 @@ fun CanvasScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                "Document Live Text",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
-                            )
+                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                Text(
+                                    "Document Live Text",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp
+                                )
+                                Text(
+                                    "Extracted searchable text. Layout editability and unsupported languages are not promised.",
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 11.sp
+                                )
+                            }
                             IconButton(
                                 onClick = { viewModel.togglePdfSearchPanel(false) },
                                 modifier = Modifier.size(24.dp)
@@ -3906,20 +3950,51 @@ fun CanvasScreen(
     }
 
     if (state.showCloseSplitDialog) {
+        val activePaneIndex = state.splitActive.coerceIn(0, (state.splitPanes.size - 1).coerceAtLeast(0))
+        val activePane = state.splitPanes.getOrNull(activePaneIndex)
+        val activeStrokeCount = activePane?.strokes?.size ?: 0
         AlertDialog(
             onDismissRequest = { viewModel.dismissCloseSplitDialog() },
-            title = { Text("Leave split screen") },
-            text = { Text("Keep ink from the active panel on the main board?") },
+            title = { Text("Leave Split Screen", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = LocalAvitriSphareColors.current.textPrimary) },
+            text = {
+                Column {
+                    Text("Return to full canvas. Keep ink from the active screen?", color = LocalAvitriSphareColors.current.textMuted)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Active: Pane ${activePaneIndex + 1} ($activeStrokeCount stroke${if (activeStrokeCount == 1) "" else "s"})",
+                        fontSize = 13.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                        color = Color(0xFF2563EB)
+                    )
+                }
+            },
             confirmButton = {
-                TextButton(onClick = { viewModel.closeSplit(state.splitActive) }) {
-                    Text("Keep active panel")
+                TextButton(onClick = { viewModel.closeSplit(activePaneIndex) }) {
+                    Text("Keep Active Screen", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Color(0xFF2563EB))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.dismissCloseSplitDialog() }) {
-                    Text("Cancel")
+                Row {
+                    if (state.splitPanes.size == 2) {
+                        val otherIndex = if (activePaneIndex == 0) 1 else 0
+                        val otherPane = state.splitPanes.getOrNull(otherIndex)
+                        val otherCount = otherPane?.strokes?.size ?: 0
+                        TextButton(onClick = { viewModel.closeSplit(otherIndex) }) {
+                            Text("Keep Pane ${otherIndex + 1} ($otherCount)", color = LocalAvitriSphareColors.current.textMuted)
+                        }
+                    }
+                    val totalStrokes = state.splitPanes.sumOf { it.strokes.size }
+                    if (totalStrokes > activeStrokeCount && state.splitPanes.size > 1) {
+                        TextButton(onClick = { viewModel.closeSplit(-1) }) {
+                            Text("Combine All", color = LocalAvitriSphareColors.current.textMuted)
+                        }
+                    }
+                    TextButton(onClick = { viewModel.dismissCloseSplitDialog() }) {
+                        Text("Cancel", color = LocalAvitriSphareColors.current.textMuted)
+                    }
                 }
-            }
+            },
+            containerColor = LocalAvitriSphareColors.current.surface
         )
     }
 

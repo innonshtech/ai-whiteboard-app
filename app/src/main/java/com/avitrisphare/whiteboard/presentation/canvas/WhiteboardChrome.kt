@@ -105,6 +105,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -173,7 +174,8 @@ fun AvitriSphareWhiteboardChrome(
     isCalculatorVisible: Boolean = false,
     onToggleCalculator: () -> Unit = {},
     isPeriodicTableVisible: Boolean = false,
-    onTogglePeriodicTable: () -> Unit = {}
+    onTogglePeriodicTable: () -> Unit = {},
+    onPickCustomBackground: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -403,6 +405,18 @@ fun AvitriSphareWhiteboardChrome(
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
                             )
                             Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "Set as Background",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF0D9488))
+                                    .clickable { viewModel.setSelectedImageAsBackground() }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
                         }
                         val canEdit = state.strokes.count {
                             it.id in state.selectedStrokeIds && it.strokeType == StrokeType.TEXT
@@ -533,14 +547,6 @@ fun AvitriSphareWhiteboardChrome(
                     PopoverRow(Icons.Default.GridOn, "Graph paper", state.canvasBackground == CanvasBackground.GRAPH) {
                         viewModel.toggleGraphPaper(); panel = null
                     }
-                    PopoverRow(Icons.Default.AutoFixHigh, "Magic pen", state.isDrawToShapeEnabled) {
-                        viewModel.toggleDrawToShape()
-                    }
-                    Text(
-                        if (state.smartWriteEnabled) "Turn off Smart Write to use Magic pen." else "",
-                        fontSize = 11.sp,
-                        color = Color(0xFF6B7280)
-                    )
                     PopoverRow(Icons.Default.HorizontalRule, "Line", state.currentTool == WhiteboardTool.LINE) {
                         viewModel.setTool(WhiteboardTool.LINE); panel = null
                     }
@@ -637,14 +643,6 @@ fun AvitriSphareWhiteboardChrome(
                         viewModel.setTool(state.inkTool)
                         panel = "ink"
                     }
-                    PopoverRow(Icons.Default.AutoFixHigh, "Magic pen", state.isDrawToShapeEnabled) {
-                        viewModel.toggleDrawToShape()
-                    }
-                    Text(
-                        if (state.smartWriteEnabled) "Turn off Smart Write to use Magic pen." else "",
-                        fontSize = 11.sp,
-                        color = Color(0xFF6B7280)
-                    )
                     PopoverRow(Icons.Default.GridOn, "Background") { panel = "background" }
                     PopoverRow(Icons.Default.IosShare, "Export lesson...") { panel = null; onExport() }
                     PopoverRow(Icons.Default.FolderOpen, "Open GYOASH Lesson (.iwb)...") { panel = null; onOpenIwb() }
@@ -721,25 +719,158 @@ fun AvitriSphareWhiteboardChrome(
                     )
                 }
                 "background" -> DockPopover {
-                    Text("Background", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+                    Text("Background", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937), fontSize = 14.sp)
                     Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Board Styles", fontSize = 11.sp, color = Color(0xFF6B7280), fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         listOf(
-                            CanvasBackground.DOTTED,
-                            CanvasBackground.WHITE,
-                            CanvasBackground.GRID,
-                            CanvasBackground.GRAPH,
-                            CanvasBackground.LINED,
-                            CanvasBackground.DARK,
-                            CanvasBackground.FOOTBALL
-                        ).forEach { type ->
-                            BackgroundSwatch(
-                                type = type,
-                                isSelected = state.canvasBackground == type,
-                                onClick = {
-                                    viewModel.setPageBackground(type)
+                            CanvasBackground.WHITE to "White",
+                            CanvasBackground.DARK to "Dark",
+                            CanvasBackground.LINED to "Lined",
+                            CanvasBackground.DOTTED to "Dotted",
+                            CanvasBackground.GRID to "Grid",
+                            CanvasBackground.GRAPH to "Graph",
+                            CanvasBackground.FOOTBALL to "Football",
+                            CanvasBackground.CUSTOM to "Image"
+                        ).forEach { (type, label) ->
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.clickable {
+                                    if (type == CanvasBackground.CUSTOM) {
+                                        val hasImage = state.strokes.any { it.strokeType == StrokeType.IMAGE && it.imageUri.isNotBlank() }
+                                        if (hasImage) {
+                                            viewModel.setSelectedImageAsBackground()
+                                        } else {
+                                            onPickCustomBackground()
+                                        }
+                                    } else {
+                                        viewModel.setPageBackground(type)
+                                    }
                                     panel = null
                                 }
+                            ) {
+                                BackgroundSwatch(
+                                    type = type,
+                                    isSelected = state.canvasBackground == type,
+                                    onClick = {
+                                        if (type == CanvasBackground.CUSTOM) {
+                                            val hasImage = state.strokes.any { it.strokeType == StrokeType.IMAGE && it.imageUri.isNotBlank() }
+                                            if (hasImage) {
+                                                viewModel.setSelectedImageAsBackground()
+                                            } else {
+                                                onPickCustomBackground()
+                                            }
+                                        } else {
+                                            viewModel.setPageBackground(type)
+                                        }
+                                        panel = null
+                                    }
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    label,
+                                    fontSize = 10.sp,
+                                    color = if (state.canvasBackground == type) Color(0xFF4F46E5) else Color(0xFF6B7280),
+                                    fontWeight = if (state.canvasBackground == type) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFE5E7EB)))
+                    Spacer(Modifier.height(8.dp))
+
+                    Text("Selected Image Background", fontSize = 11.sp, color = Color(0xFF6B7280), fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.height(6.dp))
+
+                    val hasSelectedImage = state.strokes.any { it.id in state.selectedStrokeIds && it.strokeType == StrokeType.IMAGE && it.imageUri.isNotBlank() }
+                    val hasAnyImage = state.strokes.any { it.strokeType == StrokeType.IMAGE && it.imageUri.isNotBlank() }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (hasSelectedImage) Color(0xFFEFF6FF) else Color(0xFFF9FAFB))
+                            .clickable {
+                                if (hasSelectedImage || hasAnyImage) {
+                                    viewModel.setSelectedImageAsBackground()
+                                    panel = null
+                                } else {
+                                    onPickCustomBackground()
+                                    panel = null
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Image,
+                            contentDescription = "Selected image as background",
+                            tint = if (hasSelectedImage) Color(0xFF2563EB) else Color(0xFF4B5563),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Selected Image",
+                                color = if (hasSelectedImage) Color(0xFF1D4ED8) else Color(0xFF1F2937),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = if (hasSelectedImage) "Apply selected image as canvas background"
+                                else if (hasAnyImage) "Use image from this board as background"
+                                else "Select or insert an image to set as background",
+                                color = Color(0xFF6B7280),
+                                fontSize = 10.sp
+                            )
+                        }
+                        if (state.canvasBackground == CanvasBackground.CUSTOM) {
+                            Text("Active", color = Color(0xFF16A34A), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFF9FAFB))
+                            .clickable {
+                                onPickCustomBackground()
+                                panel = null
+                            }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.FolderOpen,
+                            contentDescription = "Choose image file",
+                            tint = Color(0xFF4B5563),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Choose Image from Device",
+                                color = Color(0xFF1F2937),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Pick a picture from storage / gallery",
+                                color = Color(0xFF6B7280),
+                                fontSize = 10.sp
                             )
                         }
                     }
@@ -766,12 +897,14 @@ fun AvitriSphareWhiteboardChrome(
                     } else {
                         state.pagePreviews.getOrElse(index) { emptyList() }
                     }
+                    val bgKey = state.pageBackgroundKeys.getOrElse(index) { CanvasBackground.DOTTED.key }
                     PageThumbnail(
                         index = index,
                         title = state.pageTitles.getOrElse(index) { "Page ${index + 1}" },
                         strokes = strokes,
+                        backgroundKey = bgKey,
                         selected = index == state.pageIndex,
-                        dark = state.isDarkCanvas,
+                        dark = bgKey == CanvasBackground.DARK.key,
                         onClick = { viewModel.selectPage(index) },
                         onOptionsClick = { pageMenuIndex = index },
                         onLongClick = { pageMenuIndex = index }
@@ -860,7 +993,7 @@ fun AvitriSphareWhiteboardChrome(
                         DockItem(
                             Icons.Default.ChangeHistory,
                             "Geometry",
-                            state.isDrawToShapeEnabled || state.currentTool == WhiteboardTool.FRAME || panel == "geometry"
+                            state.currentTool == WhiteboardTool.FRAME || panel == "geometry"
                         ) { toggle("geometry") }
                         DraggableDockItem(
                             icon = Icons.Default.Straighten,
@@ -1103,9 +1236,9 @@ private fun DockPopover(content: @Composable () -> Unit) {
         shadowElevation = 12.dp,
         modifier = Modifier
             .padding(bottom = 4.dp)
-            .widthIn(min = 200.dp, max = 320.dp)
+            .widthIn(min = 280.dp, max = 380.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             content()
         }
     }
@@ -1164,6 +1297,7 @@ private fun PageThumbnail(
     index: Int,
     title: String,
     strokes: List<Stroke>,
+    backgroundKey: String = CanvasBackground.DOTTED.key,
     selected: Boolean,
     dark: Boolean,
     onClick: () -> Unit,
@@ -1186,7 +1320,86 @@ private fun PageThumbnail(
                     .fillMaxSize()
                     .clip(RoundedCornerShape(6.dp))
             ) {
-                drawRect(if (dark) Color(0xFF171717) else Color.White)
+                when (backgroundKey) {
+                    CanvasBackground.DARK.key -> {
+                        drawRect(Color(0xFF171717))
+                    }
+                    CanvasBackground.FOOTBALL.key -> {
+                        drawRect(Color(0xFF2E7D32))
+                        val linePaint = Color.White.copy(alpha = 0.5f)
+                        val pad = 4f
+                        val pitchW = size.width - pad * 2
+                        val pitchH = size.height - pad * 2
+                        drawRect(linePaint, topLeft = Offset(pad, pad), size = Size(pitchW, pitchH), style = ThumbStroke(1f))
+                        drawLine(linePaint, Offset(size.width / 2f, pad), Offset(size.width / 2f, size.height - pad), strokeWidth = 1f)
+                        drawCircle(linePaint, radius = 5f, center = Offset(size.width / 2f, size.height / 2f), style = ThumbStroke(1f))
+                        val boxW = pitchW * 0.18f
+                        val boxH = pitchH * 0.5f
+                        val boxY = (size.height - boxH) / 2f
+                        drawRect(linePaint, topLeft = Offset(pad, boxY), size = Size(boxW, boxH), style = ThumbStroke(1f))
+                        drawRect(linePaint, topLeft = Offset(size.width - pad - boxW, boxY), size = Size(boxW, boxH), style = ThumbStroke(1f))
+                    }
+                    CanvasBackground.GRAPH.key -> {
+                        drawRect(Color(0xFFF7FBFF))
+                        val gridColor = Color(0xFFD3E3F4).copy(alpha = 0.7f)
+                        val step = 6f
+                        var x = step
+                        while (x < size.width) {
+                            drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 0.5f)
+                            x += step
+                        }
+                        var y = step
+                        while (y < size.height) {
+                            drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 0.5f)
+                            y += step
+                        }
+                    }
+                    CanvasBackground.GRID.key -> {
+                        drawRect(Color.White)
+                        val gridColor = Color(0xFFCBD5E1).copy(alpha = 0.6f)
+                        val step = 8f
+                        var x = step
+                        while (x < size.width) {
+                            drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 0.5f)
+                            x += step
+                        }
+                        var y = step
+                        while (y < size.height) {
+                            drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 0.5f)
+                            y += step
+                        }
+                    }
+                    CanvasBackground.LINED.key -> {
+                        drawRect(Color.White)
+                        val lineColor = Color(0xFFCBD5E1)
+                        val step = 8f
+                        var y = step
+                        while (y < size.height) {
+                            drawLine(lineColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 0.5f)
+                            y += step
+                        }
+                    }
+                    CanvasBackground.DOTTED.key -> {
+                        drawRect(Color.White)
+                        val dotColor = Color(0xFF94A3B8)
+                        val step = 10f
+                        var x = step / 2f
+                        while (x < size.width) {
+                            var y = step / 2f
+                            while (y < size.height) {
+                                drawCircle(dotColor, radius = 0.75f, center = Offset(x, y))
+                                y += step
+                            }
+                            x += step
+                        }
+                    }
+                    CanvasBackground.CUSTOM.key -> {
+                        drawRect(Color(0xFFE2E8F0))
+                    }
+                    else -> {
+                        drawRect(if (dark) Color(0xFF171717) else Color.White)
+                    }
+                }
                 if (strokes.isEmpty()) return@Canvas
                 var minX = Float.POSITIVE_INFINITY
                 var minY = Float.POSITIVE_INFINITY

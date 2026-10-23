@@ -363,9 +363,13 @@ class CanvasViewModel @Inject constructor(
             existing.getOrNull(index) ?: CanvasPane(
                 id = index,
                 strokes = if (index == 0 && existing.isEmpty()) current.strokes else emptyList(),
-                tool = if (index == 0) current.currentTool else WhiteboardTool.PEN
+                tool = if (index == 0) current.currentTool else WhiteboardTool.PEN,
+                color = if (index == 0) current.selectedColor else 0xFF1B1F2A.toInt(),
+                strokeWidth = if (index == 0) current.strokeWidth else 4f
             )
         }
+        val targetActive = current.splitActive.coerceIn(0, count - 1)
+        val activePane = panes[targetActive]
         paneUndo.forEach { it.clear() }
         paneRedo.forEach { it.clear() }
         _state.update {
@@ -373,15 +377,21 @@ class CanvasViewModel @Inject constructor(
                 splitCount = count,
                 splitWeights = defaultWeights(count),
                 splitPanes = panes,
-                splitActive = 0
+                splitActive = targetActive,
+                currentTool = activePane.tool,
+                selectedColor = activePane.color,
+                strokeWidth = activePane.strokeWidth,
+                canUndo = false,
+                canRedo = false
             )
         }
         scheduleSave()
     }
 
-    fun requestCloseSplit() {
+    fun requestCloseSplit(paneIndex: Int? = null) {
         if (_state.value.splitCount <= 1) return
-        _state.update { it.copy(showCloseSplitDialog = true) }
+        val target = (paneIndex ?: _state.value.splitActive).coerceIn(0, (_state.value.splitPanes.size - 1).coerceAtLeast(0))
+        _state.update { it.copy(showCloseSplitDialog = true, splitActive = target) }
     }
 
     fun dismissCloseSplitDialog() {
@@ -390,25 +400,48 @@ class CanvasViewModel @Inject constructor(
 
     fun closeSplit(keepPaneIndex: Int? = null) {
         val current = _state.value
-        val index = (keepPaneIndex ?: current.splitActive).coerceIn(0, current.splitPanes.lastIndex)
-        val kept = current.splitPanes.getOrNull(index)
-        if (kept != null && kept.kind == PaneKind.BOARD) {
-            if (pages.isEmpty()) pages.add(emptyList())
-            if (activePage !in pages.indices) activePage = 0
-            pages[activePage] = kept.strokes
+        if (current.splitPanes.isEmpty()) {
+            _state.update { it.copy(showCloseSplitDialog = false, splitCount = 1) }
+            return
         }
+        val targetIndex = (keepPaneIndex ?: current.splitActive).coerceIn(0, current.splitPanes.lastIndex)
+        val strokesToKeep: List<Stroke> = if (keepPaneIndex == -1) {
+            current.splitPanes.flatMap { it.strokes }
+        } else {
+            val kept = current.splitPanes.getOrNull(targetIndex)
+            kept?.strokes ?: current.strokes
+        }
+        val keptPane = current.splitPanes.getOrNull(targetIndex)
+        val freshStrokes = ArrayList(strokesToKeep)
+        if (pages.isEmpty()) pages.add(emptyList())
+        if (activePage !in pages.indices) activePage = 0
+        pages[activePage] = freshStrokes
+
         paneUndo.forEach { it.clear() }
         paneRedo.forEach { it.clear() }
+        undoActionStack.clear()
+        redoActionStack.clear()
+        if (freshStrokes.isNotEmpty()) {
+            undoActionStack.add(CanvasUndoEntry.StrokeState(emptyList()))
+        }
         _state.update {
             it.copy(
-                strokes = if (kept != null && kept.kind == PaneKind.BOARD) kept.strokes else it.strokes,
+                strokes = freshStrokes,
                 pagePreviews = pages.toList(),
                 splitCount = 1,
                 splitWeights = emptyList(),
                 splitPanes = emptyList(),
                 splitActive = 0,
+                scale = 1f,
+                offsetX = 0f,
+                offsetY = 0f,
+                currentTool = keptPane?.tool ?: it.currentTool,
+                selectedColor = keptPane?.color ?: it.selectedColor,
+                strokeWidth = keptPane?.strokeWidth ?: it.strokeWidth,
                 paneRequest = null,
-                showCloseSplitDialog = false
+                showCloseSplitDialog = false,
+                canUndo = undoActionStack.isNotEmpty(),
+                canRedo = false
             )
         }
         scheduleSave()
@@ -416,11 +449,19 @@ class CanvasViewModel @Inject constructor(
 
     fun focusPane(index: Int) {
         val pane = _state.value.splitPanes.getOrNull(index) ?: return
-        if (_state.value.splitActive == index && _state.value.currentTool == pane.tool) return
+        if (_state.value.splitActive == index &&
+            _state.value.currentTool == pane.tool &&
+            _state.value.selectedColor == pane.color &&
+            _state.value.strokeWidth == pane.strokeWidth
+        ) return
         _state.update {
             it.copy(
                 splitActive = index,
                 currentTool = pane.tool,
+                selectedColor = pane.color,
+                strokeWidth = pane.strokeWidth,
+                canUndo = paneUndo[index].isNotEmpty(),
+                canRedo = paneRedo[index].isNotEmpty(),
                 isEraser = pane.tool == WhiteboardTool.ERASER,
                 isHighlighter = pane.tool == WhiteboardTool.HIGHLIGHTER
             )
@@ -432,16 +473,23 @@ class CanvasViewModel @Inject constructor(
         paneUndo[index].addLast(strokes)
         if (paneUndo[index].size > 40) paneUndo[index].removeAt(0)
         paneRedo[index].clear()
-        _state.update { it.copy(canUndo = true, canRedo = false) }
+        val active = _state.value.splitActive
+        _state.update {
+            it.copy(
+                canUndo = if (index == active) true else paneUndo[active].isNotEmpty(),
+                canRedo = if (index == active) false else paneRedo[active].isNotEmpty()
+            )
+        }
     }
 
     fun cancelPaneEdit(index: Int) {
         if (index !in paneUndo.indices) return
         paneUndo[index].removeLastOrNull()
+        val active = _state.value.splitActive
         _state.update {
             it.copy(
-                canUndo = paneUndo[index].isNotEmpty(),
-                canRedo = paneRedo[index].isNotEmpty()
+                canUndo = paneUndo[active].isNotEmpty(),
+                canRedo = paneRedo[active].isNotEmpty()
             )
         }
     }
@@ -449,10 +497,11 @@ class CanvasViewModel @Inject constructor(
     fun setPaneStrokes(index: Int, strokes: List<Stroke>) {
         _state.update { state ->
             if (index !in state.splitPanes.indices) return@update state
+            val active = state.splitActive.coerceIn(0, 5)
             state.copy(
                 splitPanes = replacePaneStrokes(state.splitPanes, index, strokes),
-                canUndo = paneUndo[index].isNotEmpty(),
-                canRedo = paneRedo[index].isNotEmpty()
+                canUndo = paneUndo[active].isNotEmpty(),
+                canRedo = paneRedo[active].isNotEmpty()
             )
         }
         scheduleSave()
@@ -859,12 +908,13 @@ class CanvasViewModel @Inject constructor(
                     showPdfSearchPanel = true
                 )
             }
+            scheduleSave()
 
             val totalWords = pageResults.sumOf { it.text.split(Regex("\\s+")).count { w -> w.isNotBlank() } }
             val message = if (isLargePdf) {
-                "PDF '${doc.name}' is now editable! ($pageCount pages, $totalWords words)"
+                "PDF '${doc.name}' OCR complete: text is searchable & selectable ($pageCount pages, $totalWords words)"
             } else {
-                "PDF is now editable! ($totalWords words recognized)"
+                "PDF OCR complete: text is searchable & selectable ($totalWords words recognized)"
             }
             showToast(message)
         }
@@ -1347,6 +1397,28 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun recolorSelected(color: Int) {
+        if (_state.value.splitCount > 1) {
+            val active = _state.value.splitActive.coerceIn(0, 5)
+            val currentPanes = _state.value.splitPanes
+            val activePane = currentPanes.getOrNull(active) ?: return
+            val selected = _state.value.selectedStrokeIds
+            if (selected.isEmpty()) return
+            beginPaneEdit(active)
+            val updatedStrokes = activePane.strokes.map { stroke ->
+                if (stroke.id in selected) stroke.copy(colorValue = color) else stroke
+            }
+            setPaneStrokes(active, updatedStrokes)
+            _state.update { s ->
+                s.copy(
+                    selectedColor = color,
+                    splitPanes = s.splitPanes.mapIndexed { idx, p ->
+                        if (idx == active) p.copy(color = color) else p
+                    }
+                )
+            }
+            scheduleSave()
+            return
+        }
         if (_state.value.selectedStrokeIds.isEmpty()) return
         saveToUndoStack()
         val selected = _state.value.selectedStrokeIds
@@ -1548,6 +1620,14 @@ class CanvasViewModel @Inject constructor(
         _state.update { it.copy(document = doc) }
     }
 
+    fun setPdfOcrDocumentForTesting(doc: PdfOcrDocument?) {
+        _state.update { it.copy(pdfOcrDocument = doc) }
+    }
+
+    fun setSmartWriteOfferForTesting(offer: SmartWriteOffer?) {
+        _state.update { it.copy(smartWriteOffer = offer) }
+    }
+
     fun setPageBackground(background: CanvasBackground, customUri: String = "") {
         syncPageMetadataLists()
         pageBackgroundKeys[activePage] = background.key
@@ -1555,11 +1635,35 @@ class CanvasViewModel @Inject constructor(
         _state.update {
             it.copy(
                 canvasBackground = background,
+                isDarkCanvas = background == CanvasBackground.DARK,
                 pageBackgroundKeys = pageBackgroundKeys.toList(),
                 pageCustomBackgroundUris = pageCustomBackgroundUris.toList()
             )
         }
         scheduleSave()
+    }
+
+    fun setSelectedImageAsBackground(imageStrokeId: String? = null): Boolean {
+        val targetId = imageStrokeId ?: _state.value.selectedStrokeIds.firstOrNull()
+        val imageStroke = if (targetId != null) {
+            _state.value.strokes.firstOrNull { it.id == targetId && it.strokeType == StrokeType.IMAGE && it.imageUri.isNotBlank() }
+        } else {
+            _state.value.strokes.firstOrNull { it.strokeType == StrokeType.IMAGE && it.imageUri.isNotBlank() }
+        } ?: return false
+
+        saveToUndoStack()
+        setPageBackground(CanvasBackground.CUSTOM, imageStroke.imageUri)
+        val remaining = _state.value.strokes.filterNot { it.id == imageStroke.id }
+        pages[activePage] = remaining
+        _state.update {
+            it.copy(
+                strokes = remaining,
+                selectedStrokeIds = emptySet(),
+                canUndo = true
+            )
+        }
+        scheduleSave()
+        return true
     }
 
     fun configureHelpPanel(panelId: String, licenseState: String) {
@@ -2059,6 +2163,7 @@ class CanvasViewModel @Inject constructor(
                 pageBackgroundKeys = pageBackgroundKeys.toList(),
                 pageCustomBackgroundUris = pageCustomBackgroundUris.toList(),
                 canvasBackground = bg,
+                isDarkCanvas = bg == CanvasBackground.DARK,
                 canUndo = undoActionStack.isNotEmpty(),
                 canRedo = redoActionStack.isNotEmpty()
             )
@@ -2099,28 +2204,29 @@ class CanvasViewModel @Inject constructor(
             if (restored.isEmpty()) pages.add(emptyList()) else pages.addAll(restored)
             loaded.pageTitles?.let { pageTitles.addAll(it) }
             loaded.pages.forEachIndexed { index, page ->
-                if (index >= pageTitles.size && page.title != null) pageTitles.add(page.title)
-                if (index >= pageBackgroundKeys.size && page.backgroundKey != null) {
-                    pageBackgroundKeys.add(page.backgroundKey)
+                if (index >= pageTitles.size) {
+                    pageTitles.add(page.title ?: "Page ${index + 1}")
                 }
-                if (index >= pageCustomBackgroundUris.size && page.customBackgroundUri != null) {
-                    pageCustomBackgroundUris.add(page.customBackgroundUri)
-                }
+                val defaultLegacyKey = if (index == 0 && note?.canvasBackground != null) note.canvasBackground.key else CanvasBackground.DOTTED.key
+                pageBackgroundKeys.add(page.backgroundKey ?: defaultLegacyKey)
+                pageCustomBackgroundUris.add(page.customBackgroundUri.orEmpty())
             }
             syncPageMetadataLists()
             activePage = loaded.activePage.coerceIn(0, pages.lastIndex)
             val ocrDoc = loaded.pdfOcrJson?.let { runCatching { gson.fromJson(it, PdfOcrDocument::class.java) }.getOrNull() }
             undoStack.clear()
             redoStack.clear()
-            val dark = if (loaded.fromFile) loaded.darkMode else note?.canvasBackground == CanvasBackground.DARK
-            val background = when {
-                dark -> CanvasBackground.DARK
-                note?.canvasBackground == CanvasBackground.GRID ||
-                    note?.canvasBackground == CanvasBackground.GRAPH ||
-                    note?.canvasBackground == CanvasBackground.LINED ||
-                    note?.canvasBackground == CanvasBackground.WHITE -> note.canvasBackground
-                else -> CanvasBackground.DOTTED
+            val activeBgKey = pageBackgroundKeys.getOrNull(activePage)
+            val background = if (activeBgKey != null) {
+                CanvasBackground.fromKey(activeBgKey)
+            } else if (note?.canvasBackground != null) {
+                note.canvasBackground
+            } else if (loaded.fromFile && loaded.darkMode) {
+                CanvasBackground.DARK
+            } else {
+                CanvasBackground.DOTTED
             }
+            val dark = background == CanvasBackground.DARK
             _state.update {
                 it.copy(
                     noteTitle = note?.title ?: "Untitled",
@@ -2191,7 +2297,9 @@ class CanvasViewModel @Inject constructor(
                 label = pane.label.orEmpty(),
                 pageIndex = pane.pageIndex ?: 0,
                 pageCount = pane.pageCount ?: 0,
-                tool = tool
+                tool = tool,
+                color = pane.color ?: 0xFF1B1F2A.toInt(),
+                strokeWidth = pane.strokeWidth ?: 4f
             )
         }
         val active = (loaded.splitActive ?: 0).coerceIn(0, restored.lastIndex)
@@ -2202,6 +2310,8 @@ class CanvasViewModel @Inject constructor(
                 splitPanes = restored,
                 splitActive = active,
                 currentTool = restored[active].tool,
+                selectedColor = restored[active].color,
+                strokeWidth = restored[active].strokeWidth,
                 isEraser = restored[active].tool == WhiteboardTool.ERASER,
                 isHighlighter = restored[active].tool == WhiteboardTool.HIGHLIGHTER
             )
@@ -2284,13 +2394,35 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun setColor(color: Int) {
-        _state.update { it.copy(selectedColor = color, isEraser = false) }
+        _state.update { s ->
+            val panes = if (s.splitCount > 1) {
+                s.splitPanes.mapIndexed { index, pane ->
+                    if (index == s.splitActive) pane.copy(color = color) else pane
+                }
+            } else {
+                s.splitPanes
+            }
+            s.copy(selectedColor = color, isEraser = false, splitPanes = panes)
+        }
+        if (_state.value.splitCount > 1) {
+            scheduleSave()
+        }
     }
 
     fun setStrokeWidth(width: Float) {
         val clamped = width.coerceIn(1f, 50f)
         val tool = _state.value.inkTool
         if (tool in WRITING_TOOLS) toolWidths[tool] = clamped
+        if (_state.value.splitCount > 1) {
+            _state.update { s ->
+                val panes = s.splitPanes.mapIndexed { index, pane ->
+                    if (index == s.splitActive) pane.copy(strokeWidth = clamped) else pane
+                }
+                s.copy(strokeWidth = clamped, splitPanes = panes)
+            }
+            scheduleSave()
+            return
+        }
         val selected = _state.value.selectedStrokeIds
         if (selected.isNotEmpty()) {
             saveToUndoStack()
@@ -3008,7 +3140,9 @@ class CanvasViewModel @Inject constructor(
                                 label = pane.label.orEmpty(),
                                 pageIndex = pane.pageIndex ?: 0,
                                 pageCount = pane.pageCount ?: 0,
-                                tool = tool
+                                tool = tool,
+                                color = pane.color ?: 0xFF1B1F2A.toInt(),
+                                strokeWidth = pane.strokeWidth ?: 4f
                             )
                         }
                         _state.update {
@@ -3104,7 +3238,9 @@ private data class PaneSnapshot(
     val label: String? = null,
     val pageIndex: Int? = null,
     val pageCount: Int? = null,
-    val tool: String? = null
+    val tool: String? = null,
+    val color: Int? = null,
+    val strokeWidth: Float? = null
 )
 
 private fun CanvasPane.toSnapshot(): PaneSnapshot {
@@ -3115,6 +3251,8 @@ private fun CanvasPane.toSnapshot(): PaneSnapshot {
         label = label,
         pageIndex = pageIndex,
         pageCount = pageCount,
-        tool = tool.name
+        tool = tool.name,
+        color = color,
+        strokeWidth = strokeWidth
     )
 }
