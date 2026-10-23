@@ -51,13 +51,19 @@ fun FormulaCard(
                 .verticalScroll(rememberScrollState())
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Formula",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    modifier = Modifier.weight(1f)
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Formula",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                    Text(
+                        "Local mathematical parsing (on-device, not cloud vision recognition)",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 11.sp
+                    )
+                }
                 TextButton(onClick = onDismiss) {
                     Text("Close", color = Color(0xFFC7D2FE))
                 }

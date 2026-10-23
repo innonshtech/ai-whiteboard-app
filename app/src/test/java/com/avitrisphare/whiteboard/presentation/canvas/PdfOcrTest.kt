@@ -66,4 +66,27 @@ class PdfOcrTest {
         assertEquals("Page two text", doc.textForPage(1))
         assertEquals("", doc.textForPage(99))
     }
+
+    @Test
+    fun `search handles regex metacharacters and punctuation without crashing`() {
+        val doc = PdfOcrDocument(
+            documentPath = "/dummy/sample.pdf",
+            pages = listOf(
+                PdfPageOcr(pageIndex = 0, text = "What is energy? Energy = mc^2 (mass-energy equivalence)."),
+                PdfPageOcr(pageIndex = 1, text = "Water [H2O] is essential. What is life?")
+            )
+        )
+
+        val questionMarkResults = doc.search("What is energy?")
+        assertEquals(1, questionMarkResults.size)
+        assertEquals(0 to 1, questionMarkResults[0])
+
+        val bracketResults = doc.search("[H2O]")
+        assertEquals(1, bracketResults.size)
+        assertEquals(1 to 1, bracketResults[0])
+
+        val parenResults = doc.search("(mass-energy equivalence)")
+        assertEquals(1, parenResults.size)
+        assertEquals(0 to 1, parenResults[0])
+    }
 }

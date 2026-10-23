@@ -22,8 +22,9 @@ data class PdfOcrDocument(
     fun search(query: String): List<Pair<Int, Int>> {
         if (query.isBlank()) return emptyList()
         val lowerQuery = query.trim().lowercase()
+        val regex = Regex(Regex.escape(lowerQuery))
         return pages.mapNotNull { page ->
-            val count = lowerQuery.toRegex().findAll(page.text.lowercase()).count()
+            val count = regex.findAll(page.text.lowercase()).count()
             if (count > 0) page.pageIndex to count else null
         }
     }
