@@ -26,10 +26,10 @@ enum class ExportFormat(
         tag = "Direct .png"
     ),
     IWB(
-        displayName = "GYOASH IWB Format",
+        displayName = "GYOASH IWB Format (.iwb)",
         extension = "iwb",
         mimeType = "application/octet-stream",
-        description = "Proprietary format for re-opening in GYOASH Whiteboard later with all layers and tools intact.",
+        description = "Universal & GYOASH format with all layers, strokes, and pages intact for re-opening on any interactive whiteboard.",
         tag = "Re-openable & Layers"
     );
 

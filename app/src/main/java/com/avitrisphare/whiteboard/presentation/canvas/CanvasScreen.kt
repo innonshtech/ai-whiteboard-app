@@ -33,6 +33,7 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateRotation
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +52,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -97,6 +99,7 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NearMe
+import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -218,6 +221,7 @@ private class EraserSession {
     var changed: Boolean = false
     var strokes: List<Stroke> = emptyList()
     var cursor: Offset? = null
+    var targetSelectedIds: MutableSet<String> = mutableSetOf()
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -880,10 +884,21 @@ fun CanvasScreen(
     viewModel: CanvasViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit,
     demoMode: Boolean = false,
-    panelSession: com.avitrisphare.whiteboard.presentation.entry.PanelSessionStore? = null
+    panelSession: com.avitrisphare.whiteboard.presentation.entry.PanelSessionStore? = null,
+    initialImportUri: Uri? = null
 ) {
+    val context = LocalContext.current
+
     LaunchedEffect(noteId) {
         viewModel.loadNote(noteId)
+    }
+
+    LaunchedEffect(initialImportUri) {
+        if (initialImportUri != null) {
+            viewModel.importIwbFile(context, initialImportUri) { _, msg ->
+                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     LaunchedEffect(panelSession) {
@@ -898,7 +913,6 @@ fun CanvasScreen(
 
     val state by viewModel.state.collectAsStateWithLifecycle()
     val pageBitmap by viewModel.pageBitmap.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     val focusRequester = remember { FocusRequester() }
 
     var showSidebar by remember { mutableStateOf(false) }
@@ -984,6 +998,7 @@ fun CanvasScreen(
     var mathTools by remember { mutableStateOf(listOf<PlacedMathTool>()) }
     var mathGhost by remember { mutableStateOf<PlacedMathTool?>(null) }
     var mathReadout by remember { mutableStateOf<Pair<String, Offset>?>(null) }
+    var rulerLivePreview by remember { mutableStateOf<Pair<Offset, Offset>?>(null) }
     var shapePrompt by remember { mutableStateOf<ShapePrompt?>(null) }
     var shapePromptVisible by remember { mutableStateOf(false) }
 
@@ -1275,7 +1290,9 @@ fun CanvasScreen(
                     state.eraserSize,
                     state.isToolLocked,
                     state.selectedStrokeIds,
-                    state.isDrawToShapeEnabled
+                    state.isDrawToShapeEnabled,
+                    state.palmEraserEnabled,
+                    state.restrictEraserToSelection
                 ) {
                     awaitEachGesture {
                         fun PointerInputChange.isStylusPointer(): Boolean {
@@ -1285,24 +1302,34 @@ fun CanvasScreen(
                                 type == PointerType.Stylus ||
                                 type == PointerType.Eraser
                         }
-                        fun PointerInputChange.rejectedPalm(): Boolean {
-                            val stylus = isStylusPointer()
-                            val palm = isPalmContact(
+                        fun PointerInputChange.isPalmTouch(): Boolean {
+                            if (isStylusPointer()) return false
+                            return isPalmContactArea(
                                 touchMajorPx = touchContacts.majorPx(id),
                                 xdpi = xdpi,
-                                stylusActive = touchContacts.stylusActive || stylus,
-                                isStylus = stylus,
                                 touchMinorPx = touchContacts.minorPx(id),
                                 ydpi = ydpi
                             )
-                            return palm && !(state.palmEraserEnabled && !stylus)
+                        }
+                        fun PointerInputChange.rejectedPalm(stylusDrawing: Boolean): Boolean {
+                            val stylus = isStylusPointer()
+                            if (stylus) return false
+                            val palm = isPalmTouch()
+                            if (!palm) return false
+                            // Resting palm while drawing with a stylus is ALWAYS ignored/rejected
+                            if (stylusDrawing || touchContacts.stylusActive) return true
+                            // If palm eraser is enabled and no stylus is active, allow palm through to erase
+                            val latest = viewModel.state.value
+                            if (latest.palmEraserEnabled) return false
+                            // If palm eraser is disabled, reject accidental large palm touches
+                            return true
                         }
                         var down = awaitFirstDown(requireUnconsumed = false)
                         dockDismissNonce++
-                        while (down.rejectedPalm()) {
+                        while (down.rejectedPalm(stylusDrawing = false)) {
                             down.consume()
                             val skipped = awaitPointerEvent()
-                            val next = skipped.changes.firstOrNull { it.pressed && !it.rejectedPalm() }
+                            val next = skipped.changes.firstOrNull { it.pressed && !it.rejectedPalm(stylusDrawing = false) }
                             if (next != null) {
                                 down = next
                                 break
@@ -1314,17 +1341,8 @@ fun CanvasScreen(
                             scale = canvasScale,
                             offset = Offset(canvasOffsetX, canvasOffsetY)
                         )
-                        if (state.palmEraserEnabled && !down.isStylusPointer() && isPalmContact(
-                                touchMajorPx = touchContacts.majorPx(down.id),
-                                xdpi = xdpi,
-                                stylusActive = touchContacts.stylusActive,
-                                isStylus = false,
-                                touchMinorPx = touchContacts.minorPx(down.id),
-                                ydpi = ydpi
-                            )
-                        ) {
-                            viewModel.setTool(WhiteboardTool.ERASER)
-                        }
+                        val latestState = viewModel.state.value
+                        val isPalmEraser = latestState.palmEraserEnabled && !down.isStylusPointer() && down.isPalmTouch()
                         var prevPosition = down.position
                         var shapePoints = listOf(downWorld)
                         val stylusDraw = down.isStylusPointer()
@@ -1336,18 +1354,24 @@ fun CanvasScreen(
                             WhiteboardTool.ARROW,
                             WhiteboardTool.FRAME
                         )
-                        val activeTool = if (stylusDraw) {
+                        val activeTool = if (isPalmEraser) {
+                            WhiteboardTool.ERASER
+                        } else if (stylusDraw) {
                             val toolType = touchContacts.toolType(down.id)
                             if (toolType == MotionEvent.TOOL_TYPE_ERASER || down.type == PointerType.Eraser) {
                                 WhiteboardTool.ERASER
                             } else if (isShapeActive) {
                                 state.currentTool
                             } else {
-                                state.inkTool
+                                latestState.inkTool
                             }
                         } else {
-                            state.currentTool
+                            latestState.currentTool
                         }
+                        val palmMajor = touchContacts.majorPx(down.id)
+                        val customEraserRadius = if (isPalmEraser && palmMajor > 0f) {
+                            (palmMajor / 2f) / canvasScale.coerceAtLeast(0.001f)
+                        } else null
                         val inkPoints = ArrayList<Offset>(256)
                         val inkPressures = ArrayList<Float>(256)
                         inkPoints.add(downWorld)
@@ -1412,8 +1436,8 @@ fun CanvasScreen(
                             )
                             val last = inkPoints.lastOrNull()
                             if (last != null) {
-                                val dx = (world.x - last.x) * canvasScale
-                                val dy = (world.y - last.y) * canvasScale
+                                val dx = world.x - last.x
+                                val dy = world.y - last.y
                                 val gap = inkSampleGapPx(state.inkSampleGapMm, xdpi, canvasScale)
                                 if (dx * dx + dy * dy < gap * gap) return
                             }
@@ -1421,33 +1445,36 @@ fun CanvasScreen(
                             inkPressures.add(pressure)
                             liveInk.extend(world)
                         }
-                        fun eraseSample(world: Offset, screen: Offset) {
+                        fun eraseSample(world: Offset, screen: Offset, customRadius: Float? = null) {
+                            val latest = viewModel.state.value
                             if (!eraserSession.active) {
                                 eraserSession.active = true
                                 eraserSession.changed = false
-                                eraserSession.strokes = viewModel.state.value.strokes
+                                eraserSession.strokes = latest.strokes
+                                eraserSession.targetSelectedIds = latest.selectedStrokeIds.toMutableSet()
                             }
-                            val latest = viewModel.state.value
-                            val radius = latest.eraserSize / canvasScale.coerceAtLeast(0.001f)
-                            val pool = if (latest.restrictEraserToSelection && latest.selectedStrokeIds.isNotEmpty()) {
-                                eraserSession.strokes.filter { it.id in latest.selectedStrokeIds }
-                            } else {
-                                eraserSession.strokes
-                            }
-                            val erased = StrokeEraser.apply(pool, world, radius, latest.eraserMode)
-                            val updated = if (latest.restrictEraserToSelection && latest.selectedStrokeIds.isNotEmpty()) {
-                                val kept = eraserSession.strokes.filter { it.id !in latest.selectedStrokeIds }
-                                kept + erased
-                            } else {
-                                erased
-                            }
+                            val baseRadius = latest.eraserSize / canvasScale.coerceAtLeast(0.001f)
+                            val radius = customRadius ?: baseRadius
+
+                            val (updated, newSelectedIds) = StrokeEraser.applySelection(
+                                strokes = eraserSession.strokes,
+                                selectedIds = eraserSession.targetSelectedIds,
+                                center = world,
+                                radius = radius,
+                                mode = latest.eraserMode,
+                                restrictToSelection = latest.restrictEraserToSelection
+                            )
                             if (updated !== eraserSession.strokes) {
                                 eraserSession.strokes = updated
+                                eraserSession.targetSelectedIds = newSelectedIds.toMutableSet()
                                 eraserSession.changed = true
                             }
                             eraserSession.cursor = screen
                             eraserTick.intValue = eraserTick.intValue + 1
                             boardStage?.showGestureStrokes(eraserSession.strokes)
+                        }
+                        if (activeTool == WhiteboardTool.ERASER) {
+                            eraseSample(downWorld, down.position, customEraserRadius)
                         }
                         var isDraggingSelection = false
                         var selectingBox = false
@@ -1458,21 +1485,25 @@ fun CanvasScreen(
                         val mathHit = hitTestPlacedTools(mathTools, down.position)
                         val straightedge = if (mathHit != null) {
                             null
-                        } else if (activeTool == WhiteboardTool.RULER || activeTool == WhiteboardTool.PROTRACTOR || activeTool == WhiteboardTool.SET_SQUARE || activeTool == WhiteboardTool.TRIANGLE) {
-                            mathTools.lastOrNull { it.kind == MathToolKind.RULER || it.kind == MathToolKind.PROTRACTOR || it.kind == MathToolKind.SET_SQUARE || it.kind == MathToolKind.TRIANGLE }
-                                ?.takeIf { distanceToRulerEdge(it, down.position) <= RULER_EDGE_SLOP }
-                        } else if (activeTool in WRITING_TOOLS || activeTool == WhiteboardTool.LINE) {
+                        } else if (activeTool != WhiteboardTool.HAND && activeTool != WhiteboardTool.ERASER) {
                             rulerForStraightedge(mathTools, down.position)
                         } else {
                             null
                         }
-                        if (mathHit != null || straightedge != null) {
+                        if (mathHit != null) {
                             liveInk.stroke = null
                             liveInkTick.intValue = liveInkTick.intValue + 1
                             boardStage?.setLiveInk(null)
+                            rulerLivePreview = null
                         }
                         if (mathHit != null) {
                             val tool = mathHit.tool
+                            if (mathHit.zone == MathToolZone.CLOSE) {
+                                removeMathTool(tool.id)
+                                val toolName = tool.kind.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+                                Toast.makeText(context, "$toolName closed", Toast.LENGTH_SHORT).show()
+                                mathGesture.reset()
+                            } else {
                             mathGesture.toolId = tool.id
                             mathGesture.zone = mathHit.zone
                             mathGesture.draggingPositiveEnd = mathHit.zone == MathToolZone.ROTATE_POSITIVE
@@ -1489,6 +1520,8 @@ fun CanvasScreen(
                                 mathGesture.startToolScale = tool.toolScale
                                 mathGesture.startAngleDeg = tool.rotationDeg
                                 mathGesture.startDist = hypot(down.position.x - tool.center.x, down.position.y - tool.center.y).coerceAtLeast(10f)
+                                val angle = protractorAngle(tool, down.position)
+                                if (angle != null) replaceMathTool(tool.copy(markedAngleDeg = angle))
                             }
                             if (mathHit.zone == MathToolZone.ANGLE_ARM) {
                                 val local = toLocal(down.position, tool.center, tool.rotationDeg)
@@ -1507,17 +1540,37 @@ fun CanvasScreen(
                                 mathGesture.startAngleDeg = tool.rotationDeg
                                 mathGesture.startDist = hypot(down.position.x - tool.center.x, down.position.y - tool.center.y).coerceAtLeast(10f)
                             }
+                            }
                         } else if (straightedge != null) {
                             mathGesture.rulerDrawing = true
+                            mathGesture.toolId = straightedge.id
                             mathGesture.drawDir = direction(straightedge.rotationDeg)
+                            mathGesture.rulerEdgeSign = rulerEdgeForPoint(straightedge, down.position)
+
+                            val snappedStartScreen = snapToRulerEdge(straightedge, down.position, mathGesture.rulerEdgeSign)
+                            val snappedStartWorld = CanvasTransform.screenToWorld(
+                                snappedStartScreen,
+                                canvasScale,
+                                Offset(canvasOffsetX, canvasOffsetY)
+                            )
+                            val strokeColor = if (state.selectedColor != 0) state.selectedColor else (if (state.isDarkCanvas) 0xFFFFFFFF.toInt() else 0xFF1E293B.toInt())
+                            val strokeWidth = if (state.strokeWidth > 0f) state.strokeWidth else 6f
                             val newStroke = Stroke(
-                                points = listOf(downWorld, downWorld),
-                                colorValue = state.selectedColor,
-                                strokeWidth = state.strokeWidth,
-                                strokeType = StrokeType.LINE
+                                points = listOf(snappedStartWorld, snappedStartWorld),
+                                colorValue = strokeColor,
+                                strokeWidth = strokeWidth,
+                                isHighlighter = activeTool == WhiteboardTool.HIGHLIGHTER,
+                                strokeType = if (activeTool == WhiteboardTool.HIGHLIGHTER) StrokeType.HIGHLIGHTER else StrokeType.LINE
                             )
                             shapePoints = newStroke.points
                             viewModel.startStroke(newStroke)
+                            liveInk.stroke = newStroke
+                            liveInkTick.intValue = liveInkTick.intValue + 1
+                            boardStage?.setLiveInk(liveInk)
+                            rulerLivePreview = snappedStartScreen to snappedStartScreen
+                            val perp = perpendicular(straightedge.rotationDeg)
+                            val readoutPos = snappedStartScreen + perp * (mathGesture.rulerEdgeSign * 38f)
+                            mathReadout = "Line: 0.0 cm" to readoutPos
                         }
 
                         if (mathHit == null && straightedge == null) when (activeTool) {
@@ -1634,8 +1687,9 @@ fun CanvasScreen(
                         do {
                             val event = awaitPointerEvent()
                             val pressed = event.changes.filter { it.pressed }
+                            val anyStylusPressed = pressed.any { it.isStylusPointer() }
                             val realPressed = pressed.filter { change ->
-                                if (change.rejectedPalm()) {
+                                if (change.rejectedPalm(stylusDrawing = stylusDraw || anyStylusPressed)) {
                                     change.consume()
                                     false
                                 } else {
@@ -1660,6 +1714,7 @@ fun CanvasScreen(
                                     liveInk.predicted = null
                                     boardStage?.setLiveInk(null)
                                     viewModel.cancelCurrentStroke()
+                                    rulerLivePreview = null
                                 }
                                 var sumX = 0f
                                 var sumY = 0f
@@ -1685,14 +1740,25 @@ fun CanvasScreen(
                                     mathGesture.rulerDrawing = false
                                     mathGesture.arcMode = false
                                     viewModel.cancelCurrentStroke()
-                                    mathReadout = null
-                                    replaceMathTool(
-                                        translateAndRotate(
-                                            pinchedTool,
-                                            event.calculatePan(),
-                                            event.calculateRotation()
-                                        )
+                                    rulerLivePreview = null
+                                    val pan = event.calculatePan()
+                                    val rotation = event.calculateRotation()
+                                    val zoom = event.calculateZoom()
+                                    val newSpan = if (zoom != 1f && (pinchedTool.kind == MathToolKind.RULER || pinchedTool.kind == MathToolKind.COMPASS)) {
+                                        (pinchedTool.span * zoom).coerceIn(180f, 3600f)
+                                    } else pinchedTool.span
+                                    val updated = translateAndRotate(
+                                        pinchedTool.copy(span = newSpan),
+                                        pan,
+                                        rotation
                                     )
+                                    replaceMathTool(updated)
+                                    if (updated.kind == MathToolKind.RULER) {
+                                        val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
+                                        mathReadout = "${formatCentimetres(updated.span, pxPerCm)} • $deg°" to centroid + Offset(0f, -42f)
+                                    } else {
+                                        mathReadout = null
+                                    }
                                     event.changes.forEach { it.consume() }
                                 } else if (fingerScratch.size == 2) {
                                 val zoomChange = event.calculateZoom()
@@ -1785,9 +1851,19 @@ fun CanvasScreen(
                                                     replaceMathTool(tool.copy(span = newRadius))
                                                 }
                                                 MathToolZone.ROTATE_POSITIVE, MathToolZone.ROTATE_NEGATIVE -> {
-                                                    replaceMathTool(
+                                                    val updated = if (tool.kind == MathToolKind.RULER) {
+                                                        dragRulerEnd(tool, change.position, mathGesture.draggingPositiveEnd)
+                                                    } else {
                                                         rotateToolByEnd(tool, change.position, mathGesture.draggingPositiveEnd)
-                                                    )
+                                                    }
+                                                    replaceMathTool(updated)
+                                                    val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
+                                                    val text = if (tool.kind == MathToolKind.RULER) {
+                                                        "${formatCentimetres(updated.span, pxPerCm)} • $deg°"
+                                                    } else {
+                                                        "$deg°"
+                                                    }
+                                                    mathReadout = text to change.position + Offset(0f, -38f)
                                                 }
                                                 MathToolZone.PENCIL -> {
                                                     if (tool.kind == MathToolKind.COMPASS) {
@@ -1834,22 +1910,47 @@ fun CanvasScreen(
                                             }
                                         }
                                     } else if (mathGesture.rulerDrawing) {
-                                        val endWorld = projectOntoRuler(downWorld, curWorld, mathGesture.drawDir, canvasScale)
-                                        shapePoints = listOf(downWorld, endWorld)
-                                        viewModel.updateStroke(shapePoints)
-                                        val endScreen = CanvasTransform.worldToScreen(
-                                            endWorld,
-                                            canvasScale,
-                                            Offset(canvasOffsetX, canvasOffsetY)
-                                        )
-                                        val mid = Offset(
-                                            (down.position.x + endScreen.x) / 2f,
-                                            (down.position.y + endScreen.y) / 2f - 28f
-                                        )
-                                        mathReadout = formatCentimetres(
-                                            screenLengthPx(downWorld, endWorld, canvasScale),
-                                            pxPerCm
-                                        ) to mid
+                                        val ruler = mathTools.find { it.id == mathGesture.toolId }
+                                        if (ruler != null && shapePoints.isNotEmpty()) {
+                                            val snappedStartWorld = shapePoints.first()
+                                            val snappedCurrentScreen = snapToRulerEdge(ruler, change.position, mathGesture.rulerEdgeSign)
+                                            val snappedCurrentWorld = CanvasTransform.screenToWorld(
+                                                snappedCurrentScreen,
+                                                canvasScale,
+                                                Offset(canvasOffsetX, canvasOffsetY)
+                                            )
+                                            shapePoints = listOf(snappedStartWorld, snappedCurrentWorld)
+                                            viewModel.updateStroke(shapePoints)
+
+                                            val strokeColor = if (state.selectedColor != 0) state.selectedColor else (if (state.isDarkCanvas) 0xFFFFFFFF.toInt() else 0xFF1E293B.toInt())
+                                            val strokeWidth = if (state.strokeWidth > 0f) state.strokeWidth else 6f
+                                            val liveStroke = Stroke(
+                                                id = viewModel.state.value.currentStroke?.id ?: "ruler_live",
+                                                points = shapePoints,
+                                                colorValue = strokeColor,
+                                                strokeWidth = strokeWidth,
+                                                isHighlighter = activeTool == WhiteboardTool.HIGHLIGHTER,
+                                                strokeType = if (activeTool == WhiteboardTool.HIGHLIGHTER) StrokeType.HIGHLIGHTER else StrokeType.LINE
+                                            )
+                                            liveInk.stroke = liveStroke
+                                            liveInkTick.intValue = liveInkTick.intValue + 1
+                                            boardStage?.setLiveInk(liveInk)
+
+                                            val snappedStartScreen = CanvasTransform.worldToScreen(
+                                                snappedStartWorld,
+                                                canvasScale,
+                                                Offset(canvasOffsetX, canvasOffsetY)
+                                            )
+                                            rulerLivePreview = snappedStartScreen to snappedCurrentScreen
+
+                                            val segLengthPx = (snappedCurrentScreen - snappedStartScreen).getDistance()
+                                            val lengthText = formatCentimetres(segLengthPx, pxPerCm)
+
+                                            val midScreen = (snappedStartScreen + snappedCurrentScreen) / 2f
+                                            val perp = perpendicular(ruler.rotationDeg)
+                                            val readoutPos = midScreen + perp * (mathGesture.rulerEdgeSign * 38f)
+                                            mathReadout = "Line: $lengthText" to readoutPos
+                                        }
                                     } else if (activeTool == WhiteboardTool.HAND) {
                                         val panX = change.position.x - prevPosition.x
                                         val panY = change.position.y - prevPosition.y
@@ -1876,7 +1977,13 @@ fun CanvasScreen(
                                     } else if (activeTool == WhiteboardTool.LASSO) {
                                         lassoPoints = lassoPoints + curWorld
                                     } else if (activeTool == WhiteboardTool.ERASER) {
-                                        eraseSample(curWorld, change.position)
+                                        val curPalmRadius = if (isPalmEraser) {
+                                            val curMajor = touchContacts.majorPx(change.id)
+                                            if (curMajor > 0f) (curMajor / 2f) / canvasScale.coerceAtLeast(0.001f) else customEraserRadius
+                                        } else {
+                                            customEraserRadius
+                                        }
+                                        eraseSample(curWorld, change.position, curPalmRadius)
                                     } else if (activeTool == WhiteboardTool.SPOTLIGHT) {
                                         spotlightCenter = change.position
                                     } else if (activeTool == WhiteboardTool.SHADE) {
@@ -1976,10 +2083,17 @@ fun CanvasScreen(
                         }
                         if (eraserSession.active) {
                             boardStage?.clearGestureStrokes()
-                            if (eraserSession.changed) viewModel.commitErasedStrokes(eraserSession.strokes)
+                            if (eraserSession.changed) {
+                                viewModel.commitErasedStrokes(eraserSession.strokes)
+                                val latest = viewModel.state.value
+                                if (latest.restrictEraserToSelection) {
+                                    viewModel.selectStrokes(eraserSession.targetSelectedIds)
+                                }
+                            }
                             eraserSession.active = false
                             eraserSession.changed = false
                             eraserSession.cursor = null
+                            eraserSession.targetSelectedIds.clear()
                             eraserTick.intValue = eraserTick.intValue + 1
                         }
 
@@ -1988,27 +2102,43 @@ fun CanvasScreen(
                             val start = shapePoints.first()
                             val end = shapePoints.last()
                             val lengthPx = screenLengthPx(start, end, canvasScale)
-                            if (lengthPx > 6f) {
+                            if (lengthPx > 8f) {
                                 viewModel.updateStroke(shapePoints)
                                 viewModel.finishStroke()
+
+                                val ruler = mathTools.find { it.id == mathGesture.toolId }
+                                val perp = if (ruler != null) {
+                                    perpendicular(ruler.rotationDeg) * mathGesture.rulerEdgeSign
+                                } else {
+                                    Offset(-mathGesture.drawDir.y, mathGesture.drawDir.x)
+                                }
+
                                 val mid = Offset((start.x + end.x) / 2f, (start.y + end.y) / 2f)
-                                val perp = Offset(-mathGesture.drawDir.y, mathGesture.drawDir.x)
-                                val labelAt = Offset(
-                                    mid.x + perp.x * (28f / canvasScale.coerceAtLeast(0.001f)),
-                                    mid.y + perp.y * (28f / canvasScale.coerceAtLeast(0.001f))
-                                )
+                                val labelOffsetWorld = perp * (28f / canvasScale.coerceAtLeast(0.001f))
+                                val labelAt = mid + labelOffsetWorld
+
+                                val lengthText = formatCentimetres(lengthPx, pxPerCm)
+                                val labelColor = if (state.selectedColor != 0) state.selectedColor else (if (state.isDarkCanvas) 0xFFFFFFFF.toInt() else 0xFF1E293B.toInt())
                                 viewModel.commitStroke(
                                     measurementLabel(
-                                        formatCentimetres(lengthPx, pxPerCm),
+                                        lengthText,
                                         labelAt,
-                                        state.selectedColor
+                                        labelColor
                                     )
                                 )
+                                Toast.makeText(context, "Drawn: $lengthText", Toast.LENGTH_SHORT).show()
                             } else {
                                 viewModel.cancelCurrentStroke()
                             }
+                            liveInk.stroke = null
+                            liveInkTick.intValue = liveInkTick.intValue + 1
+                            boardStage?.setLiveInk(null)
+                            rulerLivePreview = null
                             mathReadout = null
+                            mathGesture.rulerDrawing = false
                         } else if (!wasMultiTouch && mathGesture.toolId != null) {
+                            mathReadout = null
+                            rulerLivePreview = null
                             val tool = mathTools.find { it.id == mathGesture.toolId }
                             val finger = canvasOrigin + prevPosition
                             if (tool != null && mathGesture.movedPx > MATH_TAP_SLOP && droppedOnToolbar(finger, dockBounds)) {
@@ -2495,6 +2625,18 @@ fun CanvasScreen(
                         style = DrawStroke(width = 1.5f)
                     )
                 }
+                val liveLine = rulerLivePreview
+                if (liveLine != null) {
+                    val previewColor = if (state.selectedColor != 0) Color(state.selectedColor) else (if (state.isDarkCanvas) Color.White else Color.Black)
+                    val previewWidth = if (state.strokeWidth > 0f) state.strokeWidth else 6f
+                    drawLine(
+                        color = if (state.currentTool == WhiteboardTool.HIGHLIGHTER) previewColor.copy(alpha = 0.5f) else previewColor,
+                        start = liveLine.first,
+                        end = liveLine.second,
+                        strokeWidth = previewWidth,
+                        cap = StrokeCap.Round
+                    )
+                }
                 val readout = mathReadout
                 mathTools.forEach { tool ->
                     drawMathTool(tool, state.isDarkCanvas, pxPerCm)
@@ -2504,6 +2646,129 @@ fun CanvasScreen(
                 }
                 if (readout != null) {
                     drawMathReadout(readout.first, readout.second)
+                }
+            }
+
+            val currentDoc = state.document
+            if (currentDoc != null && state.splitCount <= 1) {
+                val docWidth = if (currentDoc.pageWidth > 0f) currentDoc.pageWidth else 1600f
+                val docHeight = if (currentDoc.pageHeight > 0f) currentDoc.pageHeight else 2262f
+                val frameScale = state.documentFrameScale
+                val frameX = state.documentFrameX
+                val frameY = state.documentFrameY
+
+                val pdfScreenX = canvasOffsetX + (frameX * canvasScale)
+                val pdfScreenY = canvasOffsetY + (frameY * canvasScale)
+                val pdfScreenW = docWidth * frameScale * canvasScale
+                val pdfScreenH = docHeight * frameScale * canvasScale
+
+                // 1. Subtle dashed boundary showing PDF frame
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawRect(
+                        color = Color(0x733B82F6),
+                        topLeft = Offset(pdfScreenX, pdfScreenY),
+                        size = Size(pdfScreenW, pdfScreenH),
+                        style = DrawStroke(
+                            width = 2f,
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f))
+                        )
+                    )
+                }
+
+                // 2. Draggable Top Header Pill
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                (pdfScreenX + 12f).roundToInt().coerceAtLeast(10),
+                                (pdfScreenY - 42f).roundToInt().coerceAtLeast(10)
+                            )
+                        }
+                        .wrapContentSize()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xE61E2638))
+                        .border(1.dp, Color(0xFF3B82F6), RoundedCornerShape(8.dp))
+                        .pointerInput(canvasScale, state.documentFrameX, state.documentFrameY, state.documentFrameScale) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                val worldDx = dragAmount.x / canvasScale.coerceAtLeast(0.001f)
+                                val worldDy = dragAmount.y / canvasScale.coerceAtLeast(0.001f)
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX + worldDx,
+                                    state.documentFrameY + worldDy,
+                                    state.documentFrameScale
+                                )
+                            }
+                        }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.OpenWith,
+                            contentDescription = "Drag to reposition PDF",
+                            tint = Color(0xFF60A5FA),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            "PDF: Drag to move",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFF283248))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                "${(state.documentFrameScale * 100).roundToInt()}%",
+                                color = Color(0xFF93C5FD),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                // 3. Corner Resize Handle (Bottom-Right)
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                (pdfScreenX + pdfScreenW - 22f).roundToInt(),
+                                (pdfScreenY + pdfScreenH - 22f).roundToInt()
+                            )
+                        }
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF2563EB))
+                        .border(2.dp, Color.White, CircleShape)
+                        .pointerInput(canvasScale, state.documentFrameScale, docWidth) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                val worldDx = dragAmount.x / canvasScale.coerceAtLeast(0.001f)
+                                val currentW = docWidth * state.documentFrameScale
+                                val newW = (currentW + worldDx).coerceAtLeast(docWidth * 0.2f)
+                                val newScale = (newW / docWidth).coerceIn(0.2f, 3.0f)
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX,
+                                    state.documentFrameY,
+                                    newScale
+                                )
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.ZoomOutMap,
+                        contentDescription = "Drag to resize PDF",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }
@@ -2588,7 +2853,13 @@ fun CanvasScreen(
             onMathDragEnd = { kind, root, moved ->
                 mathGhost = null
                 val overToolbar = moved && droppedOnToolbar(root, dockBounds)
-                if (!overToolbar) {
+                if (overToolbar) {
+                    val existing = mathTools.find { it.kind == kind }
+                    if (existing != null) {
+                        removeMathTool(existing.id)
+                        Toast.makeText(context, "Tool removed", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
                     val local = if (moved) rootToCanvas(root) else canvasCenter()
                     placeMathTool(kind, local, isDrag = moved)
                 }
@@ -2778,29 +3049,126 @@ fun CanvasScreen(
                         }
                     }
 
-                    TextButton(onClick = {
-                        viewModel.setDocumentFrame(
-                            state.documentFrameX - 40f,
-                            state.documentFrameY,
-                            state.documentFrameScale
+                    // 4-Directional Move Controls
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF283248))
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            "Move:",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 4.dp)
                         )
-                    }) { Text("Move PDF ←", color = Color.White, fontSize = 11.sp) }
-                    TextButton(onClick = {
-                        viewModel.setDocumentFrame(
-                            state.documentFrameX,
-                            state.documentFrameY,
-                            state.documentFrameScale * 0.9f
+                        IconButton(
+                            onClick = {
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX - 60f,
+                                    state.documentFrameY,
+                                    state.documentFrameScale
+                                )
+                            },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Text("←", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        IconButton(
+                            onClick = {
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX + 60f,
+                                    state.documentFrameY,
+                                    state.documentFrameScale
+                                )
+                            },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Text("→", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        IconButton(
+                            onClick = {
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX,
+                                    state.documentFrameY - 60f,
+                                    state.documentFrameScale
+                                )
+                            },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Text("↑", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        IconButton(
+                            onClick = {
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX,
+                                    state.documentFrameY + 60f,
+                                    state.documentFrameScale
+                                )
+                            },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Text("↓", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(Modifier.width(4.dp))
+
+                    // PDF Zoom Controls
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF283248))
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        IconButton(
+                            onClick = {
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX,
+                                    state.documentFrameY,
+                                    (state.documentFrameScale * 0.9f).coerceIn(0.2f, 3.0f)
+                                )
+                            },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Shrink PDF", tint = Color.White, modifier = Modifier.size(14.dp))
+                        }
+                        Text(
+                            "${(state.documentFrameScale * 100).roundToInt()}%",
+                            color = Color(0xFF60A5FA),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 4.dp)
                         )
-                    }) { Text("PDF −", color = Color.White, fontSize = 11.sp) }
+                        IconButton(
+                            onClick = {
+                                viewModel.setDocumentFrame(
+                                    state.documentFrameX,
+                                    state.documentFrameY,
+                                    (state.documentFrameScale * 1.1f).coerceIn(0.2f, 3.0f)
+                                )
+                            },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Enlarge PDF", tint = Color.White, modifier = Modifier.size(14.dp))
+                        }
+                    }
+
+                    Spacer(Modifier.width(4.dp))
+
                     TextButton(onClick = {
-                        viewModel.setDocumentFrame(
-                            state.documentFrameX,
-                            state.documentFrameY,
-                            state.documentFrameScale * 1.1f
-                        )
-                    }) { Text("PDF +", color = Color.White, fontSize = 11.sp) }
-                    TextButton(onClick = { viewModel.resetDocumentFrame() }) {
-                        Text("Fit PDF", color = Color.White, fontSize = 11.sp)
+                        if (canvasSize.width > 0 && canvasSize.height > 0) {
+                            viewModel.fitToContent(canvasSize.width, canvasSize.height)
+                        } else {
+                            viewModel.resetDocumentFrame()
+                        }
+                    }) {
+                        Text("Fit PDF", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
                     }
                     TextButton(onClick = {
                         viewModel.exportAnnotatedPdf { uri ->
@@ -3674,7 +4042,10 @@ fun CanvasScreen(
                             iwbPickerLauncher.launch(arrayOf("*/*"))
                         },
                         "Reset Zoom (100%)" to { showCommandPalette = false; viewModel.resetTransform() },
-                        "Fit to Content" to { showCommandPalette = false; viewModel.fitToContent(canvasSize.width, canvasSize.height) }
+                        "Fit to Content" to { showCommandPalette = false; viewModel.fitToContent(canvasSize.width, canvasSize.height) },
+                        "Paste from clipboard" to { showCommandPalette = false; viewModel.pasteStrokeClipboard() },
+                        "Add new page" to { showCommandPalette = false; viewModel.addPage() },
+                        "Duplicate current page" to { showCommandPalette = false; viewModel.duplicatePage(state.pageIndex) }
                     ).filter { it.first.contains(commandSearchQuery, ignoreCase = true) }
                         .forEach { (name, action) ->
                             Row(

@@ -65,9 +65,18 @@ fun FloatingToolPanel(
     minimizedSummary: String? = null,
     headerActions: (@Composable () -> Unit)? = null,
     onBringToFront: (() -> Unit)? = null,
+    isDarkMode: Boolean = true,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+    val panelBg = if (isDarkMode) PanelBg else Color(0xFFFFFFFF)
+    val panelBorder = if (isDarkMode) PanelBorder else Color(0xFFCBD5E1)
+    val headerBg = if (isDarkMode) HeaderBg else Color(0xFFF1F5F9)
+    val titleColor = if (isDarkMode) Color.White else Color(0xFF0F172A)
+    val actionBtnBg = if (isDarkMode) Color(0xFF283248) else Color(0xFFE2E8F0)
+    val actionBtnTint = if (isDarkMode) Color.White else Color(0xFF334155)
+    val dragIconTint = if (isDarkMode) Color(0xFF94A3B8) else Color(0xFF64748B)
+
     Box(
         modifier = modifier
             .offset { IntOffset(position.x.roundToInt().coerceAtLeast(0), position.y.roundToInt().coerceAtLeast(0)) }
@@ -88,11 +97,11 @@ fun FloatingToolPanel(
             // Minimized Floating Pill
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = PanelBg,
+                color = panelBg,
                 shadowElevation = 10.dp,
                 modifier = Modifier
                     .wrapContentSize()
-                    .border(1.dp, PanelBorder, RoundedCornerShape(20.dp))
+                    .border(1.dp, panelBorder, RoundedCornerShape(20.dp))
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
@@ -108,7 +117,7 @@ fun FloatingToolPanel(
                     Icon(
                         Icons.Default.DragHandle,
                         contentDescription = "Drag",
-                        tint = Color(0xFF94A3B8),
+                        tint = dragIconTint,
                         modifier = Modifier.size(16.dp)
                     )
                     Icon(
@@ -119,7 +128,7 @@ fun FloatingToolPanel(
                     )
                     Text(
                         minimizedSummary ?: title,
-                        color = Color.White,
+                        color = titleColor,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -127,14 +136,14 @@ fun FloatingToolPanel(
                         modifier = Modifier
                             .size(24.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF283248))
+                            .background(actionBtnBg)
                             .clickable(onClick = onToggleMinimize),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.Default.KeyboardArrowDown,
                             contentDescription = "Expand",
-                            tint = Color.White,
+                            tint = actionBtnTint,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -142,7 +151,7 @@ fun FloatingToolPanel(
                         modifier = Modifier
                             .size(24.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF374151))
+                            .background(if (isDarkMode) Color(0xFF374151) else Color(0xFFFEE2E2))
                             .clickable(onClick = onClose),
                         contentAlignment = Alignment.Center
                     ) {
@@ -159,11 +168,11 @@ fun FloatingToolPanel(
             // Expanded Floating Window - perfectly sized to its content
             Surface(
                 shape = RoundedCornerShape(14.dp),
-                color = PanelBg,
+                color = panelBg,
                 shadowElevation = 14.dp,
                 modifier = Modifier
                     .wrapContentSize()
-                    .border(1.dp, PanelBorder, RoundedCornerShape(14.dp))
+                    .border(1.dp, panelBorder, RoundedCornerShape(14.dp))
                     .pointerInput(Unit) {
                         detectTapGestures { /* consume so touches do not pass through to canvas underneath */ }
                     }
@@ -175,7 +184,7 @@ fun FloatingToolPanel(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(HeaderBg)
+                            .background(headerBg)
                             .pointerInput(Unit) {
                                 detectDragGestures { change, dragAmount ->
                                     change.consume()
@@ -193,7 +202,7 @@ fun FloatingToolPanel(
                             Icon(
                                 Icons.Default.DragHandle,
                                 contentDescription = "Drag to reposition",
-                                tint = Color(0xFF94A3B8),
+                                tint = dragIconTint,
                                 modifier = Modifier.size(16.dp)
                             )
                             Icon(
@@ -204,7 +213,7 @@ fun FloatingToolPanel(
                             )
                             Text(
                                 title,
-                                color = Color.White,
+                                color = titleColor,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -220,14 +229,14 @@ fun FloatingToolPanel(
                                 modifier = Modifier
                                     .size(24.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF283248))
+                                    .background(actionBtnBg)
                                     .clickable(onClick = onToggleMinimize),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.Default.KeyboardArrowUp,
                                     contentDescription = "Minimize",
-                                    tint = Color.White,
+                                    tint = actionBtnTint,
                                     modifier = Modifier.size(15.dp)
                                 )
                             }
@@ -235,7 +244,7 @@ fun FloatingToolPanel(
                                 modifier = Modifier
                                     .size(24.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF283248))
+                                    .background(if (isDarkMode) Color(0xFF283248) else Color(0xFFFEE2E2))
                                     .clickable(onClick = onClose),
                                 contentAlignment = Alignment.Center
                             ) {

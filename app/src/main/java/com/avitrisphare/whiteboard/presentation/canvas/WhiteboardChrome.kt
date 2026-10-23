@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Dashboard
@@ -883,19 +884,19 @@ fun AvitriSphareWhiteboardChrome(
                         color = Color(0xFF6B7280)
                     )
                     Spacer(Modifier.height(8.dp))
-                    PopoverRow(Icons.Default.Straighten, "Ruler", rulerPlaced) {
+                    PopoverRow(Icons.Default.Straighten, if (rulerPlaced) "Hide ruler" else "Ruler", rulerPlaced) {
                         onMathDragEnd(MathToolKind.RULER, Offset.Zero, false); panel = null
                     }
-                    PopoverRow(Icons.Default.Architecture, "Compass", compassPlaced) {
+                    PopoverRow(Icons.Default.Architecture, if (compassPlaced) "Hide compass" else "Compass", compassPlaced) {
                         onMathDragEnd(MathToolKind.COMPASS, Offset.Zero, false); panel = null
                     }
-                    PopoverRow(Icons.Default.Speed, "Protractor (180°)", protractorPlaced) {
+                    PopoverRow(Icons.Default.Speed, if (protractorPlaced) "Hide protractor" else "Protractor (180°)", protractorPlaced) {
                         onMathDragEnd(MathToolKind.PROTRACTOR, Offset.Zero, false); panel = null
                     }
-                    PopoverRow(Icons.Default.Category, "Set Square (45°-45°-90°)", setSquarePlaced) {
+                    PopoverRow(Icons.Default.Category, if (setSquarePlaced) "Hide set square" else "Set Square (45°-45°-90°)", setSquarePlaced) {
                         onMathDragEnd(MathToolKind.SET_SQUARE, Offset.Zero, false); panel = null
                     }
-                    PopoverRow(Icons.Default.ChangeHistory, "Triangle (60°-60°-60°)", trianglePlaced) {
+                    PopoverRow(Icons.Default.ChangeHistory, if (trianglePlaced) "Hide triangle" else "Triangle (60°-60°-60°)", trianglePlaced) {
                         onMathDragEnd(MathToolKind.TRIANGLE, Offset.Zero, false); panel = null
                     }
                     Spacer(Modifier.height(4.dp))
@@ -1146,9 +1147,8 @@ fun AvitriSphareWhiteboardChrome(
                         strokes = strokes,
                         selected = index == state.pageIndex,
                         dark = state.isDarkCanvas,
-                        canDelete = !documentOpen && count > 1,
                         onClick = { viewModel.selectPage(index) },
-                        onDelete = { pageToDeleteIndex = index },
+                        onOptionsClick = { pageMenuIndex = index },
                         onLongClick = { pageMenuIndex = index }
                     )
                 }
@@ -1206,6 +1206,8 @@ fun AvitriSphareWhiteboardChrome(
                 PageActionsDialog(
                     pageIndex = idx,
                     title = state.pageTitles.getOrElse(idx) { "Page ${idx + 1}" },
+                    documentOpen = state.document != null,
+                    pageCount = state.pageCount,
                     onDismiss = { pageMenuIndex = null },
                     onRename = { viewModel.renamePage(idx, it) },
                     onDelete = { viewModel.deletePage(idx) },
@@ -1214,7 +1216,9 @@ fun AvitriSphareWhiteboardChrome(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { onDockBounds(it.boundsInRoot()) },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom
             ) {
@@ -1837,9 +1841,8 @@ private fun PageThumbnail(
     strokes: List<Stroke>,
     selected: Boolean,
     dark: Boolean,
-    canDelete: Boolean = false,
     onClick: () -> Unit,
-    onDelete: () -> Unit = {},
+    onOptionsClick: () -> Unit = {},
     onLongClick: () -> Unit = {}
 ) {
     Column(
@@ -1895,24 +1898,21 @@ private fun PageThumbnail(
                 }
             }
 
-            if (canDelete) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(2.dp)
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFEF4444).copy(alpha = 0.92f))
-                        .clickable(onClick = onDelete),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Delete page",
-                        tint = Color.White,
-                        modifier = Modifier.size(11.dp)
-                    )
-                }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable { onOptionsClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = "Page options",
+                    tint = Color.White,
+                    modifier = Modifier.size(12.dp)
+                )
             }
         }
         Text(
@@ -1928,48 +1928,56 @@ private fun PageThumbnail(
 private fun PageActionsDialog(
     pageIndex: Int,
     title: String,
+    documentOpen: Boolean,
+    pageCount: Int,
     onDismiss: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
     onDuplicate: () -> Unit
 ) {
     var draft by remember(title) { mutableStateOf(title) }
+    val canDelete = !documentOpen && pageCount > 1
+    val canDuplicate = !documentOpen && pageCount < 50
+
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Page ${pageIndex + 1}") },
+        title = { Text("Page ${pageIndex + 1} Actions") },
         text = {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (documentOpen) {
+                    Surface(
+                        color = Color(0xFFFEF3C7),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "This board is tied to an imported PDF document. Pages cannot be added, duplicated, or deleted.",
+                            color = Color(0xFF92400E),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                } else if (pageCount <= 1) {
+                    Surface(
+                        color = Color(0xFFEFF6FF),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "The last remaining page cannot be deleted.",
+                            color = Color(0xFF1E40AF),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
                 OutlinedTextField(
                     value = draft,
                     onValueChange = { draft = it },
-                    label = { Text("Name") },
+                    label = { Text("Page Title") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    androidx.compose.material3.OutlinedButton(
-                        onClick = { onDuplicate(); onDismiss() }
-                    ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Duplicate")
-                    }
-                    androidx.compose.material3.Button(
-                        onClick = { onDelete(); onDismiss() },
-                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFEF4444)
-                        )
-                    ) {
-                        Icon(Icons.Default.Delete, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Delete", color = Color.White)
-                    }
-                }
             }
         },
         confirmButton = {
@@ -1980,8 +1988,23 @@ private fun PageActionsDialog(
             }
         },
         dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                Text("Cancel")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (canDuplicate) {
+                    androidx.compose.material3.OutlinedButton(onClick = { onDuplicate(); onDismiss() }) {
+                        Text("Duplicate")
+                    }
+                }
+                if (canDelete) {
+                    androidx.compose.material3.Button(
+                        onClick = { onDelete(); onDismiss() },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                    ) {
+                        Text("Delete", color = Color.White)
+                    }
+                }
+                androidx.compose.material3.TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
             }
         }
     )

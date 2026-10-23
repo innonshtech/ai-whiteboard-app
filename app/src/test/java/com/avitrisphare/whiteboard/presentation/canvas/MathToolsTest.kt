@@ -103,13 +103,14 @@ class MathToolsTest {
         assertEquals("90°", formatDegrees(90.2f))
 
         val pSpan = protractor.span
-        assertEquals(MathToolZone.CLOSE, hitTestMathTool(protractor, Offset(-0.80f * pSpan, 28f)))
-        assertEquals(MathToolZone.ANGLE_MODE_1, hitTestMathTool(protractor, Offset(-0.53f * pSpan, 28f)))
-        assertEquals(MathToolZone.ANGLE_MODE_ARC_LEFT, hitTestMathTool(protractor, Offset(-0.27f * pSpan, 28f)))
-        assertEquals(MathToolZone.ANGLE_MODE_ARC, hitTestMathTool(protractor, Offset(0f, 28f)))
-        assertEquals(MathToolZone.ANGLE_MODE_2, hitTestMathTool(protractor, Offset(0.27f * pSpan, 28f)))
-        assertEquals(MathToolZone.SCALE, hitTestMathTool(protractor, Offset(0.55f * pSpan, 28f)))
-        assertEquals(MathToolZone.ROTATE, hitTestMathTool(protractor, Offset(0.80f * pSpan, 28f)))
+        val shelfY = (pSpan * 0.22f).coerceIn(48f, 64f) * 0.5f
+        assertEquals(MathToolZone.CLOSE, hitTestMathTool(protractor, Offset(-0.75f * pSpan, shelfY)))
+        assertEquals(MathToolZone.ANGLE_MODE_1, hitTestMathTool(protractor, Offset(-0.45f * pSpan, shelfY)))
+        assertEquals(MathToolZone.ANGLE_MODE_ARC_LEFT, hitTestMathTool(protractor, Offset(-0.15f * pSpan, shelfY)))
+        assertEquals(MathToolZone.ANGLE_MODE_ARC, hitTestMathTool(protractor, Offset(0.15f * pSpan, shelfY)))
+        assertEquals(MathToolZone.ANGLE_MODE_2, hitTestMathTool(protractor, Offset(0.45f * pSpan, shelfY)))
+        assertEquals(MathToolZone.SCALE, hitTestMathTool(protractor, Offset(0.75f * pSpan, shelfY)))
+        assertEquals(MathToolZone.ROTATE, hitTestMathTool(protractor, Offset(0f, -pSpan - 28f)))
         assertEquals(MathToolZone.ANGLE_ARM, hitTestMathTool(protractor, Offset(0f, -pSpan)))
         assertEquals(MathToolZone.MOVE, hitTestMathTool(protractor, Offset(60f, -60f)))
 
@@ -118,12 +119,12 @@ class MathToolsTest {
             center = Offset(0f, 0f),
             span = 150f
         )
-        val sSpan = setSquare.span
-        assertEquals(MathToolZone.CLOSE, hitTestMathTool(setSquare, Offset(-0.52f * sSpan, 0.28f * sSpan)))
-        assertEquals(MathToolZone.PENCIL, hitTestMathTool(setSquare, Offset(0f, 0.26f * sSpan)))
-        assertEquals(MathToolZone.ROTATE, hitTestMathTool(setSquare, Offset(0.52f * sSpan, 0.30f * sSpan)))
-        assertEquals(MathToolZone.SCALE, hitTestMathTool(setSquare, Offset(0.76f * sSpan, 0.18f * sSpan)))
-        assertEquals(MathToolZone.MOVE, hitTestMathTool(setSquare, Offset(0f, 80f)))
+        val half = setSquare.span / 2f
+        assertEquals(MathToolZone.CLOSE, hitTestMathTool(setSquare, Offset(-half * 0.55f, -half * 0.45f)))
+        assertEquals(MathToolZone.PENCIL, hitTestMathTool(setSquare, Offset(-half * 0.35f, half * 0.35f)))
+        assertEquals(MathToolZone.ROTATE, hitTestMathTool(setSquare, Offset(-half, -half - 28f)))
+        assertEquals(MathToolZone.SCALE, hitTestMathTool(setSquare, Offset(half * 0.65f, half * 0.65f)))
+        assertEquals(MathToolZone.MOVE, hitTestMathTool(setSquare, Offset(-60f, 60f)))
 
         val triangle = PlacedMathTool(
             kind = MathToolKind.TRIANGLE,
@@ -132,11 +133,11 @@ class MathToolsTest {
         )
         val side = triangle.span * 1.8f
         val h = side * 0.8660254f
-        assertEquals(MathToolZone.CLOSE, hitTestMathTool(triangle, Offset(-side * 0.22f, -h * 0.12f)))
-        assertEquals(MathToolZone.PENCIL, hitTestMathTool(triangle, Offset(0f, h * 0.10f)))
-        assertEquals(MathToolZone.ROTATE, hitTestMathTool(triangle, Offset(side * 0.22f, -h * 0.12f)))
-        assertEquals(MathToolZone.SCALE, hitTestMathTool(triangle, Offset(side * 0.28f, h * 0.18f)))
-        assertEquals(MathToolZone.MOVE, hitTestMathTool(triangle, Offset(0f, -h * 0.35f)))
+        assertEquals(MathToolZone.CLOSE, hitTestMathTool(triangle, Offset(0f, -h * 0.35f)))
+        assertEquals(MathToolZone.PENCIL, hitTestMathTool(triangle, Offset(0f, 0f)))
+        assertEquals(MathToolZone.ROTATE, hitTestMathTool(triangle, Offset(0f, -h * 0.6667f - 28f)))
+        assertEquals(MathToolZone.SCALE, hitTestMathTool(triangle, Offset(side * 0.18f, h * 0.10f)))
+        assertEquals(MathToolZone.MOVE, hitTestMathTool(triangle, Offset(-70f, 30f)))
     }
 
     @Test
@@ -229,5 +230,60 @@ class MathToolsTest {
             existingTools = listOf(ruler)
         )
         assertEquals("Tool should stay exactly where placed when not overlapping", closeCandidate, resolved)
+    }
+
+    @Test
+    fun rulerCloseButtonHitTest() {
+        val ruler = PlacedMathTool(
+            kind = MathToolKind.RULER,
+            center = Offset(300f, 300f),
+            span = 440f
+        )
+        // half = 220f, halfT = 48f. Close button is at center + Offset(220 - 24, -48 + 22) = (496, 274)
+        val closeBtn = Offset(496f, 274f)
+        assertEquals(MathToolZone.CLOSE, hitTestMathTool(ruler, closeBtn))
+    }
+
+    @Test
+    fun rulerPhysicalEdgeSnappingAndLength() {
+        val ruler = PlacedMathTool(
+            kind = MathToolKind.RULER,
+            center = Offset(400f, 400f),
+            span = 400f,
+            rotationDeg = 0f
+        )
+        // halfT is 48f. Top edge is at y = 352f. Bottom edge is at y = 448f.
+        val topTouch = Offset(350f, 360f)
+        val bottomTouch = Offset(450f, 440f)
+
+        assertEquals(-1f, rulerEdgeForPoint(ruler, topTouch), 0.01f)
+        assertEquals(1f, rulerEdgeForPoint(ruler, bottomTouch), 0.01f)
+
+        val snappedTop = snapToRulerEdge(ruler, topTouch, edgeSign = -1f)
+        assertEquals(350f, snappedTop.x, 0.01f)
+        assertEquals(352f, snappedTop.y, 0.01f)
+
+        val snappedBottom = snapToRulerEdge(ruler, bottomTouch, edgeSign = 1f)
+        assertEquals(450f, snappedBottom.x, 0.01f)
+        assertEquals(448f, snappedBottom.y, 0.01f)
+
+        // Clamping to ruler span limits
+        val pastRightEdgeTouch = Offset(700f, 360f)
+        val snappedRight = snapToRulerEdge(ruler, pastRightEdgeTouch, edgeSign = -1f)
+        assertEquals(600f, snappedRight.x, 0.01f) // 400 + 200 = 600 max
+        assertEquals(352f, snappedRight.y, 0.01f)
+    }
+
+    @Test
+    fun rulerMagneticAngleSnapping() {
+        val ruler = PlacedMathTool(
+            kind = MathToolKind.RULER,
+            center = Offset(200f, 200f),
+            span = 400f
+        )
+        // Rotate dragging positive end to almost horizontal (e.g. angle around 1.2 degrees)
+        // Pivot is (0, 200). Drag point (400, 204) -> angle ~ 1.14 degrees -> snaps to 0.0
+        val rotated = rotateToolByEnd(ruler, Offset(400f, 204f), draggingPositiveEnd = true)
+        assertEquals(0f, rotated.rotationDeg, 0.01f)
     }
 }

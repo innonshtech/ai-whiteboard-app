@@ -615,25 +615,49 @@ fun EraserToolPanel(
             fontSize = 11.sp,
             color = Color(0xFF6B7280)
         )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Palm eraser",
-            fontSize = 12.sp,
-            color = if (state.palmEraserEnabled) Color(0xFF2563EB) else Color(0xFF6B7280),
+        Row(
             modifier = Modifier
+                .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
+                .background(if (state.palmEraserEnabled) Color(0xFFEFF6FF) else Color(0xFFF9FAFB))
                 .clickable { viewModel.setPalmEraserEnabled(!state.palmEraserEnabled) }
-                .padding(vertical = 4.dp)
-        )
-        Text(
-            "Selection eraser only",
-            fontSize = 12.sp,
-            color = if (state.restrictEraserToSelection) Color(0xFF2563EB) else Color(0xFF6B7280),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text("Palm eraser", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1F2937))
+                Text("Erase using palm contact", fontSize = 10.sp, color = Color(0xFF6B7280))
+            }
+            Text(
+                text = if (state.palmEraserEnabled) "ON" else "OFF",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (state.palmEraserEnabled) Color(0xFF2563EB) else Color(0xFF9CA3AF)
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(
             modifier = Modifier
+                .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
+                .background(if (state.restrictEraserToSelection) Color(0xFFEFF6FF) else Color(0xFFF9FAFB))
                 .clickable { viewModel.setRestrictEraserToSelection(!state.restrictEraserToSelection) }
-                .padding(vertical = 4.dp)
-        )
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text("Selection eraser only", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1F2937))
+                Text("Erase only selected strokes", fontSize = 10.sp, color = Color(0xFF6B7280))
+            }
+            Text(
+                text = if (state.restrictEraserToSelection) "ON" else "OFF",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (state.restrictEraserToSelection) Color(0xFF2563EB) else Color(0xFF9CA3AF)
+            )
+        }
         Spacer(Modifier.height(8.dp))
         Text("Size ${state.eraserSize.toInt()}px", fontSize = 12.sp, color = Color(0xFF6B7280))
         Slider(
