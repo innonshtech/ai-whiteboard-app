@@ -10,6 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 class PanelApi(
     private val client: OkHttpClient,
@@ -62,7 +63,7 @@ class PanelApi(
     ): ApiCall<MathRecognitionResponse> {
         if (imageBase64.isBlank()) return ApiCall.Err("No image to recognize")
         val body = gson.toJson(mapOf("image" to imageBase64))
-        return when (val http = post("/api/v1/math/recognize-equation", body, accessToken)) {
+        return when (val http = post("/api/v1/math/recognize-equation", body, accessToken, callTimeoutMs = 2_000L)) {
             is HttpResult.Failed -> ApiCall.Err(http.message)
             is HttpResult.Body -> parseMathRecognitionResponse(http.json)
         }
@@ -119,17 +120,31 @@ class PanelApi(
         return exchange(builder.build())
     }
 
-    private suspend fun post(path: String, json: String, bearer: String? = null): HttpResult {
+    private suspend fun post(
+        path: String,
+        json: String,
+        bearer: String? = null,
+        callTimeoutMs: Long? = null
+    ): HttpResult {
         val builder = Request.Builder()
             .url(baseUrl + path)
             .post(json.toRequestBody(JSON))
         if (!bearer.isNullOrBlank()) builder.header("Authorization", "Bearer $bearer")
-        return exchange(builder.build())
+        val httpClient = if (callTimeoutMs == null) {
+            client
+        } else {
+            client.newBuilder()
+                .connectTimeout(callTimeoutMs, TimeUnit.MILLISECONDS)
+                .readTimeout(callTimeoutMs, TimeUnit.MILLISECONDS)
+                .callTimeout(callTimeoutMs, TimeUnit.MILLISECONDS)
+                .build()
+        }
+        return exchange(builder.build(), httpClient)
     }
 
-    private suspend fun exchange(request: Request): HttpResult = withContext(Dispatchers.IO) {
+    private suspend fun exchange(request: Request, httpClient: OkHttpClient = client): HttpResult = withContext(Dispatchers.IO) {
         try {
-            client.newCall(request).execute().use { response ->
+            httpClient.newCall(request).execute().use { response ->
                 val text = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
                     HttpResult.Failed(parseErrorMessage(text, "Request failed (${response.code})"))

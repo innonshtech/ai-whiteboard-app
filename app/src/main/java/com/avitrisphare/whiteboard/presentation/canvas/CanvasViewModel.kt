@@ -37,6 +37,8 @@ import com.avitrisphare.whiteboard.presentation.canvas.export.WhiteboardExportMa
 import com.avitrisphare.whiteboard.presentation.entry.PanelSessionStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -327,6 +329,9 @@ class CanvasViewModel @Inject constructor(
                 smartWriteLanguageTag = prefs.getString(SMART_WRITE_LANG_KEY, "en") ?: "en",
                 smartWriteIntervalMs = interval
             )
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            handwritingReader.prefetch(SmartWriteLanguage("en", "English", SmartWriteScript.LATIN))
         }
     }
 
@@ -688,9 +693,7 @@ class CanvasViewModel @Inject constructor(
         if (_state.value.equationBusy) return
         val totalSelected = _state.value.selectedStrokeIds.size
         val selected = _state.value.strokes.filter {
-            it.id in _state.value.selectedStrokeIds &&
-                (it.strokeType in HANDWRITING_TYPES || it.strokeType == StrokeType.LINE) &&
-                it.points.isNotEmpty()
+            it.id in _state.value.selectedStrokeIds && isConvertibleEquationInk(it)
         }
         EquationDiagnostics.logSelection(selected, totalSelected)
         if (selected.isEmpty()) {
@@ -699,7 +702,7 @@ class CanvasViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _state.update { it.copy(equationBusy = true, formulaSolution = null) }
-            val latex = withTimeoutOrNull(12_000L) {
+            val latex = withTimeoutOrNull(4_000L) {
                 withContext(Dispatchers.Default) { readEquation(selected) }
             }
             if (!isActive) return@launch
@@ -780,36 +783,63 @@ class CanvasViewModel @Inject constructor(
 
     private suspend fun readEquation(strokes: List<Stroke>): String {
         val startTotal = System.currentTimeMillis()
-
-        // Step 4: Preferred strategy - Backend Vision API (handles complex math, fractions, superscripts, roots, Greek symbols)
-        var rawLatex = remoteVisionRead(strokes)
-        var usedEngine = "Backend Vision"
-
-        // Fallback strategy: On-device ML Kit Math Digital Ink recognizer
-        if (rawLatex.isNullOrBlank()) {
-            rawLatex = visionRead(strokes)
-            usedEngine = "MLKit Math"
+        val rawLatex = withTimeoutOrNull(3_500L) {
+            coroutineScope {
+                val remote = async { remoteVisionRead(strokes) }
+                val local = async { localMathRead(strokes) }
+                val localText = local.await()
+                val remoteText = when {
+                    remote.isCompleted -> remote.await()
+                    localText.isBlank() -> withTimeoutOrNull(600L) { remote.await() }
+                    else -> {
+                        remote.cancel()
+                        null
+                    }
+                }
+                remoteText?.takeIf { it.isNotBlank() } ?: localText
+            }
         }
 
-        if (rawLatex.isBlank()) {
+        if (rawLatex.isNullOrBlank()) {
             EquationDiagnostics.logFailure("Pipeline", "No recognition output from any engine", System.currentTimeMillis() - startTotal)
             return ""
         }
 
-        // Normalization stage
         val startNorm = System.currentTimeMillis()
         val normalized = normalizeMathReading(rawLatex)
-        val normElapsed = System.currentTimeMillis() - startNorm
-        EquationDiagnostics.logNormalized(rawLatex, normalized, normElapsed)
-
+        EquationDiagnostics.logNormalized(rawLatex, normalized, System.currentTimeMillis() - startNorm)
         return normalized
+    }
+
+    /** On-device read. A fraction bar is split so the numerator and denominator stay apart. */
+    private suspend fun localMathRead(strokes: List<Stroke>): String {
+        val bar = fractionBar(strokes)
+        if (bar != null) {
+            val (above, below, beside) = splitFraction(strokes, bar)
+            val (numerator, denominator, side) = coroutineScope {
+                val top = async { pieceText(above) }
+                val bottom = async { pieceText(below) }
+                val rest = async { pieceText(beside) }
+                Triple(top.await(), bottom.await(), rest.await())
+            }
+            if (numerator.isNotBlank() && denominator.isNotBlank()) {
+                return equationFromReadings(side, numerator, denominator, side)
+            }
+        }
+        return visionRead(strokes)
+    }
+
+    private suspend fun pieceText(strokes: List<Stroke>): String {
+        if (strokes.isEmpty()) return ""
+        val guesses = handwritingReader.readMath(strokes, allowDownload = false)
+        return selectBestMathGuess(guesses, strokes.size)?.text?.trim().orEmpty()
     }
 
     private suspend fun visionRead(strokes: List<Stroke>): String {
         if (strokes.isEmpty()) return ""
         val start = System.currentTimeMillis()
         EquationDiagnostics.logEngine("MLKit Math", "Digital Ink / Spatial")
-        val guesses = handwritingReader.readMath(strokes)
+        val guesses = handwritingReader.readMath(strokes, allowDownload = false)
         val bestGuess = selectBestMathGuess(guesses, strokes.size)
         var rawText = bestGuess?.text.orEmpty()
         val confidence = bestGuess?.score ?: 0f
@@ -2609,7 +2639,7 @@ class CanvasViewModel @Inject constructor(
             }
 
             _state.update { it.copy(equationBusy = true) }
-            val latex = withTimeoutOrNull(4000L) {
+            val latex = withTimeoutOrNull(3_500L) {
                 withContext(Dispatchers.Default) { readEquation(cluster) }
             }
             if (!isActive) return@launch

@@ -121,11 +121,24 @@ class BoardStageView(context: Context) : FrameLayout(context) {
     }
 
     fun setFrostedBounds(bounds: List<android.graphics.RectF>) {
-        if (this.frostedBounds == bounds) return
+        if (sameFrost(this.frostedBounds, bounds)) return
         this.frostedBounds = bounds
         ink.invalidate()
         blurredInk.invalidate()
-        live.invalidate()
+        if (currentStroke != null || activeLive != null) live.invalidate()
+    }
+
+    private fun sameFrost(current: List<android.graphics.RectF>, next: List<android.graphics.RectF>): Boolean {
+        if (current.size != next.size) return false
+        for (index in current.indices) {
+            val before = current[index]
+            val after = next[index]
+            if (kotlin.math.abs(before.left - after.left) > 1f) return false
+            if (kotlin.math.abs(before.top - after.top) > 1f) return false
+            if (kotlin.math.abs(before.right - after.right) > 1f) return false
+            if (kotlin.math.abs(before.bottom - after.bottom) > 1f) return false
+        }
+        return true
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean = false
@@ -618,9 +631,9 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         init {
             setWillNotDraw(false)
             isClickable = false
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val blurPx = 6f * density.density
-                setRenderEffect(android.graphics.RenderEffect.createBlurEffect(blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP))
+                setRenderEffect(RenderEffect.createBlurEffect(blurPx, blurPx, Shader.TileMode.CLAMP))
             }
         }
 

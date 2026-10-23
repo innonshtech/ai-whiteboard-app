@@ -6,8 +6,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -61,14 +59,12 @@ import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Highlight
-import androidx.compose.material.icons.filled.HorizontalRule
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.LayersClear
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Person
@@ -76,12 +72,10 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Architecture
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.CenterFocusStrong
@@ -97,6 +91,7 @@ import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -108,7 +103,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import android.graphics.BlurMaskFilter
 import android.graphics.Paint
@@ -124,21 +118,19 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.graphics.drawscope.Stroke as ThumbStroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.avitrisphare.whiteboard.domain.model.CanvasBackground
 import com.avitrisphare.whiteboard.domain.model.Stroke
 import com.avitrisphare.whiteboard.domain.model.StrokeType
-import kotlinx.coroutines.launch
 
 private val DockColor = Color(0x66FFFFFF) // Figma: #FFFFFF 40%
 private val DockLabel = Color(0xFF475569)
@@ -174,13 +166,7 @@ private fun Modifier.figmaDropShadow(
             right = size.width + blurPx * 2,
             bottom = size.height + offsetYPx + blurPx * 2
         )
-        val paint = Paint().apply {
-            color = shadowColor.toArgb()
-            isAntiAlias = true
-            if (blurPx > 0f) {
-                maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
-            }
-        }
+        val paint = cachedShadowPaint(shadowColor.toArgb(), blurPx)
         canvas.nativeCanvas.drawRoundRect(
             0f,
             offsetYPx,
@@ -194,6 +180,42 @@ private fun Modifier.figmaDropShadow(
     }
 }
 
+private val shadowPaintCache = HashMap<Long, Paint>(4)
+
+private fun cachedShadowPaint(color: Int, blurPx: Float): Paint {
+    val key = (color.toLong() shl 16) xor blurPx.toInt().toLong()
+    return shadowPaintCache.getOrPut(key) {
+        Paint().apply {
+            this.color = color
+            isAntiAlias = true
+            if (blurPx > 0f) {
+                maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+            }
+        }
+    }
+}
+
+private fun Rect.snapped(): Rect = Rect(
+    left.toInt().toFloat(),
+    top.toInt().toFloat(),
+    right.toInt().toFloat(),
+    bottom.toInt().toFloat()
+)
+
+/** Keeps the previous rect when the bar only moved by a fraction of a pixel. */
+private fun Rect.keptIfSame(current: Rect?): Rect {
+    val snapped = snapped()
+    if (current != null &&
+        kotlin.math.abs(current.left - snapped.left) < 1f &&
+        kotlin.math.abs(current.top - snapped.top) < 1f &&
+        kotlin.math.abs(current.right - snapped.right) < 1f &&
+        kotlin.math.abs(current.bottom - snapped.bottom) < 1f
+    ) {
+        return current
+    }
+    return snapped
+}
+
 private enum class ActiveDockTool {
     SELECT,
     PEN,
@@ -203,15 +225,7 @@ private enum class ActiveDockTool {
     ERASER,
     LASER,
     GEOMETRY,
-    RULER,
-    COMPASS,
-    PROTRACTOR,
-    SET_SQUARE,
-    TRIANGLE,
-    MEDIA,
-    TOOLS,
-    SPLIT,
-    MORE
+    TOOLS
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -239,13 +253,11 @@ fun AvitriSphareWhiteboardChrome(
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
     onFit: () -> Unit,
-    rulerPlaced: Boolean,
-    compassPlaced: Boolean,
-    protractorPlaced: Boolean,
-    setSquarePlaced: Boolean = false,
-    trianglePlaced: Boolean = false,
+    placedMathTools: List<PlacedMathTool> = emptyList(),
+    pxPerCm: Float = 96f / 2.54f,
     onMathDrag: (MathToolKind, Offset) -> Unit,
     onMathDragEnd: (MathToolKind, Offset, Boolean) -> Unit,
+    onMathAdjust: (MathToolKind, MathToolAdjust) -> Unit = { _, _ -> },
     onDockBounds: (Rect) -> Unit,
     onFrostedBounds: (List<Rect>) -> Unit = {},
     onOpenDocument: () -> Unit,
@@ -268,7 +280,6 @@ fun AvitriSphareWhiteboardChrome(
     onEditNodeText: (String, String) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var panel by remember { mutableStateOf<String?>(null) }
     var pageMenuIndex by remember { mutableStateOf<Int?>(null) }
     var pageToDeleteIndex by remember { mutableStateOf<Int?>(null) }
@@ -303,13 +314,6 @@ fun AvitriSphareWhiteboardChrome(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clickable { panel = null }
-            )
-        }
-        if (panel != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -323,7 +327,7 @@ fun AvitriSphareWhiteboardChrome(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()
-                .onGloballyPositioned { topBarBounds = it.boundsInRoot() }
+                .onGloballyPositioned { topBarBounds = it.boundsInRoot().keptIfSame(topBarBounds) }
                 .figmaDropShadow(
                     cornerRadius = 18.dp,
                     offsetY = 6.dp,
@@ -413,7 +417,6 @@ fun AvitriSphareWhiteboardChrome(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .onGloballyPositioned { onDockBounds(it.boundsInRoot()) }
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -667,7 +670,7 @@ fun AvitriSphareWhiteboardChrome(
                         }
 
                         // Optional row 3: Contextual actions for Handwriting / Equation / Image OCR
-                        val canConvert = state.strokes.any { it.id in state.selectedStrokeIds && it.strokeType in HANDWRITING_TYPES }
+                        val canConvert = state.strokes.any { it.id in state.selectedStrokeIds && isConvertibleEquationInk(it) }
                         val selectedEquation = state.strokes.singleOrNull { it.id in state.selectedStrokeIds && it.strokeType == StrokeType.EQUATION }
                         val selectedImage = state.strokes.firstOrNull { it.id in state.selectedStrokeIds && it.strokeType == StrokeType.IMAGE }
                         val editableStroke = state.strokes.singleOrNull {
@@ -705,7 +708,7 @@ fun AvitriSphareWhiteboardChrome(
                                     )
                                     Spacer(Modifier.width(6.dp))
                                     Text(
-                                        text = if (state.equationBusy) "Reading…" else "Math",
+                                        text = if (state.equationBusy) "Reading…" else "Convert Equation",
                                         color = Color.White,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold,
@@ -719,7 +722,7 @@ fun AvitriSphareWhiteboardChrome(
                                 }
                                 if (selectedEquation != null && state.formulaSolution?.solved != true) {
                                     Text(
-                                        text = "Solve",
+                                        text = "Solve this",
                                         color = Color.White,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold,
@@ -798,64 +801,6 @@ fun AvitriSphareWhiteboardChrome(
                         viewModel = viewModel,
                         onClose = { panel = null }
                     )
-                    PopoverRow(Icons.Default.ChangeHistory, "Triangle", state.currentTool == WhiteboardTool.TRIANGLE) {
-                        viewModel.setTool(WhiteboardTool.TRIANGLE); panel = null
-                    }
-                    PopoverRow(Icons.Default.Star, "Star", state.currentTool == WhiteboardTool.STAR) {
-                        viewModel.setTool(WhiteboardTool.STAR); panel = null
-                    }
-                    PopoverRow(Icons.Default.RadioButtonUnchecked, "Ellipse", state.currentTool == WhiteboardTool.ELLIPSE) {
-                        viewModel.setTool(WhiteboardTool.ELLIPSE); panel = null
-                    }
-                    PopoverRow(Icons.Default.CropSquare, "Square", state.currentTool == WhiteboardTool.SQUARE) {
-                        viewModel.setTool(WhiteboardTool.SQUARE); panel = null
-                    }
-                    PopoverRow(Icons.Default.Category, "Hexagon", state.currentTool == WhiteboardTool.HEXAGON) {
-                        viewModel.setTool(WhiteboardTool.HEXAGON); panel = null
-                    }
-                    PopoverRow(Icons.Default.CropFree, "Rounded rect", state.currentTool == WhiteboardTool.ROUND_RECT) {
-                        viewModel.setTool(WhiteboardTool.ROUND_RECT); panel = null
-                    }
-                    PopoverRow(Icons.Default.Architecture, "Cube", state.currentTool == WhiteboardTool.CUBE) {
-                        viewModel.setTool(WhiteboardTool.CUBE); panel = null
-                    }
-                    PopoverRow(Icons.Default.RadioButtonUnchecked, "Cylinder", state.currentTool == WhiteboardTool.CYLINDER) {
-                        viewModel.setTool(WhiteboardTool.CYLINDER); panel = null
-                    }
-                    PopoverRow(Icons.Default.ChangeHistory, "Cone", state.currentTool == WhiteboardTool.CONE) {
-                        viewModel.setTool(WhiteboardTool.CONE); panel = null
-                    }
-                    PopoverRow(Icons.Default.Category, "Pyramid", state.currentTool == WhiteboardTool.PYRAMID) {
-                        viewModel.setTool(WhiteboardTool.PYRAMID); panel = null
-                    }
-                    PopoverRow(Icons.Default.Dashboard, "Flowchart (3 Connected Nodes)") {
-                        viewModel.createThreeNodeFlowchart(Offset(320f, 360f))
-                        panel = null
-                    }
-                    PopoverRow(Icons.Default.CropSquare, "Process Node (Rectangle)") {
-                        viewModel.addFlowchartNode("process", Offset(420f, 360f))
-                        panel = null
-                    }
-                    PopoverRow(Icons.Default.Diamond, "Decision Node (Diamond)") {
-                        viewModel.addFlowchartNode("decision", Offset(420f, 360f))
-                        panel = null
-                    }
-                    PopoverRow(Icons.Default.RadioButtonUnchecked, "Terminator Node (Start/End)") {
-                        viewModel.addFlowchartNode("terminator", Offset(420f, 360f))
-                        panel = null
-                    }
-                    PopoverRow(Icons.Default.Hub, "Mind map centre") {
-                        viewModel.addMindMapCenter(Offset(480f, 360f))
-                        panel = null
-                    }
-                    PopoverRow(Icons.Default.EmojiEmotions, "Classroom Emoji") {
-                        onOpenStickerEmoji()
-                        panel = null
-                    }
-                    PopoverRow(Icons.Default.Star, "Teacher Stickers (⭐, ✓, ✕, 👍)") {
-                        onOpenStickerEmoji()
-                        panel = null
-                    }
                 }
                 "flowchart" -> DockPopover {
                     Text("Flowchart & Nodes", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
@@ -878,69 +823,154 @@ fun AvitriSphareWhiteboardChrome(
                     }
                 }
                 "geometry" -> DockPopover {
-                    Text(
-                        "Drag any tool from the toolbar onto the board. Drag a tool back onto the toolbar to remove it.",
-                        fontSize = 12.sp,
-                        color = Color(0xFF6B7280)
+                    GeometryToolPanel(
+                        state = state,
+                        viewModel = viewModel,
+                        placed = placedMathTools,
+                        pxPerCm = pxPerCm,
+                        onMathDrag = onMathDrag,
+                        onMathDragEnd = onMathDragEnd,
+                        onMathAdjust = onMathAdjust,
+                        onClose = { panel = null }
                     )
-                    Spacer(Modifier.height(8.dp))
-                    PopoverRow(Icons.Default.Straighten, if (rulerPlaced) "Hide ruler" else "Ruler", rulerPlaced) {
-                        onMathDragEnd(MathToolKind.RULER, Offset.Zero, false); panel = null
-                    }
-                    PopoverRow(Icons.Default.Architecture, if (compassPlaced) "Hide compass" else "Compass", compassPlaced) {
-                        onMathDragEnd(MathToolKind.COMPASS, Offset.Zero, false); panel = null
-                    }
-                    PopoverRow(Icons.Default.Speed, if (protractorPlaced) "Hide protractor" else "Protractor (180°)", protractorPlaced) {
-                        onMathDragEnd(MathToolKind.PROTRACTOR, Offset.Zero, false); panel = null
-                    }
-                    PopoverRow(Icons.Default.Category, if (setSquarePlaced) "Hide set square" else "Set Square (45°-45°-90°)", setSquarePlaced) {
-                        onMathDragEnd(MathToolKind.SET_SQUARE, Offset.Zero, false); panel = null
-                    }
-                    PopoverRow(Icons.Default.ChangeHistory, if (trianglePlaced) "Hide triangle" else "Triangle (60°-60°-60°)", trianglePlaced) {
-                        onMathDragEnd(MathToolKind.TRIANGLE, Offset.Zero, false); panel = null
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    PopoverRow(Icons.Default.GridOn, "Graph paper", state.canvasBackground == CanvasBackground.GRAPH) {
-                        viewModel.toggleGraphPaper(); panel = null
-                    }
-                    PopoverRow(Icons.Default.AutoFixHigh, "Magic pen", state.isDrawToShapeEnabled) {
-                        viewModel.toggleDrawToShape()
-                    }
-                    Text(
-                        if (state.smartWriteEnabled) "Turn off Smart Write to use Magic pen." else "",
-                        fontSize = 11.sp,
-                        color = Color(0xFF6B7280)
-                    )
-                    PopoverRow(Icons.Default.HorizontalRule, "Line", state.currentTool == WhiteboardTool.LINE) {
-                        viewModel.setTool(WhiteboardTool.LINE); panel = null
-                    }
-                    PopoverRow(Icons.Default.ArrowForward, "Arrow", state.currentTool == WhiteboardTool.ARROW) {
-                        viewModel.setTool(WhiteboardTool.ARROW); panel = null
-                    }
-                    PopoverRow(Icons.Default.CropFree, "Frame", state.currentTool == WhiteboardTool.FRAME) {
-                        viewModel.setTool(WhiteboardTool.FRAME); panel = null
-                    }
                 }
-                "media" -> DockPopover {
-                    PopoverRow(Icons.Default.Description, "PDF or PowerPoint") { panel = null; onOpenDocument() }
-                    PopoverRow(Icons.Default.Image, "Image from device") { panel = null; onInsertImage() }
-                    PopoverRow(Icons.Default.Search, "Google Images") { panel = null; onSearchImages() }
-                    PopoverRow(Icons.Default.Videocam, "Video from device") { panel = null; onInsertVideo() }
-                    PopoverRow(Icons.Default.OndemandVideo, "YouTube") { panel = null; onYouTube() }
-                    PopoverRow(Icons.Default.Language, "Website") { panel = null; onWebEmbed() }
-                    PopoverRow(Icons.Default.CenterFocusStrong, "Spotlight", state.currentTool == WhiteboardTool.SPOTLIGHT) {
-                        viewModel.setTool(WhiteboardTool.SPOTLIGHT); panel = null
+                "add" -> DockPopover {
+                    PopoverRow(Icons.Default.TextFields, "Text") {
+                        viewModel.setTool(WhiteboardTool.TEXT); panel = null
                     }
-                    PopoverRow(Icons.Default.VisibilityOff, "Screen shade", state.currentTool == WhiteboardTool.SHADE) {
-                        viewModel.setTool(WhiteboardTool.SHADE)
+                    PopoverRow(Icons.Default.Image, "Image") { panel = null; onInsertImage() }
+                    PopoverRow(Icons.Default.Code, "Web embed") { panel = null; onWebEmbed() }
+                }
+                "utilities" -> DockPopover(maxWidth = 560.dp) {
+                    val utilityTools = setOf(
+                        WhiteboardTool.SPOTLIGHT,
+                        WhiteboardTool.SHADE,
+                        WhiteboardTool.MAGNIFIER,
+                        WhiteboardTool.TEXT
+                    )
+                    var toolTab by remember {
+                        mutableStateOf(if (state.currentTool in utilityTools) 2 else 0)
                     }
-                    if (state.currentTool == WhiteboardTool.SHADE) {
+                    val tabs = listOf("Board", "Media", "Utilities", "Lesson", "View")
+                    ToolCategoryTabs(tabs, toolTab) { toolTab = it }
+                    Spacer(Modifier.height(12.dp))
+                    val tiles = when (toolTab) {
+                        0 -> listOf(
+                            ToolTile(Icons.Default.PanTool, "Hand", Color(0xFF2563EB), state.currentTool == WhiteboardTool.HAND) {
+                                viewModel.setTool(WhiteboardTool.HAND); panel = null
+                            },
+                            ToolTile(Icons.Default.Gesture, "Lasso", Color(0xFF0EA5E9), state.currentTool == WhiteboardTool.LASSO) {
+                                viewModel.setTool(WhiteboardTool.LASSO); panel = null
+                            },
+                            ToolTile(Icons.Default.FormatColorFill, "Bucket fill", Color(0xFF8B5CF6), state.currentTool == WhiteboardTool.BUCKET_FILL) {
+                                viewModel.setTool(WhiteboardTool.BUCKET_FILL); panel = null
+                            },
+                            ToolTile(Icons.Default.Edit, "Stroke colour", Color(0xFF2563EB)) {
+                                viewModel.setTool(state.inkTool)
+                                panel = "ink"
+                            },
+                            ToolTile(Icons.Default.AutoFixHigh, "Magic pen", Color(0xFFEC4899), state.isDrawToShapeEnabled) {
+                                viewModel.toggleDrawToShape()
+                            },
+                            ToolTile(Icons.Default.GridOn, "Background", Color(0xFF10B981)) { panel = "background" }
+                        )
+                        1 -> listOf(
+                            ToolTile(Icons.Default.Description, "PDF", Color(0xFFEF4444)) { panel = null; onOpenDocument() },
+                            ToolTile(Icons.Default.Image, "Image", Color(0xFF2563EB)) { panel = null; onInsertImage() },
+                            ToolTile(Icons.Default.Search, "Google", Color(0xFF0EA5E9)) { panel = null; onSearchImages() },
+                            ToolTile(Icons.Default.Videocam, "Video", Color(0xFF8B5CF6)) { panel = null; onInsertVideo() },
+                            ToolTile(Icons.Default.OndemandVideo, "YouTube", Color(0xFFEF4444)) { panel = null; onYouTube() },
+                            ToolTile(Icons.Default.Language, "Website", Color(0xFF10B981)) { panel = null; onWebEmbed() }
+                        )
+                        2 -> listOf(
+                            ToolTile(Icons.Default.HourglassBottom, "Timer", Color(0xFFF59E0B), isTimerVisible) {
+                                panel = null; onToggleTimer()
+                            },
+                            ToolTile(Icons.Default.Timer, "Stopwatch", Color(0xFF6366F1), isStopwatchVisible) {
+                                panel = null; onToggleStopwatch()
+                            },
+                            ToolTile(Icons.Default.Calculate, "Calculator", Color(0xFF0EA5E9), isCalculatorVisible) {
+                                panel = null; onToggleCalculator()
+                            },
+                            ToolTile(Icons.Default.Science, "Periodic", Color(0xFF10B981), isPeriodicTableVisible) {
+                                panel = null; onTogglePeriodicTable()
+                            },
+                            ToolTile(Icons.Default.CenterFocusStrong, "Spotlight", Color(0xFFF59E0B), state.currentTool == WhiteboardTool.SPOTLIGHT) {
+                                viewModel.setTool(WhiteboardTool.SPOTLIGHT)
+                            },
+                            ToolTile(Icons.Default.VisibilityOff, "Shade", Color(0xFF1F2937), state.currentTool == WhiteboardTool.SHADE) {
+                                viewModel.setTool(WhiteboardTool.SHADE)
+                            },
+                            ToolTile(Icons.Default.ZoomIn, "Magnifier", Color(0xFF6366F1), state.currentTool == WhiteboardTool.MAGNIFIER) {
+                                viewModel.setTool(WhiteboardTool.MAGNIFIER); panel = null
+                            },
+                            ToolTile(Icons.Default.TextFields, "Text", Color(0xFF2563EB), state.currentTool == WhiteboardTool.TEXT) {
+                                viewModel.setTool(WhiteboardTool.TEXT); panel = null
+                            }
+                        )
+                        3 -> listOf(
+                            ToolTile(Icons.Default.FolderOpen, "GYOASH", Color(0xFF2563EB)) { panel = null; onOpenIwb() },
+                            ToolTile(Icons.Default.Group, "Live", Color(0xFF8B5CF6)) { panel = null; onLive() },
+                            ToolTile(Icons.Default.IosShare, "Export", Color(0xFF2563EB)) { panel = null; onExport() },
+                            ToolTile(Icons.Default.Description, "Slides", Color(0xFFEF4444)) { panel = null; onSaveSlides() },
+                            ToolTile(Icons.Default.LayersClear, "Clear all", Color(0xFFEF4444)) { panel = null; onClear() },
+                            ToolTile(Icons.Default.HelpOutline, "Help", Color(0xFF6B7280)) { panel = null; onHelp() }
+                        )
+                        else -> buildList {
+                            add(
+                                ToolTile(
+                                    Icons.Default.Language,
+                                    if (state.uiLocaleTag == "hi") "English" else "हिंदी",
+                                    Color(0xFF2563EB)
+                                ) {
+                                    onToggleLocale()
+                                    panel = null
+                                }
+                            )
+                            add(ToolTile(Icons.Default.ZoomIn, "Zoom in", Color(0xFF0EA5E9)) { onZoomIn() })
+                            add(ToolTile(Icons.Default.ZoomOut, "Zoom out", Color(0xFF6366F1)) { onZoomOut() })
+                            add(ToolTile(Icons.Default.CropFree, "Fit", Color(0xFF10B981)) { panel = null; onFit() })
+                            listOf(2, 3, 4, 6).forEach { count ->
+                                add(
+                                    ToolTile(
+                                        Icons.Default.Dashboard,
+                                        "$count panels",
+                                        Color(0xFF6366F1),
+                                        state.splitCount == count
+                                    ) {
+                                        viewModel.setSplit(count)
+                                        panel = null
+                                    }
+                                )
+                            }
+                            if (state.splitCount > 1) {
+                                add(
+                                    ToolTile(Icons.Default.CropFree, "Full", Color(0xFF1F2937)) {
+                                        viewModel.requestCloseSplit()
+                                        panel = null
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    ToolIconGrid(tiles)
+                    if (toolTab == 0 && state.smartWriteEnabled) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Turn off Smart Write to use Magic pen.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF6B7280)
+                        )
+                    }
+                    if (toolTab == 2 && state.currentTool == WhiteboardTool.SHADE) {
+                        Spacer(Modifier.height(4.dp))
                         PopoverRow(
                             Icons.Default.SwapVert,
                             if (shadeFromTop) "Shade from top" else "Shade from bottom"
                         ) { onToggleShadeSide() }
                     }
-                    if (state.currentTool == WhiteboardTool.SPOTLIGHT) {
+                    if (toolTab == 2 && state.currentTool == WhiteboardTool.SPOTLIGHT) {
+                        Spacer(Modifier.height(4.dp))
                         Text("Spotlight size", fontSize = 12.sp, color = Color(0xFF6B7280))
                         Slider(
                             value = spotlightRadius.coerceIn(60f, 360f),
@@ -949,110 +979,13 @@ fun AvitriSphareWhiteboardChrome(
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
-                    PopoverRow(Icons.Default.ZoomIn, "Magnifier", state.currentTool == WhiteboardTool.MAGNIFIER) {
-                        viewModel.setTool(WhiteboardTool.MAGNIFIER); panel = null
-                    }
-                    PopoverRow(Icons.Default.TextFields, "Text", state.currentTool == WhiteboardTool.TEXT) {
-                        viewModel.setTool(WhiteboardTool.TEXT); panel = null
-                    }
-                    PopoverRow(Icons.Default.Description, "Sticky note", state.currentTool == WhiteboardTool.STICKY_NOTE) {
-                        viewModel.setTool(WhiteboardTool.STICKY_NOTE); panel = null
-                    }
-                }
-                "add" -> DockPopover {
-                    PopoverRow(Icons.Default.TextFields, "Text") {
-                        viewModel.setTool(WhiteboardTool.TEXT); panel = null
-                    }
-                    PopoverRow(Icons.Default.Description, "Sticky note") {
-                        viewModel.setTool(WhiteboardTool.STICKY_NOTE); panel = null
-                    }
-                    PopoverRow(Icons.Default.Image, "Image") { panel = null; onInsertImage() }
-                    PopoverRow(Icons.Default.Code, "Web embed") { panel = null; onWebEmbed() }
-                }
-                "split" -> DockPopover {
-                    Text("Split screen", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Each panel keeps its own ink.",
-                        fontSize = 12.sp,
-                        color = Color(0xFF6B7280)
-                    )
-                    listOf(2, 3, 4, 6).forEach { count ->
-                        PopoverRow(Icons.Default.Dashboard, "$count panels", state.splitCount == count) {
-                            viewModel.setSplit(count)
-                            panel = null
-                        }
-                    }
-                    if (state.splitCount > 1) {
-                        PopoverRow(Icons.Default.CropFree, "Full canvas") {
-                            viewModel.requestCloseSplit()
-                            panel = null
-                        }
-                    }
-                }
-                "more" -> DockPopover {
-                    PopoverRow(Icons.Default.PanTool, "Hand", state.currentTool == WhiteboardTool.HAND) {
-                        viewModel.setTool(WhiteboardTool.HAND); panel = null
-                    }
-                    PopoverRow(Icons.Default.Highlight, "Laser", state.currentTool == WhiteboardTool.LASER) {
-                        viewModel.setTool(WhiteboardTool.LASER); panel = null
-                    }
-                    PopoverRow(Icons.Default.Gesture, "Lasso", state.currentTool == WhiteboardTool.LASSO) {
-                        viewModel.setTool(WhiteboardTool.LASSO); panel = null
-                    }
-                    PopoverRow(Icons.Default.FormatColorFill, "Bucket fill", state.currentTool == WhiteboardTool.BUCKET_FILL) {
-                        viewModel.setTool(WhiteboardTool.BUCKET_FILL); panel = null
-                    }
-                    PopoverRow(Icons.Default.Edit, "Stroke colour") {
-                        viewModel.setTool(state.inkTool)
-                        panel = "ink"
-                    }
-                    PopoverRow(Icons.Default.AutoFixHigh, "Magic pen", state.isDrawToShapeEnabled) {
-                        viewModel.toggleDrawToShape()
-                    }
-                    Text(
-                        if (state.smartWriteEnabled) "Turn off Smart Write to use Magic pen." else "",
-                        fontSize = 11.sp,
-                        color = Color(0xFF6B7280)
-                    )
-                    PopoverRow(Icons.Default.GridOn, "Background") { panel = "background" }
-                    PopoverRow(Icons.Default.IosShare, "Export lesson...") { panel = null; onExport() }
-                    PopoverRow(Icons.Default.FolderOpen, "Open GYOASH Lesson (.iwb)...") { panel = null; onOpenIwb() }
-                    PopoverRow(Icons.Default.Group, "Live collaboration") { panel = null; onLive() }
-                    PopoverRow(Icons.Default.HelpOutline, "Help") { panel = null; onHelp() }
-                    PopoverRow(Icons.Default.HourglassBottom, "Countdown Timer", isTimerVisible) { panel = null; onToggleTimer() }
-                    PopoverRow(Icons.Default.Timer, "Stopwatch", isStopwatchVisible) { panel = null; onToggleStopwatch() }
-                    PopoverRow(Icons.Default.Calculate, "Calculator", isCalculatorVisible) { panel = null; onToggleCalculator() }
-                    PopoverRow(Icons.Default.Science, "Periodic Table", isPeriodicTableVisible) { panel = null; onTogglePeriodicTable() }
-                    PopoverRow(Icons.Default.LayersClear, "Clear all") { panel = null; onClear() }
-                    PopoverRow(Icons.Default.Save, "Save") { panel = null; onSave() }
-                    PopoverRow(Icons.Default.Description, "Save slides (PDF)") { panel = null; onSaveSlides() }
-                    PopoverRow(Icons.Default.Language, if (state.uiLocaleTag == "hi") "English" else "हिंदी") {
-                        onToggleLocale()
-                        panel = null
-                    }
-                    PopoverRow(Icons.Default.Add, "Zoom in") { onZoomIn() }
-                    PopoverRow(Icons.Default.ChevronLeft, "Zoom out") { onZoomOut() }
-                    PopoverRow(Icons.Default.CropFree, "Fit to content") { panel = null; onFit() }
-                }
-                "utilities" -> DockPopover {
-                    Text("Class Utilities", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
-                    Spacer(Modifier.height(8.dp))
-                    PopoverRow(Icons.Default.HourglassBottom, "Countdown Timer", isTimerVisible) {
-                        panel = null
-                        onToggleTimer()
-                    }
-                    PopoverRow(Icons.Default.Timer, "Stopwatch", isStopwatchVisible) {
-                        panel = null
-                        onToggleStopwatch()
-                    }
-                    PopoverRow(Icons.Default.Calculate, "Scientific Calculator", isCalculatorVisible) {
-                        panel = null
-                        onToggleCalculator()
-                    }
-                    PopoverRow(Icons.Default.Science, "Periodic Table", isPeriodicTableVisible) {
-                        panel = null
-                        onTogglePeriodicTable()
+                    if (toolTab == 4) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Each split panel keeps its own ink.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF6B7280)
+                        )
                     }
                 }
                 "eraser" -> DockPopover {
@@ -1218,13 +1151,18 @@ fun AvitriSphareWhiteboardChrome(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .onGloballyPositioned { onDockBounds(it.boundsInRoot()) },
+                    .onGloballyPositioned {
+                        val next = it.boundsInRoot().snapped()
+                        onDockBounds(next)
+                    },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom
             ) {
                 // 1) Left Bar: Profile, Main Menu, Exit
                 DockBar(
-                    modifier = Modifier.onGloballyPositioned { leftBarBounds = it.boundsInRoot() },
+                    modifier = Modifier.onGloballyPositioned {
+                        leftBarBounds = it.boundsInRoot().keptIfSame(leftBarBounds)
+                    },
                     isDark = state.isDarkCanvas
                 ) {
                     DockItem(
@@ -1252,7 +1190,9 @@ fun AvitriSphareWhiteboardChrome(
                     modifier = Modifier
                         .weight(1f, fill = false)
                         .padding(horizontal = 8.dp)
-                        .onGloballyPositioned { centerBarBounds = it.boundsInRoot() },
+                        .onGloballyPositioned {
+                            centerBarBounds = it.boundsInRoot().keptIfSame(centerBarBounds)
+                        },
                     isDark = state.isDarkCanvas
                 ) {
                     Row(
@@ -1283,21 +1223,22 @@ fun AvitriSphareWhiteboardChrome(
                             panel == "flowchart" -> ActiveDockTool.FLOWCHART
                             panel == "eraser" -> ActiveDockTool.ERASER
                             panel == "geometry" -> ActiveDockTool.GEOMETRY
-                            panel == "media" -> ActiveDockTool.MEDIA
-                            panel == "utilities" -> ActiveDockTool.TOOLS
-                            panel == "split" -> ActiveDockTool.SPLIT
-                            panel == "more" || panel == "color" || panel == "background" -> ActiveDockTool.MORE
+                            panel == "utilities" || panel == "background" -> ActiveDockTool.TOOLS
                             state.currentTool in WRITING_TOOLS -> ActiveDockTool.PEN
-                            state.currentTool == WhiteboardTool.SET_SQUARE -> ActiveDockTool.SET_SQUARE
-                            state.currentTool == WhiteboardTool.TRIANGLE && trianglePlaced -> ActiveDockTool.TRIANGLE
+                            state.currentTool == WhiteboardTool.RULER ||
+                                state.currentTool == WhiteboardTool.COMPASS ||
+                                state.currentTool == WhiteboardTool.PROTRACTOR ||
+                                state.currentTool == WhiteboardTool.SET_SQUARE ||
+                                state.currentTool == WhiteboardTool.FRAME ||
+                                (state.currentTool == WhiteboardTool.TRIANGLE &&
+                                    placedMathTools.any { it.kind == MathToolKind.TRIANGLE }) -> ActiveDockTool.GEOMETRY
                             state.currentTool in shapeTools -> ActiveDockTool.SHAPES
                             state.currentTool == WhiteboardTool.ERASER -> ActiveDockTool.ERASER
                             state.currentTool == WhiteboardTool.LASER -> ActiveDockTool.LASER
-                            state.currentTool == WhiteboardTool.FRAME -> ActiveDockTool.GEOMETRY
-                            state.currentTool == WhiteboardTool.RULER -> ActiveDockTool.RULER
-                            state.currentTool == WhiteboardTool.COMPASS -> ActiveDockTool.COMPASS
-                            state.currentTool == WhiteboardTool.PROTRACTOR -> ActiveDockTool.PROTRACTOR
-                            state.currentTool == WhiteboardTool.TEXT || state.currentTool == WhiteboardTool.STICKY_NOTE -> ActiveDockTool.MEDIA
+                            state.currentTool == WhiteboardTool.TEXT ||
+                                state.currentTool == WhiteboardTool.SPOTLIGHT ||
+                                state.currentTool == WhiteboardTool.SHADE ||
+                                state.currentTool == WhiteboardTool.MAGNIFIER -> ActiveDockTool.TOOLS
                             else -> ActiveDockTool.SELECT
                         }
 
@@ -1329,7 +1270,7 @@ fun AvitriSphareWhiteboardChrome(
                             }
                         )
                         DockItem(
-                            icon = Icons.Default.Dashboard,
+                            icon = Icons.Default.Hub,
                             label = "Flowchart",
                             active = activeDockTool == ActiveDockTool.FLOWCHART,
                             tint = Color(0xFF2563EB)
@@ -1377,52 +1318,6 @@ fun AvitriSphareWhiteboardChrome(
                             active = activeDockTool == ActiveDockTool.GEOMETRY,
                             tint = Color(0xFF10B981)
                         ) { toggle("geometry") }
-                        DraggableDockItem(
-                            icon = Icons.Default.Straighten,
-                            label = "Ruler",
-                            active = activeDockTool == ActiveDockTool.RULER,
-                            tint = Color(0xFF6366F1),
-                            onDrag = { onMathDrag(MathToolKind.RULER, it) },
-                            onDragEnd = { at: Offset, moved: Boolean -> onMathDragEnd(MathToolKind.RULER, at, moved) }
-                        )
-                        DraggableDockItem(
-                            icon = Icons.Default.Architecture,
-                            label = "Compass",
-                            active = activeDockTool == ActiveDockTool.COMPASS,
-                            tint = Color(0xFF6366F1),
-                            onDrag = { onMathDrag(MathToolKind.COMPASS, it) },
-                            onDragEnd = { at: Offset, moved: Boolean -> onMathDragEnd(MathToolKind.COMPASS, at, moved) }
-                        )
-                        DraggableDockItem(
-                            icon = Icons.Default.Speed,
-                            label = "Protractor",
-                            active = activeDockTool == ActiveDockTool.PROTRACTOR,
-                            tint = Color(0xFF6366F1),
-                            onDrag = { onMathDrag(MathToolKind.PROTRACTOR, it) },
-                            onDragEnd = { at: Offset, moved: Boolean -> onMathDragEnd(MathToolKind.PROTRACTOR, at, moved) }
-                        )
-                        DraggableDockItem(
-                            icon = Icons.Default.Category,
-                            label = "Set Square",
-                            active = activeDockTool == ActiveDockTool.SET_SQUARE,
-                            tint = Color(0xFF6366F1),
-                            onDrag = { onMathDrag(MathToolKind.SET_SQUARE, it) },
-                            onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.SET_SQUARE, at, moved) }
-                        )
-                        DraggableDockItem(
-                            icon = Icons.Default.ChangeHistory,
-                            label = "Triangle",
-                            active = activeDockTool == ActiveDockTool.TRIANGLE,
-                            tint = Color(0xFF6366F1),
-                            onDrag = { onMathDrag(MathToolKind.TRIANGLE, it) },
-                            onDragEnd = { at, moved -> onMathDragEnd(MathToolKind.TRIANGLE, at, moved) }
-                        )
-                        DockItem(
-                            icon = Icons.Default.Videocam,
-                            label = "Media",
-                            active = activeDockTool == ActiveDockTool.MEDIA,
-                            tint = Color(0xFF0EA5E9)
-                        ) { toggle("media") }
                         DockItem(
                             icon = Icons.Default.Widgets,
                             label = "Tools",
@@ -1453,34 +1348,8 @@ fun AvitriSphareWhiteboardChrome(
                             tint = Color(0xFF10B981)
                         ) {
                             panel = null
-                            scope.launch {
-                                viewModel.saveNow()
-                                Toast.makeText(context, "Saved", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                        DockItem(
-                            icon = Icons.Default.IosShare,
-                            label = "Export",
-                            tint = Color(0xFF2563EB)
-                        ) {
-                            panel = null
-                            onExport()
-                        }
-                        DockItem(
-                            icon = Icons.Default.Dashboard,
-                            label = "Split",
-                            active = activeDockTool == ActiveDockTool.SPLIT,
-                            tint = Color(0xFF6366F1)
-                        ) {
-                            toggle("split")
-                        }
-                        DockItem(
-                            icon = Icons.Default.MoreHoriz,
-                            label = "More",
-                            active = activeDockTool == ActiveDockTool.MORE,
-                            tint = Color(0xFF8B5CF6)
-                        ) {
-                            toggle("more")
+                            onSave()
+                            Toast.makeText(context, "Saved", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -1490,7 +1359,9 @@ fun AvitriSphareWhiteboardChrome(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     DockBar(
-                        modifier = Modifier.onGloballyPositioned { rightBarBounds = it.boundsInRoot() },
+                        modifier = Modifier.onGloballyPositioned {
+                            rightBarBounds = it.boundsInRoot().keptIfSame(rightBarBounds)
+                        },
                         isDark = state.isDarkCanvas
                     ) {
                         DockItem(
@@ -1703,86 +1574,123 @@ private fun TwoColorPenQuickSwap(
 }
 
 @Composable
-private fun DraggableDockItem(
-    icon: ImageVector,
-    label: String,
-    active: Boolean,
-    tint: Color = Color(0xFF6366F1),
-    onDrag: (Offset) -> Unit,
-    onDragEnd: (Offset, Boolean) -> Unit
+private fun DockPopover(
+    maxWidth: androidx.compose.ui.unit.Dp = 480.dp,
+    content: @Composable () -> Unit
 ) {
-    var origin by remember { mutableStateOf(Offset.Zero) }
-    Column(
-        modifier = Modifier
-            .onGloballyPositioned { origin = it.positionInRoot() }
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    val down = awaitFirstDown()
-                    down.consume()
-                    var moved = 0f
-                    var previous = down.position
-                    var root = origin + down.position
-                    onDrag(root)
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) {
-                            onDragEnd(root, moved > 12f)
-                            break
-                        }
-                        val delta = change.position - previous
-                        moved += delta.getDistance()
-                        previous = change.position
-                        root = origin + change.position
-                        onDrag(root)
-                        change.consume()
-                    }
-                }
-            }
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(30.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(
-                    if (active) Brush.horizontalGradient(ButtonGradient)
-                    else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                icon,
-                contentDescription = label,
-                tint = if (active) Color.White else tint,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = label,
-            color = if (active) Color(0xFF1E293B) else DockLabel,
-            fontSize = 9.sp,
-            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-            maxLines = 1
-        )
-    }
-}
-
-@Composable
-private fun DockPopover(content: @Composable () -> Unit) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = Color.White,
         shadowElevation = 12.dp,
         modifier = Modifier
             .padding(bottom = 6.dp)
-            .widthIn(min = 200.dp, max = 460.dp)
+            .widthIn(min = 200.dp, max = maxWidth)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             content()
         }
+    }
+}
+
+private data class ToolTile(
+    val icon: ImageVector,
+    val label: String,
+    val tint: Color,
+    val selected: Boolean = false,
+    val onClick: () -> Unit
+)
+
+@Composable
+private fun ToolCategoryTabs(
+    labels: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .width(536.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFF3F4F6))
+            .padding(4.dp)
+    ) {
+        labels.forEachIndexed { index, label ->
+            val active = index == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (active) Color.White else Color.Transparent)
+                    .clickable { onSelect(index) }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    label,
+                    fontSize = 13.sp,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (active) Color(0xFF111827) else Color(0xFF6B7280),
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToolIconGrid(tiles: List<ToolTile>) {
+    val columns = 5
+    Column(
+        modifier = Modifier.width(536.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        tiles.chunked(columns).forEach { row ->
+            Row {
+                row.forEach { tile ->
+                    ToolIconTile(tile, Modifier.weight(1f))
+                }
+                repeat(columns - row.size) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToolIconTile(tile: ToolTile, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (tile.selected) Color(0xFFEEF2FF) else Color.Transparent)
+            .clickable(onClick = tile.onClick)
+            .padding(vertical = 8.dp, horizontal = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(tile.tint.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                tile.icon,
+                contentDescription = tile.label,
+                tint = tile.tint,
+                modifier = Modifier.size(26.dp)
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            tile.label,
+            color = Color(0xFF1F2937),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            lineHeight = 14.sp
+        )
     }
 }
 

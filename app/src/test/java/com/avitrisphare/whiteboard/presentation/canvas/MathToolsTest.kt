@@ -275,6 +275,18 @@ class MathToolsTest {
     }
 
     @Test
+    fun spanClampFollowsEachInstrument() {
+        assertEquals(200f, clampMathSpan(MathToolKind.RULER, 10f))
+        assertEquals(1800f, clampMathSpan(MathToolKind.RULER, 9000f))
+        assertEquals(COMPASS_MIN_RADIUS, clampMathSpan(MathToolKind.COMPASS, 1f))
+        assertEquals(COMPASS_MAX_RADIUS, clampMathSpan(MathToolKind.COMPASS, 5000f))
+        assertEquals(800f, clampMathSpan(MathToolKind.PROTRACTOR, 2000f))
+        assertEquals(120f, clampMathSpan(MathToolKind.SET_SQUARE, 20f))
+        assertEquals(900f, clampMathSpan(MathToolKind.TRIANGLE, 4000f))
+        assertEquals(396f, triangleSidePx(220f), 0.01f)
+    }
+
+    @Test
     fun rulerMagneticAngleSnapping() {
         val ruler = PlacedMathTool(
             kind = MathToolKind.RULER,

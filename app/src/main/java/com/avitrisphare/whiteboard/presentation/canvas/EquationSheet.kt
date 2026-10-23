@@ -63,7 +63,7 @@ fun FormulaCard(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Formula",
+                    "Converted equation",
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
@@ -82,10 +82,7 @@ fun FormulaCard(
             Spacer(Modifier.height(4.dp))
             OutlinedTextField(
                 value = draft,
-                onValueChange = {
-                    draft = it
-                    onDraftChange(it)
-                },
+                onValueChange = { draft = it },
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = LocalTextStyle.current.copy(
                     color = Color.White,
@@ -121,7 +118,10 @@ fun FormulaCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!solution.solved) {
                     Button(
-                        onClick = { onSolve(draft) },
+                        onClick = {
+                            onDraftChange(draft)
+                            onSolve(draft)
+                        },
                         enabled = draft.isNotBlank(),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
                     ) {

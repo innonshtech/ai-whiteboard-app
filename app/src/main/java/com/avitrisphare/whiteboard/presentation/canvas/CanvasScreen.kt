@@ -39,6 +39,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -111,7 +112,6 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.ZoomOutMap
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -165,6 +165,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
@@ -346,19 +347,20 @@ fun DrawScope.renderStroke(
                 val top = minOf(p1.y, p2.y)
                 val width = kotlin.math.abs(p2.x - p1.x)
                 val height = kotlin.math.abs(p2.y - p1.y)
+                val radius = (if (stroke.cornerRadius > 0f) stroke.cornerRadius else 4f) / safeScale
                 if (stroke.fillColor != 0) {
                     drawRoundRect(
                         color = Color(stroke.fillColor),
                         topLeft = Offset(left, top),
                         size = Size(width, height),
-                        cornerRadius = CornerRadius(4f / safeScale, 4f / safeScale)
+                        cornerRadius = CornerRadius(radius, radius)
                     )
                 }
                 drawRoundRect(
                     color = strokeColor,
                     topLeft = Offset(left, top),
                     size = Size(width, height),
-                    cornerRadius = CornerRadius(4f / safeScale, 4f / safeScale),
+                    cornerRadius = CornerRadius(radius, radius),
                     style = DrawStroke(width = strokeWidth)
                 )
                 if (stroke.text.isNotEmpty()) {
@@ -516,13 +518,25 @@ fun DrawScope.renderStroke(
                 val top = minOf(p1.y, p2.y)
                 val width = kotlin.math.abs(p2.x - p1.x)
                 val height = kotlin.math.abs(p2.y - p1.y)
+                val radius = 24f / safeScale
+                if (stroke.fillColor != 0) {
+                    drawRoundRect(
+                        Color(stroke.fillColor),
+                        Offset(left, top),
+                        Size(width, height),
+                        CornerRadius(radius, radius)
+                    )
+                }
                 drawRoundRect(
                     strokeColor,
                     Offset(left, top),
                     Size(width, height),
-                    cornerRadius = CornerRadius(24f / safeScale, 24f / safeScale),
+                    cornerRadius = CornerRadius(radius, radius),
                     style = DrawStroke(width = strokeWidth)
                 )
+                if (stroke.text.isNotEmpty()) {
+                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.colorValue, stroke.strokeWidth)
+                }
             }
         }
         StrokeType.CUBE, StrokeType.CYLINDER, StrokeType.CONE, StrokeType.PYRAMID -> {
@@ -928,7 +942,6 @@ fun CanvasScreen(
     var exportStatusMessage by remember { mutableStateOf("") }
     var exportResult by remember { mutableStateOf<ExportResult?>(null) }
     var showTextInputDialog by remember { mutableStateOf(false) }
-    var showStickyInputDialog by remember { mutableStateOf(false) }
     var showWebEmbedDialog by remember { mutableStateOf(false) }
     var showStickerEmojiDialog by remember { mutableStateOf(false) }
     var editingNodeStrokeId by remember { mutableStateOf<String?>(null) }
@@ -938,7 +951,6 @@ fun CanvasScreen(
     var commandSearchQuery by remember { mutableStateOf("") }
     var pendingWorldPoint by remember { mutableStateOf(Offset.Zero) }
     var textInputValue by remember { mutableStateOf("") }
-    var stickyColorSelected by remember { mutableStateOf(STICKY_COLORS.first()) }
     var exportedUri by remember { mutableStateOf<Uri?>(null) }
     var lassoPoints by remember { mutableStateOf(listOf<Offset>()) }
     var timerState by remember { mutableStateOf(TimerUiState()) }
@@ -990,8 +1002,7 @@ fun CanvasScreen(
     var canvasOffsetY by remember { mutableFloatStateOf(0f) }
     var canvasSize by remember { mutableStateOf(Size.Zero) }
     var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
-    var dockBounds by remember { mutableStateOf<Rect?>(null) }
-    var frostedRects by remember { mutableStateOf<List<Rect>>(emptyList()) }
+    val chromeBounds = remember { ChromeBounds() }
     var dockDismissNonce by remember { mutableIntStateOf(0) }
 
     // Math instruments live in screen space so centimetre marks stay physical size.
@@ -1114,6 +1125,21 @@ fun CanvasScreen(
         val newTool = newMathTool(kind, resolvedCenter)
         mathTools = mathTools + newTool
         viewModel.setTool(tool)
+    }
+
+    fun adjustMathTool(kind: MathToolKind, adjust: MathToolAdjust) {
+        val current = mathTools.find { it.kind == kind } ?: return
+        val rotation = adjust.rotationDeg?.let { deg ->
+            val wrapped = deg % 360f
+            if (wrapped < 0f) wrapped + 360f else wrapped
+        } ?: current.rotationDeg
+        replaceMathTool(
+            current.copy(
+                span = adjust.span?.let { clampMathSpan(kind, it) } ?: current.span,
+                rotationDeg = rotation,
+                pointerAngleDeg = adjust.pointerAngleDeg?.coerceIn(0f, 180f) ?: current.pointerAngleDeg
+            )
+        )
     }
 
     fun rootToCanvas(root: Offset): Offset = root - canvasOrigin
@@ -1612,11 +1638,6 @@ fun CanvasScreen(
                                 pendingWorldPoint = downWorld
                                 textInputValue = ""
                                 showTextInputDialog = true
-                            }
-                            WhiteboardTool.STICKY_NOTE -> {
-                                pendingWorldPoint = downWorld
-                                textInputValue = ""
-                                showStickyInputDialog = true
                             }
                             WhiteboardTool.ERASER -> eraseSample(downWorld, down.position)
                             WhiteboardTool.SPOTLIGHT -> spotlightCenter = down.position
@@ -2141,7 +2162,7 @@ fun CanvasScreen(
                             rulerLivePreview = null
                             val tool = mathTools.find { it.id == mathGesture.toolId }
                             val finger = canvasOrigin + prevPosition
-                            if (tool != null && mathGesture.movedPx > MATH_TAP_SLOP && droppedOnToolbar(finger, dockBounds)) {
+                            if (tool != null && mathGesture.movedPx > MATH_TAP_SLOP && droppedOnToolbar(finger, chromeBounds.dock)) {
                                 viewModel.cancelCurrentStroke()
                                 removeMathTool(tool.id)
                                 Toast.makeText(context, "Tool removed", Toast.LENGTH_SHORT).show()
@@ -2549,7 +2570,7 @@ fun CanvasScreen(
                         document?.pageHeight ?: 0f
                     )
                     stage.setDocumentFrame(page.documentFrameX, page.documentFrameY, page.documentFrameScale)
-                    stage.setFrostedBounds(frostedRects.map { android.graphics.RectF(it.left, it.top, it.right, it.bottom) })
+                    stage.setFrostedBounds(chromeBounds.frost.map { android.graphics.RectF(it.left, it.top, it.right, it.bottom) })
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -2842,17 +2863,15 @@ fun CanvasScreen(
                 viewModel.updateTransform(canvasScale, canvasOffsetX, canvasOffsetY)
             },
             onFit = { viewModel.fitToContent(canvasSize.width, canvasSize.height) },
-            rulerPlaced = mathTools.any { it.kind == MathToolKind.RULER },
-            compassPlaced = mathTools.any { it.kind == MathToolKind.COMPASS },
-            protractorPlaced = mathTools.any { it.kind == MathToolKind.PROTRACTOR },
-            setSquarePlaced = mathTools.any { it.kind == MathToolKind.SET_SQUARE },
-            trianglePlaced = mathTools.any { it.kind == MathToolKind.TRIANGLE },
+            placedMathTools = mathTools,
+            pxPerCm = pxPerCm,
             onMathDrag = { kind, root ->
                 mathGhost = newMathTool(kind, rootToCanvas(root))
             },
+            onMathAdjust = { kind, adjust -> adjustMathTool(kind, adjust) },
             onMathDragEnd = { kind, root, moved ->
                 mathGhost = null
-                val overToolbar = moved && droppedOnToolbar(root, dockBounds)
+                val overToolbar = moved && droppedOnToolbar(root, chromeBounds.dock)
                 if (overToolbar) {
                     val existing = mathTools.find { it.kind == kind }
                     if (existing != null) {
@@ -2864,10 +2883,20 @@ fun CanvasScreen(
                     placeMathTool(kind, local, isDrag = moved)
                 }
             },
-            onDockBounds = { dockBounds = it },
-            onFrostedBounds = {
-                frostedRects = it
-                boardStage?.setFrostedBounds(it.map { r -> android.graphics.RectF(r.left, r.top, r.right, r.bottom) })
+            onDockBounds = { next ->
+                val prev = chromeBounds.dock
+                val unchanged = prev != null &&
+                    kotlin.math.abs(prev.left - next.left) < 1f &&
+                    kotlin.math.abs(prev.top - next.top) < 1f &&
+                    kotlin.math.abs(prev.right - next.right) < 1f &&
+                    kotlin.math.abs(prev.bottom - next.bottom) < 1f
+                if (!unchanged) chromeBounds.dock = next
+            },
+            onFrostedBounds = { rects ->
+                if (!frostUnchanged(chromeBounds.frost, rects)) {
+                    chromeBounds.frost = rects
+                    boardStage?.setFrostedBounds(rects.map { r -> android.graphics.RectF(r.left, r.top, r.right, r.bottom) })
+                }
             },
             onOpenDocument = {
                 documentPickerLauncher.launch(
@@ -3332,7 +3361,7 @@ fun CanvasScreen(
                 canvasScale,
                 Offset(canvasOffsetX, canvasOffsetY)
             )
-            val dockTop = dockBounds?.top ?: Float.MAX_VALUE
+            val dockTop = chromeBounds.dock?.top ?: Float.MAX_VALUE
             val targetY = if (anchor.y + 70f >= dockTop) {
                 (anchor.y - 70f).coerceAtLeast(80f)
             } else {
@@ -3398,7 +3427,7 @@ fun CanvasScreen(
             }
         }
 
-        val editing = state.strokes.firstOrNull { it.id == state.editingTextId && it.strokeType == StrokeType.TEXT }
+        val editing = state.strokes.firstOrNull { it.id == state.editingTextId }
         if (editing != null && editing.points.isNotEmpty()) {
             val origin = CanvasTransform.worldToScreen(
                 editing.points.first(),
@@ -4011,7 +4040,6 @@ fun CanvasScreen(
                         "Draw Rectangle" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.RECTANGLE) },
                         "Draw Diamond" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.DIAMOND) },
                         "Draw Arrow" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.ARROW) },
-                        "Add Sticky Note" to { showCommandPalette = false; showStickyInputDialog = true },
                         "Toggle Laser Pointer" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.LASER) },
                         "Place ruler" to { showCommandPalette = false; placeMathTool(MathToolKind.RULER, canvasCenter()) },
                         "Place compass" to { showCommandPalette = false; placeMathTool(MathToolKind.COMPASS, canvasCenter()) },
@@ -4068,54 +4096,45 @@ fun CanvasScreen(
 
     // Help & Shortcuts Dialog
     if (showHelpDialog) {
-        AlertDialog(
-            onDismissRequest = { showHelpDialog = false },
-            title = { Text("Whiteboard Guide & Shortcuts", color = Color(0xFF1F2937), fontWeight = FontWeight.Bold) },
-            text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    Text(
-                        "V selects. H pans. R rectangle, D diamond, O circle, A arrow, L line. P pen, plus pencil, marker, highlighter, and brush. T text, N sticky note. E eraser: Standard erases inside the circle, Smart removes the whole stroke. Palm touches wider than 3 cm are ignored while a stylus is down. K laser, B bucket fill, 9 inserts an image.",
-                        fontSize = 13.sp,
-                        color = Color(0xFF4B5563),
-                        lineHeight = 20.sp
-                    )
+        BoardModal(
+            title = "Whiteboard guide",
+            onDismiss = { showHelpDialog = false },
+            confirmLabel = "Got it",
+            onConfirm = { showHelpDialog = false },
+            cancelLabel = null
+        ) {
+            Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                Text(
+                    "V selects. H pans. R rectangle, D diamond, O circle, A arrow, L line. P pen, plus pencil, marker, highlighter, and brush. T text. E eraser: Standard erases inside the circle, Smart removes the whole stroke. Palm touches wider than 3 cm are ignored while a stylus is down. K laser, B bucket fill, 9 inserts an image.",
+                    fontSize = 13.sp,
+                    color = Color(0xFF4B5563),
+                    lineHeight = 20.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    "Drag the ruler, compass, or protractor from the toolbar onto the board. Drag either end to rotate. On the compass, drag the pencil to set the radius in centimetres, then tap it to draw a circle or sweep it to draw an arc. On the protractor, tap the scale to mark an angle in degrees. Draw along the ruler edge to place a straight line with its length. Two fingers on a tool move and rotate it. Drag a tool back to the toolbar to remove it. Graph paper adds a squared background. A rough circle, ellipse, rectangle, square, triangle, line, arrow, star, or diamond offers Convert to shape half a second after you lift the pen. Yes converts it, No keeps the drawing, and no answer converts it after two seconds. Turn Shape recognition off in the menu for free drawing. A converted shape can be moved, resized from its corners, and recoloured.",
+                    fontSize = 12.sp,
+                    color = Color(0xFF6B7280)
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text("Pinch with 2 fingers on empty board to zoom from 10% to 500%. Two fingers also pan. Ctrl+Z undoes, Ctrl+Y redoes. Double tap fits the page.", fontSize = 12.sp, color = Color(0xFF6B7280))
+                if (state.panelIdForHelp.isNotBlank()) {
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        "Drag the ruler, compass, or protractor from the toolbar onto the board. Drag either end to rotate. On the compass, drag the pencil to set the radius in centimetres, then tap it to draw a circle or sweep it to draw an arc. On the protractor, tap the scale to mark an angle in degrees. Draw along the ruler edge to place a straight line with its length. Two fingers on a tool move and rotate it. Drag a tool back to the toolbar to remove it. Graph paper adds a squared background. A rough circle, ellipse, rectangle, square, triangle, line, arrow, star, or diamond offers Convert to shape half a second after you lift the pen. Yes converts it, No keeps the drawing, and no answer converts it after two seconds. Turn Shape recognition off in the menu for free drawing. A converted shape can be moved, resized from its corners, and recoloured.",
-                        fontSize = 12.sp,
-                        color = Color(0xFF6B7280)
+                        "Panel: ${state.panelIdForHelp} · ${state.licenseStateForHelp}",
+                        fontSize = 11.sp,
+                        color = Color(0xFF9CA3AF)
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text("Pinch with 2 fingers on empty board to zoom from 10% to 500%. Two fingers also pan. Ctrl+Z undoes, Ctrl+Y redoes. Double tap fits the page.", fontSize = 12.sp, color = Color(0xFF6B7280))
-                    if (state.panelIdForHelp.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            "Panel: ${state.panelIdForHelp} · ${state.licenseStateForHelp}",
-                            fontSize = 11.sp,
-                            color = Color(0xFF9CA3AF)
-                        )
-                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showHelpDialog = false }) {
-                    Text("Close", color = LocalAvitriSphareColors.current.textMuted)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showHelpDialog = false }) {
-                    Text("Got it", color = Color(0xFF5B5BD6), fontWeight = FontWeight.Bold)
-                }
-            },
-            containerColor = Color.White
-        )
+            }
+        }
     }
 
     if (showImageSearch) {
         Dialog(onDismissRequest = { showImageSearch = false }) {
-            Surface(shape = RoundedCornerShape(16.dp), color = Color.White, modifier = Modifier.fillMaxWidth()) {
+            Surface(shape = RoundedCornerShape(20.dp), color = Color.White, modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Google Images", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+                    BoardModalHeader("Google Images") { showImageSearch = false }
                     Text(
                         "Search stays in this window. Tap a picture to paste it on the board.",
                         fontSize = 12.sp,
@@ -4171,9 +4190,9 @@ fun CanvasScreen(
 
     if (showYouTubeDialog) {
         Dialog(onDismissRequest = { showYouTubeDialog = false }) {
-            Surface(shape = RoundedCornerShape(16.dp), color = Color.White, modifier = Modifier.fillMaxWidth()) {
+            Surface(shape = RoundedCornerShape(20.dp), color = Color.White, modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("YouTube", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+                    BoardModalHeader("YouTube") { showYouTubeDialog = false }
                     Text("Paste a link or tap a video in the results.", fontSize = 12.sp, color = Color(0xFF6B7280))
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
@@ -4226,342 +4245,178 @@ fun CanvasScreen(
     }
 
     if (paneWebIndex >= 0) {
-        AlertDialog(
-            onDismissRequest = { paneWebIndex = -1 },
-            title = { Text("Open a page in this panel") },
-            text = {
-                OutlinedTextField(
-                    value = paneWebAddress,
-                    onValueChange = { paneWebAddress = it },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.openPaneWeb(paneWebIndex, paneWebAddress)
-                    paneWebIndex = -1
-                }) { Text("Open") }
-            },
-            dismissButton = {
-                TextButton(onClick = { paneWebIndex = -1 }) { Text("Cancel") }
+        BoardModal(
+            title = "Open a page",
+            onDismiss = { paneWebIndex = -1 },
+            confirmLabel = "Open",
+            onConfirm = {
+                viewModel.openPaneWeb(paneWebIndex, paneWebAddress)
+                paneWebIndex = -1
             }
-        )
+        ) {
+            OutlinedTextField(
+                value = paneWebAddress,
+                onValueChange = { paneWebAddress = it },
+                singleLine = true,
+                placeholder = { Text("https://") },
+                colors = boardFieldColors(),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 
-    // Web Embed Dialog
     if (showWebEmbedDialog) {
-        AlertDialog(
-            onDismissRequest = { showWebEmbedDialog = false },
-            title = { Text("Web Embed", color = LocalAvitriSphareColors.current.textPrimary) },
-            text = {
-                OutlinedTextField(
-                    value = textInputValue,
-                    onValueChange = { textInputValue = it },
-                    placeholder = { Text("https://example.com") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = LocalAvitriSphareColors.current.textPrimary,
-                        unfocusedTextColor = LocalAvitriSphareColors.current.textPrimary,
-                        focusedBorderColor = LocalAvitriSphareColors.current.brand,
-                        unfocusedBorderColor = LocalAvitriSphareColors.current.borderStandard
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.addWebEmbed(textInputValue.ifBlank { "https://avitrisphere.app" }, pendingWorldPoint)
-                    showWebEmbedDialog = false
-                }) {
-                    Text("Embed", color = LocalAvitriSphareColors.current.brand)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showWebEmbedDialog = false }) {
-                    Text("Cancel", color = LocalAvitriSphareColors.current.textMuted)
-                }
-            },
-            containerColor = LocalAvitriSphareColors.current.surface
-        )
+        BoardModal(
+            title = "Website",
+            onDismiss = { showWebEmbedDialog = false },
+            confirmLabel = "Embed",
+            onConfirm = {
+                viewModel.addWebEmbed(textInputValue.ifBlank { "https://avitrisphere.app" }, pendingWorldPoint)
+                showWebEmbedDialog = false
+            }
+        ) {
+            OutlinedTextField(
+                value = textInputValue,
+                onValueChange = { textInputValue = it },
+                placeholder = { Text("https://example.com") },
+                singleLine = true,
+                colors = boardFieldColors(),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 
-    // Text Input Modal Dialog
     if (showTextInputDialog) {
-        AlertDialog(
-            onDismissRequest = { showTextInputDialog = false },
-            title = { Text("Add Text", color = LocalAvitriSphareColors.current.textPrimary) },
-            text = {
-                OutlinedTextField(
-                    value = textInputValue,
-                    onValueChange = { textInputValue = it },
-                    placeholder = { Text("Type something...") },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = LocalAvitriSphareColors.current.textPrimary,
-                        unfocusedTextColor = LocalAvitriSphareColors.current.textPrimary,
-                        focusedBorderColor = LocalAvitriSphareColors.current.brand,
-                        unfocusedBorderColor = LocalAvitriSphareColors.current.borderStandard
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+        BoardModal(
+            title = "Add text",
+            onDismiss = { showTextInputDialog = false },
+            confirmLabel = "Add",
+            onConfirm = {
+                viewModel.addTextOrSticky(
+                    text = textInputValue,
+                    worldPoint = pendingWorldPoint,
+                    isSticky = false,
+                    color = state.selectedColor
                 )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.addTextOrSticky(
-                        text = textInputValue,
-                        worldPoint = pendingWorldPoint,
-                        isSticky = false,
-                        color = state.selectedColor
-                    )
-                    showTextInputDialog = false
-                }) {
-                    Text("Add", color = LocalAvitriSphareColors.current.brand)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTextInputDialog = false }) {
-                    Text("Cancel", color = LocalAvitriSphareColors.current.textMuted)
-                }
-            },
-            containerColor = LocalAvitriSphareColors.current.surface
-        )
+                showTextInputDialog = false
+            }
+        ) {
+            OutlinedTextField(
+                value = textInputValue,
+                onValueChange = { textInputValue = it },
+                placeholder = { Text("Type something…") },
+                colors = boardFieldColors(),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 
-    // Flowchart Node / Shape Text Editing Dialog
     if (editingNodeStrokeId != null) {
-        AlertDialog(
-            onDismissRequest = { editingNodeStrokeId = null },
-            title = { Text("Node Text", color = LocalAvitriSphareColors.current.textPrimary) },
-            text = {
-                OutlinedTextField(
-                    value = editingNodeText,
-                    onValueChange = { editingNodeText = it },
-                    placeholder = { Text("Type text for this node...") },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = LocalAvitriSphareColors.current.textPrimary,
-                        unfocusedTextColor = LocalAvitriSphareColors.current.textPrimary,
-                        focusedBorderColor = LocalAvitriSphareColors.current.brand,
-                        unfocusedBorderColor = LocalAvitriSphareColors.current.borderStandard
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    editingNodeStrokeId?.let { id ->
-                        viewModel.updateStrokeText(id, editingNodeText)
-                    }
-                    editingNodeStrokeId = null
-                }) {
-                    Text("Save", color = LocalAvitriSphareColors.current.brand)
+        BoardModal(
+            title = "Node text",
+            onDismiss = { editingNodeStrokeId = null },
+            confirmLabel = "Save",
+            onConfirm = {
+                editingNodeStrokeId?.let { id ->
+                    viewModel.updateStrokeText(id, editingNodeText)
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { editingNodeStrokeId = null }) {
-                    Text("Cancel", color = LocalAvitriSphareColors.current.textMuted)
-                }
-            },
-            containerColor = LocalAvitriSphareColors.current.surface
-        )
+                editingNodeStrokeId = null
+            }
+        ) {
+            OutlinedTextField(
+                value = editingNodeText,
+                onValueChange = { editingNodeText = it },
+                placeholder = { Text("Type text for this node…") },
+                colors = boardFieldColors(),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 
-    // Sticky Note Input Modal Dialog
-    if (showStickyInputDialog) {
-        AlertDialog(
-            onDismissRequest = { showStickyInputDialog = false },
-            title = { Text("Add Sticky Note", color = LocalAvitriSphareColors.current.textPrimary) },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = textInputValue,
-                        onValueChange = { textInputValue = it },
-                        placeholder = { Text("Write a note...") },
-                        minLines = 3,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = LocalAvitriSphareColors.current.textPrimary,
-                            unfocusedTextColor = LocalAvitriSphareColors.current.textPrimary,
-                            focusedBorderColor = LocalAvitriSphareColors.current.brand,
-                            unfocusedBorderColor = LocalAvitriSphareColors.current.borderStandard
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Color", fontSize = 12.sp, color = LocalAvitriSphareColors.current.textMuted)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        STICKY_COLORS.forEach { color ->
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(color))
-                                    .border(
-                                        if (stickyColorSelected == color) 2.5.dp else 1.dp,
-                                        if (stickyColorSelected == color) LocalAvitriSphareColors.current.brand else Color(0x33000000),
-                                        RoundedCornerShape(8.dp)
-                                    )
-                                    .clickable { stickyColorSelected = color }
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.addTextOrSticky(
-                        text = textInputValue,
-                        worldPoint = pendingWorldPoint,
-                        isSticky = true,
-                        fill = stickyColorSelected
-                    )
-                    showStickyInputDialog = false
-                }) {
-                    Text("Add Note", color = LocalAvitriSphareColors.current.brand)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showStickyInputDialog = false }) {
-                    Text("Cancel", color = LocalAvitriSphareColors.current.textMuted)
-                }
-            },
-            containerColor = LocalAvitriSphareColors.current.surface
-        )
-    }
-
-    // Edit Title Dialog
     if (showEditTitleDialog) {
         var editedTitle by remember { mutableStateOf(state.noteTitle) }
-        AlertDialog(
-            onDismissRequest = { showEditTitleDialog = false },
-            title = { Text("Edit Title", color = LocalAvitriSphareColors.current.textPrimary) },
-            text = {
-                OutlinedTextField(
-                    value = editedTitle,
-                    onValueChange = { editedTitle = it },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = LocalAvitriSphareColors.current.textPrimary,
-                        unfocusedTextColor = LocalAvitriSphareColors.current.textPrimary,
-                        focusedBorderColor = LocalAvitriSphareColors.current.brand,
-                        unfocusedBorderColor = LocalAvitriSphareColors.current.borderStandard
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.updateTitle(editedTitle.ifBlank { "Untitled" })
-                    showEditTitleDialog = false
-                }) {
-                    Text("Save", color = LocalAvitriSphareColors.current.brand)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditTitleDialog = false }) {
-                    Text("Cancel", color = LocalAvitriSphareColors.current.textMuted)
-                }
-            },
-            containerColor = LocalAvitriSphareColors.current.surface
-        )
+        BoardModal(
+            title = "Edit title",
+            onDismiss = { showEditTitleDialog = false },
+            confirmLabel = "Save",
+            onConfirm = {
+                viewModel.updateTitle(editedTitle.ifBlank { "Untitled" })
+                showEditTitleDialog = false
+            }
+        ) {
+            OutlinedTextField(
+                value = editedTitle,
+                onValueChange = { editedTitle = it },
+                singleLine = true,
+                colors = boardFieldColors(),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 
-    // Delete confirmation dialog
     if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Note", color = LocalAvitriSphareColors.current.textPrimary) },
-            text = { Text("Are you sure you want to delete this note?", color = LocalAvitriSphareColors.current.textMuted) },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteNote { onNavigateBack() }
-                    showDeleteDialog = false
-                }) {
-                    Text("Delete", color = Color(0xFFFF6B6B))
-                }
+        BoardModal(
+            title = "Delete note",
+            onDismiss = { showDeleteDialog = false },
+            confirmLabel = "Delete",
+            onConfirm = {
+                viewModel.deleteNote { onNavigateBack() }
+                showDeleteDialog = false
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel", color = LocalAvitriSphareColors.current.textMuted)
-                }
-            },
-            containerColor = LocalAvitriSphareColors.current.surface
-        )
+            confirmDestructive = true
+        ) {
+            Text("Are you sure you want to delete this note?", color = Color(0xFF6B7280), fontSize = 14.sp)
+        }
     }
 
     if (state.showCloseSplitDialog) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissCloseSplitDialog() },
-            title = { Text("Leave split screen") },
-            text = { Text("Keep ink from the active panel on the main board?") },
-            confirmButton = {
-                TextButton(onClick = { viewModel.closeSplit(state.splitActive) }) {
-                    Text("Keep active panel")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissCloseSplitDialog() }) {
-                    Text("Cancel")
-                }
-            }
-        )
+        BoardModal(
+            title = "Leave split screen",
+            onDismiss = { viewModel.dismissCloseSplitDialog() },
+            confirmLabel = "Keep active panel",
+            onConfirm = { viewModel.closeSplit(state.splitActive) }
+        ) {
+            Text("Keep ink from the active panel on the main board?", color = Color(0xFF6B7280), fontSize = 14.sp)
+        }
     }
 
-    // Clear Canvas confirmation dialog
     if (showClearDialog) {
-        AlertDialog(
-            onDismissRequest = { showClearDialog = false },
-            title = { Text("Clear all", color = LocalAvitriSphareColors.current.textPrimary) },
-            text = { Text("Clear everything on this page? You can bring it back with Undo.", color = LocalAvitriSphareColors.current.textMuted) },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.clearCanvas()
-                    showClearDialog = false
-                }) {
-                    Text("Clear all", color = Color(0xFFFF6B6B))
-                }
+        BoardModal(
+            title = "Clear all",
+            onDismiss = { showClearDialog = false },
+            confirmLabel = "Clear all",
+            onConfirm = {
+                viewModel.clearCanvas()
+                showClearDialog = false
             },
-            dismissButton = {
-                TextButton(onClick = { showClearDialog = false }) {
-                    Text("Cancel", color = LocalAvitriSphareColors.current.textMuted)
-                }
-            },
-            containerColor = LocalAvitriSphareColors.current.surface
-        )
+            confirmDestructive = true
+        ) {
+            Text("Clear everything on this page? You can bring it back with Undo.", color = Color(0xFF6B7280), fontSize = 14.sp)
+        }
     }
 
-    // Export success dialog
     if (showExportDialog && exportedUri != null) {
-        AlertDialog(
-            onDismissRequest = {
+        BoardModal(
+            title = "Exported",
+            onDismiss = {
                 showExportDialog = false
                 exportedUri = null
             },
-            title = { Text("Export Successful", color = LocalAvitriSphareColors.current.textPrimary) },
-            text = { Text("Note exported to Pictures/AvitriSphare", color = LocalAvitriSphareColors.current.textMuted) },
-            confirmButton = {
-                TextButton(onClick = {
-                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "image/png"
-                        putExtra(Intent.EXTRA_STREAM, exportedUri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(Intent.createChooser(shareIntent, "Share Note"))
-                    showExportDialog = false
-                    exportedUri = null
-                }) {
-                    Text("Share", color = LocalAvitriSphareColors.current.brand)
+            confirmLabel = "Share",
+            onConfirm = {
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "image/png"
+                    putExtra(Intent.EXTRA_STREAM, exportedUri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
+                context.startActivity(Intent.createChooser(shareIntent, "Share Note"))
+                showExportDialog = false
+                exportedUri = null
             },
-            dismissButton = {
-                TextButton(onClick = {
-                    showExportDialog = false
-                    exportedUri = null
-                }) {
-                    Text("Close", color = LocalAvitriSphareColors.current.textMuted)
-                }
-            },
-            containerColor = LocalAvitriSphareColors.current.surface
-        )
+            cancelLabel = null
+        ) {
+            Text("Note exported to Pictures/AvitriSphare", color = Color(0xFF6B7280), fontSize = 14.sp)
+        }
     }
     // Export lesson dialog (PDF, PNG ZIP, IWB)
     if (showExportLessonDialog) {
@@ -4615,4 +4470,126 @@ fun CanvasScreen(
             }
         )
     }
+}
+
+/** Dock position kept off the compose state so opening a panel does not redraw the page. */
+private class ChromeBounds {
+    var dock: Rect? = null
+    var frost: List<Rect> = emptyList()
+}
+
+@Composable
+private fun boardFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = Color(0xFF1F2937),
+    unfocusedTextColor = Color(0xFF1F2937),
+    focusedBorderColor = Color(0xFF6366F1),
+    unfocusedBorderColor = Color(0xFFE5E7EB),
+    focusedContainerColor = Color(0xFFF8FAFC),
+    unfocusedContainerColor = Color(0xFFF8FAFC),
+    cursorColor = Color(0xFF6366F1)
+)
+
+@Composable
+private fun BoardModalHeader(title: String, onDismiss: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            title,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 18.sp,
+            color = Color(0xFF111827),
+            modifier = Modifier.weight(1f)
+        )
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(Color(0xFFF3F4F6))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Close",
+                tint = Color(0xFF6B7280),
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun BoardModal(
+    title: String,
+    onDismiss: () -> Unit,
+    confirmLabel: String? = null,
+    onConfirm: (() -> Unit)? = null,
+    confirmDestructive: Boolean = false,
+    cancelLabel: String? = "Cancel",
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = Color.White,
+            shadowElevation = 16.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                BoardModalHeader(title, onDismiss)
+                Spacer(Modifier.height(14.dp))
+                content()
+                if (confirmLabel != null || cancelLabel != null) {
+                    Spacer(Modifier.height(18.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (cancelLabel != null) {
+                            TextButton(onClick = onDismiss) {
+                                Text(cancelLabel, color = Color(0xFF6B7280), fontWeight = FontWeight.Medium)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        if (confirmLabel != null && onConfirm != null) {
+                            val fill = if (confirmDestructive) {
+                                Brush.linearGradient(listOf(Color(0xFFEF4444), Color(0xFFF97316)))
+                            } else {
+                                Brush.horizontalGradient(
+                                    listOf(Color(0xFF22D3EE), Color(0xFF3B82F6), Color(0xFFA855F7))
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(fill)
+                                    .clickable(onClick = onConfirm)
+                                    .padding(horizontal = 18.dp, vertical = 10.dp)
+                            ) {
+                                Text(confirmLabel, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun frostUnchanged(current: List<Rect>, next: List<Rect>): Boolean {
+    if (current.size != next.size) return false
+    for (index in current.indices) {
+        val before = current[index]
+        val after = next[index]
+        if (kotlin.math.abs(before.left - after.left) > 1f) return false
+        if (kotlin.math.abs(before.top - after.top) > 1f) return false
+        if (kotlin.math.abs(before.right - after.right) > 1f) return false
+        if (kotlin.math.abs(before.bottom - after.bottom) > 1f) return false
+    }
+    return true
 }
