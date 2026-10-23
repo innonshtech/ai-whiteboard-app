@@ -725,8 +725,58 @@ class BoardStageView(context: Context) : FrameLayout(context) {
 
         private fun drawStroke(canvas: android.graphics.Canvas, stroke: Stroke, p: android.graphics.Paint) {
             val points = stroke.points
+            val blurBoost = if (p === liveBlurPaint) 1.5f else 1f
+            if (stroke.strokeType == StrokeType.STICKER && points.isNotEmpty()) {
+                if (p === liveBlurPaint) return
+                val origin = points.first()
+                val label = when (stroke.stickerKind) {
+                    "star" -> "⭐"
+                    "tick" -> "✓"
+                    "cross" -> "✕"
+                    "thumb" -> "👍"
+                    "emoji" -> stroke.text.ifEmpty { "😀" }
+                    else -> stroke.text.ifEmpty { stroke.stickerKind }
+                }
+                val textPaint = android.graphics.Paint().apply {
+                    color = when (stroke.stickerKind) {
+                        "tick" -> 0xFF10B981.toInt()
+                        "cross" -> 0xFFEF4444.toInt()
+                        "star" -> 0xFFF59E0B.toInt()
+                        else -> stroke.colorValue
+                    }
+                    textSize = (stroke.strokeWidth * 14f).coerceIn(56f, 150f)
+                    isAntiAlias = true
+                }
+                canvas.drawText(label, origin.x, origin.y + textPaint.textSize * 0.88f, textPaint)
+                return
+            }
+            if (stroke.strokeType == StrokeType.CONNECTOR && points.size >= 2) {
+                val p1 = points.first()
+                val p2 = points.last()
+                p.color = stroke.colorValue
+                p.strokeWidth = stroke.strokeWidth.coerceAtLeast(3f) * blurBoost
+                canvas.drawLine(p1.x, p1.y, p2.x, p2.y, p)
+                val angle = kotlin.math.atan2(p2.y - p1.y, p2.x - p1.x)
+                val arrowLen = (stroke.strokeWidth * 4.5f).coerceIn(16f, 32f)
+                val arrowAngle = Math.PI / 6.0
+                val ap1X = p2.x - (arrowLen * kotlin.math.cos(angle - arrowAngle)).toFloat()
+                val ap1Y = p2.y - (arrowLen * kotlin.math.sin(angle - arrowAngle)).toFloat()
+                val ap2X = p2.x - (arrowLen * kotlin.math.cos(angle + arrowAngle)).toFloat()
+                val ap2Y = p2.y - (arrowLen * kotlin.math.sin(angle + arrowAngle)).toFloat()
+                val arrowPath = android.graphics.Path().apply {
+                    moveTo(p2.x, p2.y)
+                    lineTo(ap1X, ap1Y)
+                    lineTo(ap2X, ap2Y)
+                    close()
+                }
+                val prevStyle = p.style
+                p.style = android.graphics.Paint.Style.FILL
+                canvas.drawPath(arrowPath, p)
+                p.style = prevStyle
+                return
+            }
             p.color = stroke.colorValue
-            p.strokeWidth = fittedStrokeWidth(stroke) * (if (p === liveBlurPaint) 1.5f else 1f)
+            p.strokeWidth = fittedStrokeWidth(stroke) * blurBoost
             if (points.size >= 2 && (
                     stroke.strokeType == StrokeType.RECTANGLE ||
                         stroke.strokeType == StrokeType.FRAME ||

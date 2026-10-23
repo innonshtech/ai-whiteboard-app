@@ -3,6 +3,7 @@ package com.avitrisphare.whiteboard.presentation.canvas
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import java.util.Locale
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Paint
@@ -187,6 +188,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import kotlin.math.atan2
+import kotlin.math.hypot
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -262,6 +265,25 @@ private fun decodeMediaBitmap(context: Context, uriString: String, maxDim: Int =
     }
 }
 
+private fun DrawScope.drawCenteredNodeText(text: String, cx: Float, cy: Float, colorInt: Int, strokeW: Float) {
+    if (text.isEmpty()) return
+    drawContext.canvas.nativeCanvas.apply {
+        val tPaint = Paint().apply {
+            color = colorInt
+            textSize = (strokeW * 4.2f).coerceIn(16f, 32f)
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val lines = text.split("\n")
+        val lineH = tPaint.textSize * 1.25f
+        val startY = cy - ((lines.size - 1) * lineH) / 2f + tPaint.textSize * 0.35f
+        lines.forEachIndexed { i, line ->
+            drawText(line, cx, startY + i * lineH, tPaint)
+        }
+    }
+}
+
 fun DrawScope.renderStroke(
     context: Context,
     stroke: Stroke,
@@ -307,6 +329,9 @@ fun DrawScope.renderStroke(
                     size = Size(width, height),
                     style = DrawStroke(width = strokeWidth)
                 )
+                if (stroke.text.isNotEmpty()) {
+                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.colorValue, stroke.strokeWidth)
+                }
             }
         }
         StrokeType.RECTANGLE, StrokeType.SQUARE -> {
@@ -332,6 +357,9 @@ fun DrawScope.renderStroke(
                     cornerRadius = CornerRadius(4f / safeScale, 4f / safeScale),
                     style = DrawStroke(width = strokeWidth)
                 )
+                if (stroke.text.isNotEmpty()) {
+                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.colorValue, stroke.strokeWidth)
+                }
             }
         }
         StrokeType.DIAMOND -> {
@@ -360,6 +388,9 @@ fun DrawScope.renderStroke(
                     color = strokeColor,
                     style = DrawStroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
                 )
+                if (stroke.text.isNotEmpty()) {
+                    drawCenteredNodeText(stroke.text, midX, midY, stroke.colorValue, stroke.strokeWidth)
+                }
             }
         }
         StrokeType.FRAME -> {
@@ -497,24 +528,52 @@ fun DrawScope.renderStroke(
         }
         StrokeType.CONNECTOR -> {
             if (pointsList.size >= 2) {
-                drawLine(strokeColor, pointsList.first(), pointsList.last(), strokeWidth, cap = StrokeCap.Round)
+                val p1 = pointsList.first()
+                val p2 = pointsList.last()
+                val actualWidth = strokeWidth.coerceAtLeast(3f)
+                drawLine(strokeColor, p1, p2, actualWidth, cap = StrokeCap.Round)
+                val angle = kotlin.math.atan2(p2.y - p1.y, p2.x - p1.x)
+                val arrowLen = (actualWidth * 4.5f).coerceIn(16f, 32f)
+                val arrowAngle = Math.PI / 6.0
+                val ap1 = Offset(
+                    p2.x - (arrowLen * kotlin.math.cos(angle - arrowAngle)).toFloat(),
+                    p2.y - (arrowLen * kotlin.math.sin(angle - arrowAngle)).toFloat()
+                )
+                val ap2 = Offset(
+                    p2.x - (arrowLen * kotlin.math.cos(angle + arrowAngle)).toFloat(),
+                    p2.y - (arrowLen * kotlin.math.sin(angle + arrowAngle)).toFloat()
+                )
+                val arrowPath = Path().apply {
+                    moveTo(p2.x, p2.y)
+                    lineTo(ap1.x, ap1.y)
+                    lineTo(ap2.x, ap2.y)
+                    close()
+                }
+                drawPath(arrowPath, color = strokeColor)
             }
         }
         StrokeType.STICKER -> {
             val origin = pointsList.first()
             val label = when (stroke.stickerKind) {
+                "star" -> "⭐"
                 "tick" -> "✓"
                 "cross" -> "✕"
                 "thumb" -> "👍"
-                else -> "★"
+                "emoji" -> stroke.text.ifEmpty { "😀" }
+                else -> stroke.text.ifEmpty { stroke.stickerKind }
             }
             drawContext.canvas.nativeCanvas.apply {
                 val paint = Paint().apply {
-                    color = stroke.colorValue
-                    textSize = stroke.strokeWidth.coerceAtLeast(48f)
+                    color = when (stroke.stickerKind) {
+                        "tick" -> 0xFF10B981.toInt()
+                        "cross" -> 0xFFEF4444.toInt()
+                        "star" -> 0xFFF59E0B.toInt()
+                        else -> stroke.colorValue
+                    }
+                    textSize = (stroke.strokeWidth * 14f).coerceIn(56f, 150f)
                     isAntiAlias = true
                 }
-                drawText(label, origin.x, origin.y + paint.textSize, paint)
+                drawText(label, origin.x, origin.y + paint.textSize * 0.88f, paint)
             }
         }
         StrokeType.IMAGE -> {
@@ -857,6 +916,9 @@ fun CanvasScreen(
     var showTextInputDialog by remember { mutableStateOf(false) }
     var showStickyInputDialog by remember { mutableStateOf(false) }
     var showWebEmbedDialog by remember { mutableStateOf(false) }
+    var showStickerEmojiDialog by remember { mutableStateOf(false) }
+    var editingNodeStrokeId by remember { mutableStateOf<String?>(null) }
+    var editingNodeText by remember { mutableStateOf("") }
     var showHelpDialog by remember { mutableStateOf(false) }
     var showCommandPalette by remember { mutableStateOf(false) }
     var commandSearchQuery by remember { mutableStateOf("") }
@@ -961,6 +1023,8 @@ fun CanvasScreen(
             MathToolKind.RULER -> WhiteboardTool.RULER
             MathToolKind.COMPASS -> WhiteboardTool.COMPASS
             MathToolKind.PROTRACTOR -> WhiteboardTool.PROTRACTOR
+            MathToolKind.SET_SQUARE -> WhiteboardTool.SET_SQUARE
+            MathToolKind.TRIANGLE -> WhiteboardTool.TRIANGLE
         }
         if (viewModel.state.value.currentTool == active) {
             val remaining = mathTools.lastOrNull()
@@ -969,6 +1033,8 @@ fun CanvasScreen(
                     MathToolKind.RULER -> WhiteboardTool.RULER
                     MathToolKind.COMPASS -> WhiteboardTool.COMPASS
                     MathToolKind.PROTRACTOR -> WhiteboardTool.PROTRACTOR
+                    MathToolKind.SET_SQUARE -> WhiteboardTool.SET_SQUARE
+                    MathToolKind.TRIANGLE -> WhiteboardTool.TRIANGLE
                 }
                 viewModel.setTool(nextTool)
             } else {
@@ -980,7 +1046,9 @@ fun CanvasScreen(
     fun removeAllMathTools() {
         mathTools = emptyList()
         val current = viewModel.state.value.currentTool
-        if (current == WhiteboardTool.RULER || current == WhiteboardTool.COMPASS || current == WhiteboardTool.PROTRACTOR) {
+        if (current == WhiteboardTool.RULER || current == WhiteboardTool.COMPASS || current == WhiteboardTool.PROTRACTOR ||
+            current == WhiteboardTool.SET_SQUARE || current == WhiteboardTool.TRIANGLE
+        ) {
             viewModel.setTool(WhiteboardTool.SELECT)
         }
     }
@@ -992,6 +1060,8 @@ fun CanvasScreen(
             MathToolKind.RULER -> WhiteboardTool.RULER
             MathToolKind.COMPASS -> WhiteboardTool.COMPASS
             MathToolKind.PROTRACTOR -> WhiteboardTool.PROTRACTOR
+            MathToolKind.SET_SQUARE -> WhiteboardTool.SET_SQUARE
+            MathToolKind.TRIANGLE -> WhiteboardTool.TRIANGLE
         }
 
         if (existingIndex >= 0) {
@@ -1388,8 +1458,8 @@ fun CanvasScreen(
                         val mathHit = hitTestPlacedTools(mathTools, down.position)
                         val straightedge = if (mathHit != null) {
                             null
-                        } else if (activeTool == WhiteboardTool.RULER) {
-                            mathTools.lastOrNull { it.kind == MathToolKind.RULER }
+                        } else if (activeTool == WhiteboardTool.RULER || activeTool == WhiteboardTool.PROTRACTOR || activeTool == WhiteboardTool.SET_SQUARE || activeTool == WhiteboardTool.TRIANGLE) {
+                            mathTools.lastOrNull { it.kind == MathToolKind.RULER || it.kind == MathToolKind.PROTRACTOR || it.kind == MathToolKind.SET_SQUARE || it.kind == MathToolKind.TRIANGLE }
                                 ?.takeIf { distanceToRulerEdge(it, down.position) <= RULER_EDGE_SLOP }
                         } else if (activeTool in WRITING_TOOLS || activeTool == WhiteboardTool.LINE) {
                             rulerForStraightedge(mathTools, down.position)
@@ -1415,8 +1485,27 @@ fun CanvasScreen(
                                 mathGesture.lastAngleDeg = tool.rotationDeg
                             }
                             if (mathHit.zone == MathToolZone.SCALE) {
-                                val angle = protractorAngle(tool, down.position)
-                                if (angle != null) replaceMathTool(tool.copy(markedAngleDeg = angle))
+                                mathGesture.startSpan = tool.span
+                                mathGesture.startToolScale = tool.toolScale
+                                mathGesture.startAngleDeg = tool.rotationDeg
+                                mathGesture.startDist = hypot(down.position.x - tool.center.x, down.position.y - tool.center.y).coerceAtLeast(10f)
+                            }
+                            if (mathHit.zone == MathToolZone.ANGLE_ARM) {
+                                val local = toLocal(down.position, tool.center, tool.rotationDeg)
+                                val a = (atan2(-local.y, local.x) * (180f / Math.PI.toFloat())).coerceIn(0f, 180f)
+                                replaceMathTool(tool.copy(pointerAngleDeg = kotlin.math.round(a * 10f) / 10f))
+                            }
+                            if (mathHit.zone == MathToolZone.ROTATE) {
+                                mathGesture.startAngleDeg = tool.rotationDeg
+                                val radToDeg = 180f / Math.PI.toFloat()
+                                mathGesture.lastAngleDeg = atan2(down.position.y - tool.center.y, down.position.x - tool.center.x) * radToDeg
+                                mathGesture.sweepDeg = 0f
+                            }
+                            if (mathHit.zone == MathToolZone.SPREAD) {
+                                mathGesture.startSpan = tool.span
+                                mathGesture.startToolScale = tool.toolScale
+                                mathGesture.startAngleDeg = tool.rotationDeg
+                                mathGesture.startDist = hypot(down.position.x - tool.center.x, down.position.y - tool.center.y).coerceAtLeast(10f)
                             }
                         } else if (straightedge != null) {
                             mathGesture.rulerDrawing = true
@@ -1658,33 +1747,90 @@ fun CanvasScreen(
                                             mathGesture.movedPx += Offset(dx, dy).getDistance()
                                             when (mathGesture.zone) {
                                                 MathToolZone.MOVE -> replaceMathTool(tool.copy(center = Offset(tool.center.x + dx, tool.center.y + dy)))
+                                                MathToolZone.ROTATE -> {
+                                                    val radToDeg = 180f / Math.PI.toFloat()
+                                                    val curAngle = atan2(change.position.y - tool.center.y, change.position.x - tool.center.x) * radToDeg
+                                                    val delta = shortestAngleDelta(mathGesture.lastAngleDeg, curAngle)
+                                                    mathGesture.lastAngleDeg = curAngle
+                                                    val next = tool.copy(rotationDeg = tool.rotationDeg + delta)
+                                                    replaceMathTool(next)
+                                                    if (tool.kind == MathToolKind.COMPASS) {
+                                                        mathGesture.sweepDeg += delta
+                                                        if (kotlin.math.abs(mathGesture.sweepDeg) >= ARC_ANGLE_SLOP) {
+                                                            mathGesture.arcMode = true
+                                                            val worldPts = screenPointsToWorld(
+                                                                compassArcScreenPoints(next, mathGesture.startAngleDeg, mathGesture.sweepDeg),
+                                                                canvasScale,
+                                                                Offset(canvasOffsetX, canvasOffsetY)
+                                                            )
+                                                            val arc = arcStroke(worldPts, state.selectedColor, state.strokeWidth)
+                                                            if (viewModel.state.value.currentStroke == null) {
+                                                                viewModel.startStroke(arc)
+                                                            } else {
+                                                                viewModel.updateStroke(worldPts)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                MathToolZone.ANGLE_ARM -> {
+                                                    val local = toLocal(change.position, tool.center, tool.rotationDeg)
+                                                    var angle = atan2(-local.y, local.x) * (180f / Math.PI.toFloat())
+                                                    if (angle < 0f) angle += 360f
+                                                    val clamped = (kotlin.math.round(angle.coerceIn(0f, 180f) * 10f) / 10f)
+                                                    replaceMathTool(tool.copy(pointerAngleDeg = clamped))
+                                                }
+                                                MathToolZone.SPREAD -> {
+                                                    val newRadius = hypot(change.position.x - tool.center.x, change.position.y - tool.center.y)
+                                                        .coerceIn(COMPASS_MIN_RADIUS, COMPASS_MAX_RADIUS)
+                                                    replaceMathTool(tool.copy(span = newRadius))
+                                                }
                                                 MathToolZone.ROTATE_POSITIVE, MathToolZone.ROTATE_NEGATIVE -> {
                                                     replaceMathTool(
                                                         rotateToolByEnd(tool, change.position, mathGesture.draggingPositiveEnd)
                                                     )
                                                 }
                                                 MathToolZone.PENCIL -> {
-                                                    val next = dragCompassPencil(tool, change.position, mathGesture)
-                                                    replaceMathTool(next)
-                                                    if (mathGesture.arcMode) {
-                                                        val worldPts = screenPointsToWorld(
-                                                            compassArcScreenPoints(next, mathGesture.startAngleDeg, mathGesture.sweepDeg),
-                                                            canvasScale,
-                                                            Offset(canvasOffsetX, canvasOffsetY)
-                                                        )
-                                                        val arc = arcStroke(worldPts, state.selectedColor, state.strokeWidth)
-                                                        if (viewModel.state.value.currentStroke == null) {
-                                                            viewModel.startStroke(arc)
-                                                        } else {
-                                                            viewModel.updateStroke(worldPts)
+                                                    if (tool.kind == MathToolKind.COMPASS) {
+                                                        val next = dragCompassPencil(tool, change.position, mathGesture)
+                                                        replaceMathTool(next)
+                                                        if (mathGesture.arcMode) {
+                                                            val worldPts = screenPointsToWorld(
+                                                                compassArcScreenPoints(next, mathGesture.startAngleDeg, mathGesture.sweepDeg),
+                                                                canvasScale,
+                                                                Offset(canvasOffsetX, canvasOffsetY)
+                                                            )
+                                                            val arc = arcStroke(worldPts, state.selectedColor, state.strokeWidth)
+                                                            if (viewModel.state.value.currentStroke == null) {
+                                                                viewModel.startStroke(arc)
+                                                            } else {
+                                                                viewModel.updateStroke(worldPts)
+                                                            }
                                                         }
                                                     }
                                                 }
                                                 MathToolZone.SCALE -> {
-                                                    val angle = protractorAngle(tool, change.position)
-                                                    if (angle != null) replaceMathTool(tool.copy(markedAngleDeg = angle))
+                                                    val curDist = hypot(change.position.x - tool.center.x, change.position.y - tool.center.y)
+                                                    val ratio = if (mathGesture.startDist > 10f) curDist / mathGesture.startDist else 1f
+                                                    if (tool.kind == MathToolKind.COMPASS) {
+                                                        val newScale = (mathGesture.startToolScale * ratio).coerceIn(0.6f, 3.5f)
+                                                        replaceMathTool(tool.copy(toolScale = newScale))
+                                                    } else {
+                                                        val maxSpan = when (tool.kind) {
+                                                            MathToolKind.SET_SQUARE -> 1000f
+                                                            MathToolKind.TRIANGLE -> 900f
+                                                            MathToolKind.PROTRACTOR -> 800f
+                                                            MathToolKind.RULER -> 1800f
+                                                            else -> 800f
+                                                        }
+                                                        val minSpan = when (tool.kind) {
+                                                            MathToolKind.RULER -> 200f
+                                                            else -> 120f
+                                                        }
+                                                        val newSpan = (mathGesture.startSpan * ratio).coerceIn(minSpan, maxSpan)
+                                                        replaceMathTool(tool.copy(span = newSpan))
+                                                    }
                                                 }
-                                                MathToolZone.NONE -> Unit
+                                                MathToolZone.CLOSE, MathToolZone.ANGLE_MODE_1, MathToolZone.ANGLE_MODE_ARC_LEFT, MathToolZone.ANGLE_MODE_ARC, MathToolZone.ANGLE_MODE_2, MathToolZone.SIDE_1_PENCIL, MathToolZone.SIDE_2_PENCIL, MathToolZone.SIDE_3_PENCIL, MathToolZone.NONE -> Unit
                                             }
                                         }
                                     } else if (mathGesture.rulerDrawing) {
@@ -1883,7 +2029,250 @@ fun CanvasScreen(
                                         replaceMathTool(tool.copy(center = resolved))
                                     }
                                 }
-                                if (tool != null && tool.kind == MathToolKind.COMPASS && mathGesture.zone == MathToolZone.PENCIL) {
+                                if (tool != null && mathGesture.zone == MathToolZone.CLOSE && mathGesture.movedPx <= MATH_TAP_SLOP) {
+                                viewModel.cancelCurrentStroke()
+                                removeMathTool(tool.id)
+                                val toolName = tool.kind.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+                                Toast.makeText(context, "$toolName closed", Toast.LENGTH_SHORT).show()
+                            } else if (tool != null && tool.kind == MathToolKind.SET_SQUARE && (mathGesture.zone == MathToolZone.PENCIL || mathGesture.zone == MathToolZone.SIDE_1_PENCIL || mathGesture.zone == MathToolZone.SIDE_2_PENCIL || mathGesture.zone == MathToolZone.SIDE_3_PENCIL) && mathGesture.movedPx <= MATH_TAP_SLOP) {
+                                val half = tool.span / 2f
+                                val dir = direction(tool.rotationDeg)
+                                val perp = perpendicular(tool.rotationDeg)
+                                val pCorner = tool.center - dir * half + perp * half
+                                val pBase = tool.center + dir * half + perp * half
+                                val pTop = tool.center - dir * half - perp * half
+                                val offset = Offset(canvasOffsetX, canvasOffsetY)
+                                val wCorner = CanvasTransform.screenToWorld(pCorner, canvasScale, offset)
+                                val wBase = CanvasTransform.screenToWorld(pBase, canvasScale, offset)
+                                val wTop = CanvasTransform.screenToWorld(pTop, canvasScale, offset)
+
+                                val legCm = tool.span / pxPerCm.coerceAtLeast(1f)
+                                val baseLabel = String.format(Locale.US, "%.1f cm", legCm)
+                                val heightLabel = String.format(Locale.US, "%.1f cm", legCm)
+                                val hypLabel = String.format(Locale.US, "%.1f cm", legCm * 1.4142f)
+
+                                val midBase = Offset((wCorner.x + wBase.x) / 2f, (wCorner.y + wBase.y) / 2f)
+                                val midHeight = Offset((wCorner.x + wTop.x) / 2f, (wCorner.y + wTop.y) / 2f)
+                                val midHyp = Offset((wTop.x + wBase.x) / 2f, (wTop.y + wBase.y) / 2f)
+
+                                when (mathGesture.zone) {
+                                    MathToolZone.SIDE_1_PENCIL -> {
+                                        viewModel.commitStroke(straightStroke(wCorner, wBase, state.selectedColor, state.strokeWidth))
+                                        viewModel.commitStroke(measurementLabel(baseLabel, midBase, state.selectedColor))
+                                        Toast.makeText(context, "Base line ($baseLabel) drawn", Toast.LENGTH_SHORT).show()
+                                    }
+                                    MathToolZone.SIDE_2_PENCIL -> {
+                                        viewModel.commitStroke(straightStroke(wCorner, wTop, state.selectedColor, state.strokeWidth))
+                                        viewModel.commitStroke(measurementLabel(heightLabel, midHeight, state.selectedColor))
+                                        Toast.makeText(context, "Height line ($heightLabel) drawn", Toast.LENGTH_SHORT).show()
+                                    }
+                                    MathToolZone.SIDE_3_PENCIL -> {
+                                        viewModel.commitStroke(straightStroke(wTop, wBase, state.selectedColor, state.strokeWidth))
+                                        viewModel.commitStroke(measurementLabel(hypLabel, midHyp, state.selectedColor))
+                                        Toast.makeText(context, "Hypotenuse line ($hypLabel) drawn", Toast.LENGTH_SHORT).show()
+                                    }
+                                    MathToolZone.PENCIL -> {
+                                        val pts = listOf(wCorner, wBase, wTop, wCorner)
+                                        viewModel.commitStroke(
+                                            Stroke(
+                                                points = pts,
+                                                colorValue = state.selectedColor,
+                                                strokeWidth = state.strokeWidth,
+                                                strokeType = StrokeType.TRIANGLE
+                                            )
+                                        )
+                                        viewModel.commitStroke(measurementLabel(baseLabel, midBase, state.selectedColor))
+                                        viewModel.commitStroke(measurementLabel(heightLabel, midHeight, state.selectedColor))
+                                        viewModel.commitStroke(measurementLabel(hypLabel, midHyp, state.selectedColor))
+                                        Toast.makeText(context, "Set square (45°-90°-45°) with measurements drawn", Toast.LENGTH_SHORT).show()
+                                    }
+                                    else -> Unit
+                                }
+                            } else if (tool != null && tool.kind == MathToolKind.TRIANGLE && (mathGesture.zone == MathToolZone.PENCIL || mathGesture.zone == MathToolZone.SIDE_1_PENCIL || mathGesture.zone == MathToolZone.SIDE_2_PENCIL || mathGesture.zone == MathToolZone.SIDE_3_PENCIL) && mathGesture.movedPx <= MATH_TAP_SLOP) {
+                                val side = tool.span * 1.8f
+                                val h = side * 0.8660254f
+                                val dir = direction(tool.rotationDeg)
+                                val perp = perpendicular(tool.rotationDeg)
+                                val topScreen = tool.center - perp * (h * 0.6667f)
+                                val leftScreen = tool.center - dir * (side / 2f) + perp * (h * 0.3333f)
+                                val rightScreen = tool.center + dir * (side / 2f) + perp * (h * 0.3333f)
+                                val offset = Offset(canvasOffsetX, canvasOffsetY)
+                                val wTop = CanvasTransform.screenToWorld(topScreen, canvasScale, offset)
+                                val wLeft = CanvasTransform.screenToWorld(leftScreen, canvasScale, offset)
+                                val wRight = CanvasTransform.screenToWorld(rightScreen, canvasScale, offset)
+
+                                val sideCm = side / pxPerCm.coerceAtLeast(1f)
+                                val sideLabel = String.format(Locale.US, "%.1f cm", sideCm)
+
+                                val midBottom = Offset((wLeft.x + wRight.x) / 2f, (wLeft.y + wRight.y) / 2f)
+                                val midLeft = Offset((wTop.x + wLeft.x) / 2f, (wTop.y + wLeft.y) / 2f)
+                                val midRight = Offset((wTop.x + wRight.x) / 2f, (wTop.y + wRight.y) / 2f)
+
+                                when (mathGesture.zone) {
+                                    MathToolZone.SIDE_1_PENCIL -> {
+                                        viewModel.commitStroke(straightStroke(wLeft, wRight, state.selectedColor, state.strokeWidth))
+                                        viewModel.commitStroke(measurementLabel(sideLabel, midBottom, state.selectedColor))
+                                        Toast.makeText(context, "Side A ($sideLabel) drawn", Toast.LENGTH_SHORT).show()
+                                    }
+                                    MathToolZone.SIDE_2_PENCIL -> {
+                                        viewModel.commitStroke(straightStroke(wLeft, wTop, state.selectedColor, state.strokeWidth))
+                                        viewModel.commitStroke(measurementLabel(sideLabel, midLeft, state.selectedColor))
+                                        Toast.makeText(context, "Side B ($sideLabel) drawn", Toast.LENGTH_SHORT).show()
+                                    }
+                                    MathToolZone.SIDE_3_PENCIL -> {
+                                        viewModel.commitStroke(straightStroke(wTop, wRight, state.selectedColor, state.strokeWidth))
+                                        viewModel.commitStroke(measurementLabel(sideLabel, midRight, state.selectedColor))
+                                        Toast.makeText(context, "Side C ($sideLabel) drawn", Toast.LENGTH_SHORT).show()
+                                    }
+                                    MathToolZone.PENCIL -> {
+                                        val pts = listOf(wTop, wLeft, wRight, wTop)
+                                        viewModel.commitStroke(
+                                            Stroke(
+                                                points = pts,
+                                                colorValue = state.selectedColor,
+                                                strokeWidth = state.strokeWidth,
+                                                strokeType = StrokeType.TRIANGLE
+                                            )
+                                        )
+                                        viewModel.commitStroke(measurementLabel(sideLabel, midBottom, state.selectedColor))
+                                        viewModel.commitStroke(measurementLabel(sideLabel, midLeft, state.selectedColor))
+                                        viewModel.commitStroke(measurementLabel(sideLabel, midRight, state.selectedColor))
+                                        Toast.makeText(context, "Triangle (60°-60°-60°) with measurements drawn", Toast.LENGTH_SHORT).show()
+                                    }
+                                    else -> Unit
+                                }
+                            } else if (tool != null && tool.kind == MathToolKind.PROTRACTOR &&
+                                (mathGesture.zone == MathToolZone.ANGLE_MODE_1 ||
+                                 mathGesture.zone == MathToolZone.ANGLE_MODE_ARC_LEFT ||
+                                 mathGesture.zone == MathToolZone.ANGLE_MODE_ARC ||
+                                 mathGesture.zone == MathToolZone.ANGLE_MODE_2) &&
+                                mathGesture.movedPx <= MATH_TAP_SLOP
+                            ) {
+                                val pDeg = tool.pointerAngleDeg
+                                val rad = Math.toRadians(pDeg.toDouble()).toFloat()
+                                val dir = direction(tool.rotationDeg)
+                                val perp = perpendicular(tool.rotationDeg)
+                                val armDir = dir * cos(rad) - perp * sin(rad)
+                                val armScreen = tool.center + armDir * tool.span
+                                val rightBaseScreen = tool.center + dir * tool.span
+                                val leftBaseScreen = tool.center - dir * tool.span
+                                val offset = Offset(canvasOffsetX, canvasOffsetY)
+                                val centerWorld = CanvasTransform.screenToWorld(tool.center, canvasScale, offset)
+                                val armWorld = CanvasTransform.screenToWorld(armScreen, canvasScale, offset)
+                                val rightBaseWorld = CanvasTransform.screenToWorld(rightBaseScreen, canvasScale, offset)
+                                val leftBaseWorld = CanvasTransform.screenToWorld(leftBaseScreen, canvasScale, offset)
+                                when (mathGesture.zone) {
+                                    MathToolZone.ANGLE_MODE_1 -> {
+                                        // Left Angle: from Left baseline (180°) to arm
+                                        val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
+                                        viewModel.commitStroke(straightStroke(centerWorld, leftBaseWorld, state.selectedColor, state.strokeWidth))
+                                        viewModel.commitStroke(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
+                                        val arcScreenPoints = mutableListOf<Offset>()
+                                        val steps = (leftAngleDeg / 3f).roundToInt().coerceAtLeast(8)
+                                        val arcR = tool.span * 0.45f
+                                        for (i in 0..steps) {
+                                            val deg = 180f - (leftAngleDeg * i) / steps
+                                            val r = Math.toRadians(deg.toDouble()).toFloat()
+                                            val d = dir * cos(r) - perp * sin(r)
+                                            arcScreenPoints.add(tool.center + d * arcR)
+                                        }
+                                        viewModel.commitStroke(
+                                            arcStroke(
+                                                screenPointsToWorld(arcScreenPoints, canvasScale, offset),
+                                                state.selectedColor,
+                                                (state.strokeWidth * 0.85f).coerceAtLeast(2f)
+                                            )
+                                        )
+                                        val midRad = Math.toRadians((180.0 - leftAngleDeg / 2.0)).toFloat()
+                                        val midD = dir * cos(midRad) - perp * sin(midRad)
+                                        val labelScreen = tool.center + midD * (arcR + 32f) - perp * 26f
+                                        viewModel.commitStroke(
+                                            measurementLabel("${leftAngleDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                        )
+                                        Toast.makeText(context, "Left Angle ${leftAngleDeg.roundToInt()}° drawn", Toast.LENGTH_SHORT).show()
+                                    }
+                                    MathToolZone.ANGLE_MODE_ARC_LEFT -> {
+                                        // Left Arc: circular arc only from Left baseline (180°) down to arm
+                                        val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
+                                        val arcScreenPoints = mutableListOf<Offset>()
+                                        val steps = (leftAngleDeg / 2.5f).roundToInt().coerceAtLeast(8)
+                                        for (i in 0..steps) {
+                                            val deg = 180f - (leftAngleDeg * i) / steps
+                                            val r = Math.toRadians(deg.toDouble()).toFloat()
+                                            val d = dir * cos(r) - perp * sin(r)
+                                            arcScreenPoints.add(tool.center + d * tool.span)
+                                        }
+                                        viewModel.commitStroke(
+                                            arcStroke(
+                                                screenPointsToWorld(arcScreenPoints, canvasScale, offset),
+                                                state.selectedColor,
+                                                state.strokeWidth
+                                            )
+                                        )
+                                        val midRad = Math.toRadians((180.0 - leftAngleDeg / 2.0)).toFloat()
+                                        val midD = dir * cos(midRad) - perp * sin(midRad)
+                                        val labelScreen = tool.center + midD * (tool.span + 36f) - perp * 24f
+                                        viewModel.commitStroke(
+                                            measurementLabel("${leftAngleDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                        )
+                                        Toast.makeText(context, "Left Arc (${leftAngleDeg.roundToInt()}°) drawn", Toast.LENGTH_SHORT).show()
+                                    }
+                                    MathToolZone.ANGLE_MODE_ARC -> {
+                                        // Right Arc: circular arc only from Right baseline (0°) up to arm
+                                        val arcScreenPoints = mutableListOf<Offset>()
+                                        val steps = (pDeg / 2.5f).roundToInt().coerceAtLeast(8)
+                                        for (i in 0..steps) {
+                                            val deg = (pDeg * i) / steps
+                                            val r = Math.toRadians(deg.toDouble()).toFloat()
+                                            val d = dir * cos(r) - perp * sin(r)
+                                            arcScreenPoints.add(tool.center + d * tool.span)
+                                        }
+                                        viewModel.commitStroke(
+                                            arcStroke(
+                                                screenPointsToWorld(arcScreenPoints, canvasScale, offset),
+                                                state.selectedColor,
+                                                state.strokeWidth
+                                            )
+                                        )
+                                        val midRad = Math.toRadians((pDeg / 2f).toDouble()).toFloat()
+                                        val midD = dir * cos(midRad) - perp * sin(midRad)
+                                        val labelScreen = tool.center + midD * (tool.span + 36f) - perp * 24f
+                                        viewModel.commitStroke(
+                                            measurementLabel("${pDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                        )
+                                        Toast.makeText(context, "Right Arc (${pDeg.roundToInt()}°) drawn", Toast.LENGTH_SHORT).show()
+                                    }
+                                    MathToolZone.ANGLE_MODE_2 -> {
+                                        // Right Angle: from Right baseline (0°) to arm
+                                        viewModel.commitStroke(straightStroke(centerWorld, rightBaseWorld, state.selectedColor, state.strokeWidth))
+                                        viewModel.commitStroke(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
+                                        val arcScreenPoints = mutableListOf<Offset>()
+                                        val steps = (pDeg / 3f).roundToInt().coerceAtLeast(8)
+                                        val arcR = tool.span * 0.45f
+                                        for (i in 0..steps) {
+                                            val deg = (pDeg * i) / steps
+                                            val r = Math.toRadians(deg.toDouble()).toFloat()
+                                            val d = dir * cos(r) - perp * sin(r)
+                                            arcScreenPoints.add(tool.center + d * arcR)
+                                        }
+                                        viewModel.commitStroke(
+                                            arcStroke(
+                                                screenPointsToWorld(arcScreenPoints, canvasScale, offset),
+                                                state.selectedColor,
+                                                (state.strokeWidth * 0.85f).coerceAtLeast(2f)
+                                            )
+                                        )
+                                        val midRad = Math.toRadians((pDeg / 2f).toDouble()).toFloat()
+                                        val midD = dir * cos(midRad) - perp * sin(midRad)
+                                        val labelScreen = tool.center + midD * (arcR + 32f) - perp * 26f
+                                        viewModel.commitStroke(
+                                            measurementLabel("${pDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                        )
+                                        Toast.makeText(context, "Right Angle ${pDeg.roundToInt()}° drawn", Toast.LENGTH_SHORT).show()
+                                    }
+                                    else -> Unit
+                                }
+                            } else if (tool != null && tool.kind == MathToolKind.COMPASS && (mathGesture.zone == MathToolZone.PENCIL || mathGesture.zone == MathToolZone.ROTATE)) {
                                 val worldCenter = CanvasTransform.screenToWorld(
                                     tool.center,
                                     canvasScale,
@@ -1898,7 +2287,7 @@ fun CanvasScreen(
                                 } else if (mathGesture.arcMode) {
                                     viewModel.finishStroke()
                                 }
-                            } else if (tool != null && tool.kind == MathToolKind.PROTRACTOR &&
+                            } else if (tool != null && tool.kind == MathToolKind.SET_SQUARE &&
                                 mathGesture.zone == MathToolZone.SCALE && tool.markedAngleDeg != null
                             ) {
                                 val angle = tool.markedAngleDeg
@@ -1921,7 +2310,7 @@ fun CanvasScreen(
                                     )
                                 )
                             }
-                        }
+                            }
                         mathReadout = null
                         } else if (!wasMultiTouch) {
                             val latest = viewModel.state.value
@@ -2191,6 +2580,8 @@ fun CanvasScreen(
             rulerPlaced = mathTools.any { it.kind == MathToolKind.RULER },
             compassPlaced = mathTools.any { it.kind == MathToolKind.COMPASS },
             protractorPlaced = mathTools.any { it.kind == MathToolKind.PROTRACTOR },
+            setSquarePlaced = mathTools.any { it.kind == MathToolKind.SET_SQUARE },
+            trianglePlaced = mathTools.any { it.kind == MathToolKind.TRIANGLE },
             onMathDrag = { kind, root ->
                 mathGhost = newMathTool(kind, rootToCanvas(root))
             },
@@ -2257,6 +2648,11 @@ fun CanvasScreen(
                 val next = !periodicTableState.isVisible
                 periodicTableState = periodicTableState.copy(isVisible = next)
                 if (next) bringToolToFront(UtilityToolKind.PERIODIC_TABLE)
+            },
+            onOpenStickerEmoji = { showStickerEmojiDialog = true },
+            onEditNodeText = { strokeId, currentText ->
+                editingNodeStrokeId = strokeId
+                editingNodeText = currentText
             }
         )
 
@@ -3252,6 +3648,13 @@ fun CanvasScreen(
                         "Place ruler" to { showCommandPalette = false; placeMathTool(MathToolKind.RULER, canvasCenter()) },
                         "Place compass" to { showCommandPalette = false; placeMathTool(MathToolKind.COMPASS, canvasCenter()) },
                         "Place protractor" to { showCommandPalette = false; placeMathTool(MathToolKind.PROTRACTOR, canvasCenter()) },
+                        "Place set square" to { showCommandPalette = false; placeMathTool(MathToolKind.SET_SQUARE, canvasCenter()) },
+                        "Place triangle" to { showCommandPalette = false; placeMathTool(MathToolKind.TRIANGLE, canvasCenter()) },
+                        "Flowchart: 3 Connected Nodes" to { showCommandPalette = false; viewModel.createThreeNodeFlowchart(canvasCenter()) },
+                        "Flowchart: Process Node" to { showCommandPalette = false; viewModel.addFlowchartNode("process", canvasCenter()) },
+                        "Flowchart: Decision Node" to { showCommandPalette = false; viewModel.addFlowchartNode("decision", canvasCenter()) },
+                        "Flowchart: Terminator Node" to { showCommandPalette = false; viewModel.addFlowchartNode("terminator", canvasCenter()) },
+                        "Stickers & Emoji" to { showCommandPalette = false; showStickerEmojiDialog = true },
                         "Countdown Timer" to { showCommandPalette = false; timerState = timerState.copy(isVisible = true); bringToolToFront(UtilityToolKind.TIMER) },
                         "Stopwatch" to { showCommandPalette = false; stopwatchState = stopwatchState.copy(isVisible = true); bringToolToFront(UtilityToolKind.STOPWATCH) },
                         "Scientific Calculator" to { showCommandPalette = false; calculatorState = calculatorState.copy(isVisible = true); bringToolToFront(UtilityToolKind.CALCULATOR) },
@@ -3553,6 +3956,44 @@ fun CanvasScreen(
         )
     }
 
+    // Flowchart Node / Shape Text Editing Dialog
+    if (editingNodeStrokeId != null) {
+        AlertDialog(
+            onDismissRequest = { editingNodeStrokeId = null },
+            title = { Text("Node Text", color = LocalAvitriSphareColors.current.textPrimary) },
+            text = {
+                OutlinedTextField(
+                    value = editingNodeText,
+                    onValueChange = { editingNodeText = it },
+                    placeholder = { Text("Type text for this node...") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = LocalAvitriSphareColors.current.textPrimary,
+                        unfocusedTextColor = LocalAvitriSphareColors.current.textPrimary,
+                        focusedBorderColor = LocalAvitriSphareColors.current.brand,
+                        unfocusedBorderColor = LocalAvitriSphareColors.current.borderStandard
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    editingNodeStrokeId?.let { id ->
+                        viewModel.updateStrokeText(id, editingNodeText)
+                    }
+                    editingNodeStrokeId = null
+                }) {
+                    Text("Save", color = LocalAvitriSphareColors.current.brand)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingNodeStrokeId = null }) {
+                    Text("Cancel", color = LocalAvitriSphareColors.current.textMuted)
+                }
+            },
+            containerColor = LocalAvitriSphareColors.current.surface
+        )
+    }
+
     // Sticky Note Input Modal Dialog
     if (showStickyInputDialog) {
         AlertDialog(
@@ -3790,6 +4231,16 @@ fun CanvasScreen(
             },
             onShareFile = { result ->
                 WhiteboardExportManager.launchShareIntent(context, result, state.noteTitle)
+            }
+        )
+    }
+
+    if (showStickerEmojiDialog) {
+        StickerEmojiPickerDialog(
+            onDismiss = { showStickerEmojiDialog = false },
+            onSelectSticker = { kind, text ->
+                val center = canvasCenter()
+                viewModel.insertSticker(kind, center, text)
             }
         )
     }
