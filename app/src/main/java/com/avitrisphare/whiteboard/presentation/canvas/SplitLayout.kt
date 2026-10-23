@@ -13,7 +13,9 @@ data class CanvasPane(
     val label: String = "",
     val pageIndex: Int = 0,
     val pageCount: Int = 0,
-    val tool: WhiteboardTool = WhiteboardTool.PEN
+    val tool: WhiteboardTool = WhiteboardTool.PEN,
+    val color: Int = 0xFF1B1F2A.toInt(),
+    val strokeWidth: Float = 4f
 )
 
 data class PaneFrame(val left: Int, val top: Int, val right: Int, val bottom: Int) {
@@ -77,23 +79,34 @@ fun hitPane(frames: List<PaneFrame>, x: Float, y: Float): Int {
     return frames.indexOfFirst { x >= it.left && x < it.right && y >= it.top && y < it.bottom }
 }
 
-fun hitDivider(frames: List<PaneFrame>, count: Int, x: Float, y: Float, slop: Float = 18f): DividerHit? {
+fun hitDivider(frames: List<PaneFrame>, count: Int, x: Float, y: Float, slop: Float = 36f): DividerHit? {
     if (frames.size < 2) return null
     val columns = splitColumns(count)
     val rows = splitRows(count)
+    var bestHit: DividerHit? = null
+    var bestDist = Float.MAX_VALUE
+
     if (columns > 1) {
         for (column in 0 until columns - 1) {
             val edge = frames[column].right.toFloat()
-            if (abs(x - edge) <= slop) return DividerHit(vertical = true, index = column)
+            val dist = abs(x - edge)
+            if (dist <= slop && dist < bestDist) {
+                bestDist = dist
+                bestHit = DividerHit(vertical = true, index = column)
+            }
         }
     }
     if (rows > 1) {
         for (row in 0 until rows - 1) {
             val edge = frames[row * columns].bottom.toFloat()
-            if (abs(y - edge) <= slop) return DividerHit(vertical = false, index = row)
+            val dist = abs(y - edge)
+            if (dist <= slop && dist < bestDist) {
+                bestDist = dist
+                bestHit = DividerHit(vertical = false, index = row)
+            }
         }
     }
-    return null
+    return bestHit
 }
 
 fun dragDivider(
@@ -110,11 +123,13 @@ fun dragDivider(
     val start = if (vertical) index else columns + index
     if (start < 0 || start + 1 >= current.size) return current
     val change = deltaPx / spanPx
-    val nextA = current[start] + change
-    val nextB = current[start + 1] - change
-    if (nextA < 0.12f || nextB < 0.12f) return current
-    current[start] = nextA
-    current[start + 1] = nextB
+    val minWeight = 0.12f
+    val clampedChange = change.coerceIn(
+        minWeight - current[start],
+        current[start + 1] - minWeight
+    )
+    current[start] = current[start] + clampedChange
+    current[start + 1] = current[start + 1] - clampedChange
     return normalizeWeights(count, current)
 }
 

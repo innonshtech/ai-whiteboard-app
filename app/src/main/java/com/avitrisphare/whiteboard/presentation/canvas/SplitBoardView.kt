@@ -35,6 +35,7 @@ interface SplitHost {
     fun stepPage(index: Int, delta: Int)
     fun swipeBoard(delta: Int)
     fun toggleAi()
+    fun requestCloseSplit(index: Int)
 }
 
 /**
@@ -264,6 +265,7 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
                 val span = if (dragged.vertical) width.toFloat() else height.toFloat()
                 weights = dragDivider(dividerWeights, panes.size, dragged.vertical, dragged.index, delta, span)
                 layoutPanes(weights)
+                invalidate()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 cells.forEach { it.stage.setResizing(false) }
@@ -271,6 +273,7 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
                 divider = null
                 dragging = false
                 laidKey = ""
+                invalidate()
             }
         }
         return true
@@ -572,15 +575,17 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
     }
 
     private fun publishInk(index: Int) {
+        val targetColor = panes.getOrNull(index)?.color ?: inkColor
+        val targetWidth = panes.getOrNull(index)?.strokeWidth ?: inkWidth
         val width = if (stylusInk) {
-            stylusPressureWidth(inkWidth, pressures.lastOrNull() ?: 1f)
+            stylusPressureWidth(targetWidth, pressures.lastOrNull() ?: 1f)
         } else {
-            inkWidth
+            targetWidth
         }
         liveInk.stroke = Stroke(
             points = ArrayList(points),
             pointPressures = ArrayList(pressures),
-            colorValue = inkColor,
+            colorValue = targetColor,
             strokeWidth = width,
             isHighlighter = drawTool == WhiteboardTool.HIGHLIGHTER,
             strokeType = drawTool.toStrokeType()
@@ -656,15 +661,22 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
             val stage = cells[index].stage
             stage.setLiveInk(null)
             when {
-                points.size >= 2 -> {
+                points.size >= 1 -> {
+                    if (points.size == 1) {
+                        points.add(points[0].copy(x = points[0].x + 0.1f))
+                        if (pressures.isNotEmpty()) pressures.add(pressures[0]) else pressures.add(1f)
+                    }
+                    val targetColor = panes.getOrNull(index)?.color ?: inkColor
+                    val targetWidth = panes.getOrNull(index)?.strokeWidth ?: inkWidth
                     val width = if (stylusInk && pressures.isNotEmpty()) {
-                        stylusPressureWidth(inkWidth, pressures.average().toFloat())
+                        stylusPressureWidth(targetWidth, pressures.average().toFloat())
                     } else {
-                        inkWidth
+                        targetWidth
                     }
                     val stroke = (liveInk.stroke ?: Stroke(points = ArrayList(points))).copy(
                         points = ArrayList(points),
                         pointPressures = ArrayList(pressures),
+                        colorValue = targetColor,
                         strokeWidth = width,
                         strokeType = drawTool.toStrokeType(),
                         isHighlighter = drawTool == WhiteboardTool.HIGHLIGHTER
@@ -720,16 +732,49 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
         super.dispatchDraw(canvas)
         val frames = if (panes.isEmpty() || width == 0) return else paneFrames(panes.size, width, height, weights)
         val paint = borderPaint
+
+        // Draw inactive pane borders first
         frames.forEachIndexed { index, frame ->
-            paint.strokeWidth = if (index == activeIndex) 6f else 2f
-            paint.color = if (index == activeIndex) 0xFF2563EB.toInt() else 0xFFCBD5E1.toInt()
+            if (index != activeIndex) {
+                paint.strokeWidth = 2f
+                paint.color = 0xFFCBD5E1.toInt()
+                canvas.drawRect(
+                    frame.left + 1f,
+                    frame.top + 1f,
+                    frame.right - 1f,
+                    frame.bottom - 1f,
+                    paint
+                )
+            }
+        }
+
+        // Draw active pane border prominently
+        val activeFrame = frames.getOrNull(activeIndex)
+        if (activeFrame != null) {
+            paint.strokeWidth = 6f
+            paint.color = 0xFF2563EB.toInt()
             canvas.drawRect(
-                frame.left + 2f,
-                frame.top + 2f,
-                frame.right - 2f,
-                frame.bottom - 2f,
+                activeFrame.left + 3f,
+                activeFrame.top + 3f,
+                activeFrame.right - 3f,
+                activeFrame.bottom - 3f,
                 paint
             )
+        }
+
+        // Highlight dragged divider during resize
+        if (dragging && divider != null) {
+            val d = divider!!
+            paint.strokeWidth = 6f
+            paint.color = 0xFF2563EB.toInt()
+            if (d.vertical) {
+                val edge = frames.getOrNull(d.index)?.right?.toFloat() ?: 0f
+                canvas.drawLine(edge, 0f, edge, height.toFloat(), paint)
+            } else {
+                val columns = splitColumns(panes.size)
+                val edge = frames.getOrNull(d.index * columns)?.bottom?.toFloat() ?: 0f
+                canvas.drawLine(0f, edge, width.toFloat(), edge, paint)
+            }
         }
     }
 
@@ -759,10 +804,59 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
 
         fun bindBar(pane: CanvasPane, active: Boolean) {
             bar.removeAllViews()
+            bar.setOnClickListener {
+                if (index != activeIndex) {
+                    host?.focus(index)
+                    activeIndex = index
+                    syncCells()
+                    invalidate()
+                }
+            }
             if (!active) {
-                bar.addView(label(pane.label.ifBlank { pane.kind.name.lowercase().replaceFirstChar { it.uppercase() } }))
+                val title = pane.label.ifBlank { "Pane ${index + 1} (${pane.kind.name.lowercase().replaceFirstChar { it.uppercase() }})" }
+                bar.addView(label(title))
+                val hint = TextView(context).apply {
+                    text = "Tap to focus"
+                    setTextColor(0x88FFFFFF.toInt())
+                    textSize = 10f
+                    setPadding(16, 0, 16, 0)
+                    isClickable = false
+                    isFocusable = false
+                }
+                bar.addView(hint)
+
+                val spacer = View(context).apply {
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+                    isClickable = false
+                    isFocusable = false
+                }
+                bar.addView(spacer)
+
+                val closeBtn = TextView(context).apply {
+                    text = "✕ Close"
+                    setTextColor(0xFFCBD5E1.toInt())
+                    textSize = 11f
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    setPadding(20, 8, 20, 8)
+                    setBackgroundColor(0x33475569.toInt())
+                    setOnClickListener {
+                        host?.focus(index)
+                        host?.requestCloseSplit(index)
+                    }
+                }
+                bar.addView(closeBtn)
                 return
             }
+
+            val activeTag = TextView(context).apply {
+                text = "● ACTIVE PANE ${index + 1}"
+                setTextColor(android.graphics.Color.WHITE)
+                textSize = 10f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setPadding(16, 4, 16, 4)
+                setBackgroundColor(0xFF2563EB.toInt())
+            }
+            bar.addView(activeTag)
             listOf(
                 PaneKind.BOARD to "Board",
                 PaneKind.PDF to "PDF",
@@ -781,6 +875,39 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
                 bar.addView(label("${pane.pageIndex + 1}/${pane.pageCount}"))
                 bar.addView(button("›", false) { host?.stepPage(index, 1) })
             }
+
+            val spacer = View(context).apply {
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+                isClickable = false
+                isFocusable = false
+            }
+            bar.addView(spacer)
+
+            val fullCanvasBtn = TextView(context).apply {
+                text = "⛶ Full Canvas"
+                setTextColor(android.graphics.Color.WHITE)
+                textSize = 11f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setPadding(18, 8, 18, 8)
+                setBackgroundColor(0xFF2563EB.toInt())
+                setOnClickListener {
+                    host?.requestCloseSplit(index)
+                }
+            }
+            bar.addView(fullCanvasBtn)
+
+            val closeBtn = TextView(context).apply {
+                text = "✕ Close"
+                setTextColor(android.graphics.Color.WHITE)
+                textSize = 11f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setPadding(18, 8, 18, 8)
+                setBackgroundColor(0xFFDC2626.toInt())
+                setOnClickListener {
+                    host?.requestCloseSplit(index)
+                }
+            }
+            bar.addView(closeBtn)
         }
 
         private fun label(text: String): TextView {
@@ -789,6 +916,8 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
                 setTextColor(android.graphics.Color.WHITE)
                 textSize = 12f
                 setPadding(16, 0, 16, 0)
+                isClickable = false
+                isFocusable = false
             }
         }
 
@@ -836,6 +965,7 @@ fun SplitCanvas(
                         }
                     }
                     override fun toggleAi() = onToggleAi()
+                    override fun requestCloseSplit(index: Int) = viewModel.requestCloseSplit(index)
                 }
             }
         },
