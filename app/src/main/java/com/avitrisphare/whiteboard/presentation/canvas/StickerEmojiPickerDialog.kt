@@ -1,33 +1,37 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -44,7 +48,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 
 data class FeedbackStickerItem(
     val kind: String,
@@ -103,20 +106,37 @@ fun StickerEmojiPickerDialog(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222D)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                onDismiss()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
             modifier = Modifier
-                .width(480.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .border(1.dp, Color(0xFF333B4F), RoundedCornerShape(20.dp))
+                .padding(top = 56.dp, bottom = 76.dp)
+                .widthIn(min = 320.dp, max = 440.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {} // Consume clicks inside
+                ),
+            shape = RoundedCornerShape(18.dp),
+            color = Color.White,
+            shadowElevation = 16.dp,
+            border = BorderStroke(1.dp, Color(0xFFE2E8F0))
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp)
+                    .padding(horizontal = 18.dp, vertical = 16.dp)
+                    .heightIn(max = 480.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
                 // Header
                 Row(
@@ -124,56 +144,64 @@ fun StickerEmojiPickerDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Box(
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(36.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF2C3246)),
+                                .background(Color(0xFFF1F5F9)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = if (selectedTab == 0) Icons.Default.Star else Icons.Default.EmojiEmotions,
                                 contentDescription = null,
-                                tint = if (selectedTab == 0) Color(0xFFF59E0B) else Color(0xFF38BDF8),
-                                modifier = Modifier.size(22.dp)
+                                tint = if (selectedTab == 0) Color(0xFFF59E0B) else Color(0xFF0284C7),
+                                modifier = Modifier.size(20.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
                                 text = "Classroom Stickers & Emoji",
-                                color = Color.White,
-                                fontSize = 17.sp,
+                                color = Color(0xFF1E293B),
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = "Curated feedback set (not a full system keyboard)",
-                                color = Color(0xFF94A3B8),
+                                color = Color(0xFF64748B),
                                 fontSize = 11.sp
                             )
                         }
                     }
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.size(32.dp)
+
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF1F5F9))
+                            .clickable(onClick = onDismiss),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close",
-                            tint = Color(0xFF94A3B8),
-                            modifier = Modifier.size(20.dp)
+                            tint = Color(0xFF4B5563),
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Tabs: Stickers vs Emoji
                 TabRow(
                     selectedTabIndex = selectedTab,
-                    containerColor = Color(0xFF151922),
-                    contentColor = Color.White,
+                    containerColor = Color(0xFFF1F5F9),
+                    contentColor = Color(0xFF1E293B),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
@@ -185,8 +213,8 @@ fun StickerEmojiPickerDialog(
                             Text(
                                 text = "⭐ Teacher Stickers (4)",
                                 fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selectedTab == 0) Color(0xFFF59E0B) else Color(0xFF94A3B8),
-                                fontSize = 13.sp
+                                color = if (selectedTab == 0) Color(0xFFD97706) else Color(0xFF64748B),
+                                fontSize = 12.5.sp
                             )
                         }
                     )
@@ -197,14 +225,14 @@ fun StickerEmojiPickerDialog(
                             Text(
                                 text = "😀 Classroom Emoji",
                                 fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selectedTab == 1) Color(0xFF38BDF8) else Color(0xFF94A3B8),
-                                fontSize = 13.sp
+                                color = if (selectedTab == 1) Color(0xFF2563EB) else Color(0xFF64748B),
+                                fontSize = 12.5.sp
                             )
                         }
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Body content based on tab
                 if (selectedTab == 0) {
@@ -265,15 +293,15 @@ fun StickerEmojiPickerDialog(
                             .height(180.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(4.dp)
+                        contentPadding = PaddingValues(2.dp)
                     ) {
                         items(CURATED_EDUCATIONAL_EMOJI) { emoji ->
                             Box(
                                 modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color(0xFF282F40))
-                                    .border(1.dp, Color(0xFF374151), RoundedCornerShape(12.dp))
+                                    .size(46.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFFF8FAFC))
+                                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(10.dp))
                                     .clickable {
                                         onSelectSticker("emoji", emoji)
                                         onDismiss()
@@ -282,7 +310,7 @@ fun StickerEmojiPickerDialog(
                             ) {
                                 Text(
                                     text = emoji,
-                                    fontSize = 24.sp,
+                                    fontSize = 22.sp,
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -297,12 +325,12 @@ fun StickerEmojiPickerDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF141824))
+                        .background(Color(0xFFF1F5F9))
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     Text(
                         text = "💡 Tap any sticker or emoji to place it on the active board. Drag to move, or select to delete.",
-                        color = Color(0xFF94A3B8),
+                        color = Color(0xFF64748B),
                         fontSize = 11.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
@@ -322,25 +350,25 @@ private fun StickerCard(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFF242A3A))
-            .border(1.5.dp, sticker.accentColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+            .background(Color(0xFFF8FAFC))
+            .border(1.2.dp, sticker.accentColor.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(12.dp)
+            .padding(10.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(42.dp)
                     .clip(CircleShape)
                     .background(sticker.badgeBg),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = sticker.symbol,
-                    fontSize = 26.sp,
+                    fontSize = 24.sp,
                     color = sticker.accentColor,
                     fontWeight = FontWeight.Bold
                 )
@@ -348,14 +376,14 @@ private fun StickerCard(
             Column {
                 Text(
                     text = sticker.title,
-                    color = Color.White,
-                    fontSize = 14.sp,
+                    color = Color(0xFF1E293B),
+                    fontSize = 13.5.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = sticker.subtitle,
-                    color = Color(0xFF94A3B8),
-                    fontSize = 11.sp
+                    color = Color(0xFF64748B),
+                    fontSize = 10.5.sp
                 )
             }
         }
