@@ -22,6 +22,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
@@ -269,6 +272,45 @@ fun InkToolPanel(state: CanvasState, viewModel: CanvasViewModel) {
                 onDismiss = { showSmartWrite = false }
             )
         }
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (state.isDrawToShapeEnabled) Color(0xFF6366F1) else Color(0xFFF3F4F6))
+                .clickable { viewModel.toggleDrawToShape() }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.AutoFixHigh,
+                    contentDescription = "Magic pen",
+                    tint = if (state.isDrawToShapeEnabled) Color.White else Color(0xFF1F2937),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Magic pen",
+                    color = if (state.isDrawToShapeEnabled) Color.White else Color(0xFF1F2937),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Text(
+                text = if (state.isDrawToShapeEnabled) "ON" else "OFF",
+                color = if (state.isDrawToShapeEnabled) Color.White.copy(alpha = 0.9f) else Color(0xFF6B7280),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Text(
+            if (state.smartWriteEnabled) "Turn off Smart Write to use Magic pen." else "Recognizes rough circles, rectangles, lines, and shapes.",
+            fontSize = 11.sp,
+            color = Color(0xFF6B7280),
+            modifier = Modifier.padding(top = 4.dp)
+        )
         Spacer(Modifier.height(8.dp))
         Text("Size", fontSize = 12.sp, color = Color(0xFF6B7280))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -429,7 +471,7 @@ private fun SmartWriteLanguageDialog(
                 }
             }
             Text(
-                "English, Hindi, and Marathi are ready on this board.",
+                "English, Hindi, and Marathi are supported on-device. Unsupported language coverage and complete scanned-document editability are not promised.",
                 color = Color(0xFF9CA3AF),
                 fontSize = 11.sp
             )
