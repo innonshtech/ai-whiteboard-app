@@ -94,10 +94,60 @@ fun DrawScope.drawIsometricSolid(
 }
 
 fun DrawScope.drawFootballPitch() {
-    drawRect(Color(0xFF2E7D32), size = size)
-    val line = Color(0xE6FFFFFF)
-    val sw = 3f
-    drawRect(line, size = size, style = Stroke(width = sw))
-    drawLine(line, Offset(size.width / 2f, 0f), Offset(size.width / 2f, size.height), sw)
-    drawCircle(line, radius = size.minDimension * 0.12f, center = Offset(size.width / 2f, size.height / 2f), style = Stroke(width = sw))
+    val totalW = size.width
+    val totalH = size.height
+    // 1. Alternating grass stripes across the pitch
+    val stripeCount = 10
+    val stripeW = totalW / stripeCount
+    val grassDark = Color(0xFF276A2B)
+    val grassLight = Color(0xFF2E7D32)
+    for (i in 0 until stripeCount) {
+        val color = if (i % 2 == 0) grassLight else grassDark
+        drawRect(color, topLeft = Offset(i * stripeW, 0f), size = Size(stripeW, totalH))
+    }
+
+    // 2. Pitch boundary line with neat margin
+    val marginX = (totalW * 0.03f).coerceAtLeast(16f)
+    val marginY = (totalH * 0.03f).coerceAtLeast(16f)
+    val pitchW = totalW - 2 * marginX
+    val pitchH = totalH - 2 * marginY
+    val line = Color(0xF2FFFFFF)
+    val sw = 2.5f
+
+    // Outer touchline
+    drawRect(line, topLeft = Offset(marginX, marginY), size = Size(pitchW, pitchH), style = Stroke(width = sw))
+
+    // Halfway line & center circle
+    val midX = marginX + pitchW / 2f
+    val midY = marginY + pitchH / 2f
+    drawLine(line, Offset(midX, marginY), Offset(midX, marginY + pitchH), sw)
+    val centerR = (pitchH * 0.18f).coerceAtLeast(30f)
+    drawCircle(line, radius = centerR, center = Offset(midX, midY), style = Stroke(width = sw))
+    drawCircle(line, radius = 4f, center = Offset(midX, midY))
+
+    // Penalty areas (18-yard box)
+    val penaltyW = pitchW * 0.16f
+    val penaltyH = pitchH * 0.44f
+    val penaltyTop = midY - penaltyH / 2f
+    drawRect(line, topLeft = Offset(marginX, penaltyTop), size = Size(penaltyW, penaltyH), style = Stroke(width = sw))
+    drawRect(line, topLeft = Offset(marginX + pitchW - penaltyW, penaltyTop), size = Size(penaltyW, penaltyH), style = Stroke(width = sw))
+
+    // Goal areas (6-yard box)
+    val goalW = pitchW * 0.06f
+    val goalH = pitchH * 0.22f
+    val goalTop = midY - goalH / 2f
+    drawRect(line, topLeft = Offset(marginX, goalTop), size = Size(goalW, goalH), style = Stroke(width = sw))
+    drawRect(line, topLeft = Offset(marginX + pitchW - goalW, goalTop), size = Size(goalW, goalH), style = Stroke(width = sw))
+
+    // Penalty spots
+    val spotDist = pitchW * 0.11f
+    drawCircle(line, radius = 3.5f, center = Offset(marginX + spotDist, midY))
+    drawCircle(line, radius = 3.5f, center = Offset(marginX + pitchW - spotDist, midY))
+
+    // Corner arcs
+    val cornerR = (pitchH * 0.03f).coerceAtLeast(10f)
+    drawArc(line, startAngle = 0f, sweepAngle = 90f, useCenter = false, topLeft = Offset(marginX - cornerR, marginY - cornerR), size = Size(cornerR * 2, cornerR * 2), style = Stroke(width = sw))
+    drawArc(line, startAngle = 270f, sweepAngle = 90f, useCenter = false, topLeft = Offset(marginX - cornerR, marginY + pitchH - cornerR), size = Size(cornerR * 2, cornerR * 2), style = Stroke(width = sw))
+    drawArc(line, startAngle = 90f, sweepAngle = 90f, useCenter = false, topLeft = Offset(marginX + pitchW - cornerR, marginY - cornerR), size = Size(cornerR * 2, cornerR * 2), style = Stroke(width = sw))
+    drawArc(line, startAngle = 180f, sweepAngle = 90f, useCenter = false, topLeft = Offset(marginX + pitchW - cornerR, marginY + pitchH - cornerR), size = Size(cornerR * 2, cornerR * 2), style = Stroke(width = sw))
 }

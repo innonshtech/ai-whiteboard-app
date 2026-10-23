@@ -118,7 +118,9 @@ data class GyoashIwbPane(
     val label: String? = null,
     val pageIndex: Int? = null,
     val pageCount: Int? = null,
-    val tool: String? = null
+    val tool: String? = null,
+    val color: Int? = null,
+    val strokeWidth: Float? = null
 )
 
 data class ExportResult(

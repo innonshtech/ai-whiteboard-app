@@ -491,6 +491,7 @@ object WhiteboardExportManager {
                         // Background fill: pure white or graph tint
                         val bgArgb = when (canvasBackground) {
                             CanvasBackground.GRAPH -> 0xFFF7FBFF.toInt()
+                            CanvasBackground.FOOTBALL -> 0xFF2E7D32.toInt()
                             else -> 0xFFFFFFFF.toInt()
                         }
                         canvas.drawColor(bgArgb)
@@ -618,6 +619,7 @@ object WhiteboardExportManager {
         // Background fill
         val bgArgb = when (canvasBackground) {
             CanvasBackground.GRAPH -> 0xFFF7FBFF.toInt()
+            CanvasBackground.FOOTBALL -> 0xFF2E7D32.toInt()
             else -> 0xFFFFFFFF.toInt()
         }
         canvas.drawColor(bgArgb)
@@ -797,7 +799,9 @@ object WhiteboardExportManager {
                     label = pane.label,
                     pageIndex = pane.pageIndex,
                     pageCount = pane.pageCount,
-                    tool = pane.tool.name
+                    tool = pane.tool.name,
+                    color = pane.color,
+                    strokeWidth = pane.strokeWidth
                 )
             } else null
         )
@@ -849,6 +853,7 @@ object WhiteboardExportManager {
 
         val bgColor = if (isDarkCanvas) "#171717" else when (canvasBackground) {
             CanvasBackground.DARK -> "#171717"
+            CanvasBackground.FOOTBALL -> "#2E7D32"
             CanvasBackground.WHITE, CanvasBackground.GRID, CanvasBackground.GRAPH, CanvasBackground.LINED, CanvasBackground.DOTTED -> "#FFFFFF"
             else -> "#FFFFFF"
         }
