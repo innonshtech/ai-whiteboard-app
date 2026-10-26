@@ -255,4 +255,32 @@ class StrokeEraserTest {
         // Both s1 and r1 cross (50, 0) and will be hit in smart mode
         assertTrue(result.none { it.id == stroke.id })
     }
+
+    @Test
+    fun `smart palm eraser deletes whole intersecting strokes with palm radius while leaving other strokes intact`() {
+        val hitStroke = Stroke(
+            id = "hit_stroke",
+            points = listOf(Offset(0f, 50f), Offset(100f, 50f)),
+            strokeWidth = 4f
+        )
+        val farStroke = Stroke(
+            id = "far_stroke",
+            points = listOf(Offset(0f, 300f), Offset(100f, 300f)),
+            strokeWidth = 4f
+        )
+        val strokes = listOf(hitStroke, farStroke)
+
+        // Palm contact at (50, 50) with palm radius 35f
+        val result = StrokeEraser.apply(
+            strokes = strokes,
+            center = Offset(50f, 50f),
+            radius = 35f,
+            mode = EraserMode.SMART
+        )
+
+        // The hit stroke should be completely deleted (whole stroke removed in SMART mode)
+        assertTrue(result.none { it.id == hitStroke.id })
+        // The far stroke remains untouched
+        assertTrue(result.any { it.id == farStroke.id })
+    }
 }

@@ -66,6 +66,11 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
+import com.avitrisphare.whiteboard.core.localization.AppLanguage
+import com.avitrisphare.whiteboard.presentation.common.LanguageSelectionDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -103,6 +108,7 @@ import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Remove
@@ -899,7 +905,9 @@ fun CanvasScreen(
     onNavigateBack: () -> Unit,
     demoMode: Boolean = false,
     panelSession: com.avitrisphare.whiteboard.presentation.entry.PanelSessionStore? = null,
-    initialImportUri: Uri? = null
+    initialImportUri: Uri? = null,
+    currentLanguage: AppLanguage = AppLanguage.ENGLISH,
+    onLanguageChange: (AppLanguage) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -930,6 +938,8 @@ fun CanvasScreen(
     val focusRequester = remember { FocusRequester() }
 
     var showSidebar by remember { mutableStateOf(false) }
+    var showProfileDialog by remember { mutableStateOf(false) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
     var showAiPanel by remember { mutableStateOf(false) }
     var showLiveCollabDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -1351,11 +1361,8 @@ fun CanvasScreen(
                             if (!palm) return false
                             // Resting palm while drawing with a stylus is ALWAYS ignored/rejected
                             if (stylusDrawing || touchContacts.stylusActive) return true
-                            // If palm eraser is enabled and no stylus is active, allow palm through to erase
-                            val latest = viewModel.state.value
-                            if (latest.palmEraserEnabled) return false
-                            // If palm eraser is disabled, reject accidental large palm touches
-                            return true
+                            // If no stylus is active, allow palm contact through for palm erasing
+                            return false
                         }
                         var down = awaitFirstDown(requireUnconsumed = false)
                         dockDismissNonce++
@@ -1379,7 +1386,9 @@ fun CanvasScreen(
                             offset = Offset(canvasOffsetX, canvasOffsetY)
                         )
                         val latestState = viewModel.state.value
-                        val isPalmEraser = latestState.palmEraserEnabled && !down.isStylusPointer() && down.isPalmTouch()
+                        val isPalmEraser = (latestState.currentTool in WRITING_TOOLS || latestState.currentTool == WhiteboardTool.ERASER) &&
+                            !down.isStylusPointer() &&
+                            down.isPalmTouch()
                         var prevPosition = down.position
                         var shapePoints = listOf(downWorld)
                         val stylusDraw = down.isStylusPointer()
@@ -1503,13 +1512,16 @@ fun CanvasScreen(
                             val baseRadius = latest.eraserSize / canvasScale.coerceAtLeast(0.001f)
                             val radius = customRadius ?: baseRadius
 
+                            val eraseModeToUse = if (isPalmEraser) EraserMode.SMART else latest.eraserMode
+                            val restrictSelection = latest.selectedStrokeIds.isNotEmpty()
+
                             val (updated, newSelectedIds) = StrokeEraser.applySelection(
                                 strokes = eraserSession.strokes,
                                 selectedIds = eraserSession.targetSelectedIds,
                                 center = world,
                                 radius = radius,
-                                mode = latest.eraserMode,
-                                restrictToSelection = latest.restrictEraserToSelection
+                                mode = eraseModeToUse,
+                                restrictToSelection = restrictSelection
                             )
                             if (updated !== eraserSession.strokes) {
                                 eraserSession.strokes = updated
@@ -2184,7 +2196,7 @@ fun CanvasScreen(
                             if (eraserSession.changed) {
                                 viewModel.commitErasedStrokes(eraserSession.strokes)
                                 val latest = viewModel.state.value
-                                if (latest.restrictEraserToSelection) {
+                                if (latest.selectedStrokeIds.isNotEmpty()) {
                                     viewModel.selectStrokes(eraserSession.targetSelectedIds)
                                 }
                             }
@@ -3009,9 +3021,17 @@ fun CanvasScreen(
             onCopySelection = { viewModel.copySelectedStrokes() },
             onPasteClipboard = { viewModel.pasteStrokeClipboard() },
             onToggleLocale = {
-                val next = if (state.uiLocaleTag == "hi") "en" else "hi"
-                panelSession?.setUiLocaleTag(next)
-                viewModel.setUiLocaleTag(next)
+                val nextLang = when (currentLanguage) {
+                    AppLanguage.ENGLISH -> AppLanguage.HINDI
+                    AppLanguage.HINDI -> AppLanguage.MARATHI
+                    AppLanguage.MARATHI -> AppLanguage.ENGLISH
+                }
+                onLanguageChange(nextLang)
+                panelSession?.setUiLocaleTag(nextLang.code)
+                viewModel.setUiLocaleTag(nextLang.code)
+            },
+            onOpenLanguageDialog = {
+                showLanguageDialog = true
             },
             isTimerVisible = timerState.isVisible,
             onToggleTimer = {
@@ -3764,7 +3784,7 @@ fun CanvasScreen(
                                     color = Color(0xFF1F2937)
                                 )
                                 Text(
-                                    "Whiteboard",
+                                    stringResource(R.string.app_subtitle),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = Color(0xFF6B7280)
@@ -3774,15 +3794,25 @@ fun CanvasScreen(
                                 onClick = { showSidebar = false },
                                 modifier = Modifier.size(28.dp)
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF6B7280))
+                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), tint = Color(0xFF6B7280))
                             }
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
+                        // 0. Profile
+                        SidebarMenuItem(
+                            icon = Icons.Default.Person,
+                            label = stringResource(R.string.tool_profile),
+                            onClick = {
+                                showSidebar = false
+                                showProfileDialog = true
+                            }
+                        )
+
                         SidebarMenuItem(
                             icon = Icons.Default.Edit,
-                            label = "Rename board",
+                            label = stringResource(R.string.menu_rename_board),
                             onClick = {
                                 showSidebar = false
                                 showEditTitleDialog = true
@@ -3792,7 +3822,7 @@ fun CanvasScreen(
                         // 1. Open (Ctrl+O)
                         SidebarMenuItem(
                             icon = Icons.Default.FolderOpen,
-                            label = "Open",
+                            label = stringResource(R.string.menu_open),
                             shortcut = "Ctrl+O",
                             onClick = {
                                 showSidebar = false
@@ -3803,7 +3833,7 @@ fun CanvasScreen(
                         // 2. Export lesson (PDF, PNG ZIP, IWB)
                         SidebarMenuItem(
                             icon = Icons.Default.IosShare,
-                            label = "Export lesson...",
+                            label = stringResource(R.string.menu_export_lesson),
                             shortcut = "Ctrl+Shift+E",
                             isSelected = true,
                             onClick = {
@@ -3816,7 +3846,7 @@ fun CanvasScreen(
                         // 3. Open GYOASH Lesson (.iwb)...
                         SidebarMenuItem(
                             icon = Icons.Default.FolderOpen,
-                            label = "Open GYOASH Lesson (.iwb)...",
+                            label = stringResource(R.string.menu_open_iwb),
                             onClick = {
                                 showSidebar = false
                                 iwbPickerLauncher.launch(arrayOf("*/*"))
@@ -3826,7 +3856,7 @@ fun CanvasScreen(
                         // 4. Live collaboration...
                         SidebarMenuItem(
                             icon = Icons.Default.Group,
-                            label = "Live collaboration...",
+                            label = stringResource(R.string.menu_live_collab),
                             onClick = {
                                 showSidebar = false
                                 showLiveCollabDialog = true
@@ -3842,7 +3872,7 @@ fun CanvasScreen(
                         // 5. Command palette (Ctrl+/)
                         SidebarMenuItem(
                             icon = Icons.Default.Bolt,
-                            label = "Command palette",
+                            label = stringResource(R.string.menu_command_palette),
                             shortcut = "Ctrl+/",
                             onClick = {
                                 showSidebar = false
@@ -3853,7 +3883,7 @@ fun CanvasScreen(
                         // 6. Find on canvas (Ctrl+F)
                         SidebarMenuItem(
                             icon = Icons.Default.Search,
-                            label = "Find on canvas",
+                            label = stringResource(R.string.menu_find_on_canvas),
                             shortcut = "Ctrl+F",
                             onClick = {
                                 showSidebar = false
@@ -3864,7 +3894,7 @@ fun CanvasScreen(
                         // 7. Help (?)
                         SidebarMenuItem(
                             icon = Icons.Default.HelpOutline,
-                            label = "Help",
+                            label = stringResource(R.string.menu_help),
                             shortcut = "?",
                             onClick = {
                                 showSidebar = false
@@ -3875,10 +3905,27 @@ fun CanvasScreen(
                         // 8. Reset the canvas
                         SidebarMenuItem(
                             icon = Icons.Default.LayersClear,
-                            label = "Reset the canvas",
+                            label = stringResource(R.string.menu_reset_canvas),
                             onClick = {
                                 showSidebar = false
                                 showClearDialog = true
+                            }
+                        )
+
+                        Divider(
+                            color = Color(0xFFF3F4F6),
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+
+                        // 9. Change Language (English, Hindi, Marathi)
+                        SidebarMenuItem(
+                            icon = Icons.Default.Language,
+                            label = stringResource(R.string.change_language),
+                            shortcut = currentLanguage.nativeName,
+                            onClick = {
+                                showSidebar = false
+                                showLanguageDialog = true
                             }
                         )
                     }
@@ -4428,9 +4475,9 @@ fun CanvasScreen(
     if (showEditTitleDialog) {
         var editedTitle by remember { mutableStateOf(state.noteTitle) }
         BoardModal(
-            title = "Edit title",
+            title = stringResource(R.string.dialog_edit_title),
             onDismiss = { showEditTitleDialog = false },
-            confirmLabel = "Save",
+            confirmLabel = stringResource(R.string.save),
             onConfirm = {
                 viewModel.updateTitle(editedTitle.ifBlank { "Untitled" })
                 showEditTitleDialog = false
@@ -4446,55 +4493,85 @@ fun CanvasScreen(
         }
     }
 
+    if (showProfileDialog) {
+        var profileDraft by remember(state.userName) { mutableStateOf(state.userName) }
+        BoardModal(
+            title = stringResource(R.string.tool_profile),
+            onDismiss = { showProfileDialog = false },
+            confirmLabel = stringResource(R.string.save),
+            onConfirm = {
+                viewModel.setUserName(profileDraft)
+                showProfileDialog = false
+            }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Your name",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF1F2937)
+                )
+                OutlinedTextField(
+                    value = profileDraft,
+                    onValueChange = { profileDraft = it },
+                    singleLine = true,
+                    colors = boardFieldColors(),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+
     if (showDeleteDialog) {
         BoardModal(
-            title = "Delete note",
+            title = stringResource(R.string.dialog_delete_title),
             onDismiss = { showDeleteDialog = false },
-            confirmLabel = "Delete",
+            confirmLabel = stringResource(R.string.delete),
             onConfirm = {
                 viewModel.deleteNote { onNavigateBack() }
                 showDeleteDialog = false
             },
             confirmDestructive = true
         ) {
-            Text("Are you sure you want to delete this note?", color = Color(0xFF6B7280), fontSize = 14.sp)
+            Text(stringResource(R.string.dialog_delete_msg), color = Color(0xFF6B7280), fontSize = 14.sp)
         }
     }
 
     if (state.showCloseSplitDialog) {
         BoardModal(
-            title = "Leave split screen",
+            title = stringResource(R.string.dialog_split_leave_title),
             onDismiss = { viewModel.dismissCloseSplitDialog() },
-            confirmLabel = "Keep active panel",
+            confirmLabel = stringResource(R.string.dialog_keep_active),
             onConfirm = { viewModel.closeSplit(state.splitActive) }
         ) {
-            Text("Keep ink from the active panel on the main board?", color = Color(0xFF6B7280), fontSize = 14.sp)
+            Text(stringResource(R.string.dialog_split_leave_msg), color = Color(0xFF6B7280), fontSize = 14.sp)
         }
     }
 
     if (showClearDialog) {
         BoardModal(
-            title = "Clear all",
+            title = stringResource(R.string.dialog_clear_title),
             onDismiss = { showClearDialog = false },
-            confirmLabel = "Clear all",
+            confirmLabel = stringResource(R.string.dialog_clear_title),
             onConfirm = {
                 viewModel.clearCanvas()
                 showClearDialog = false
             },
             confirmDestructive = true
         ) {
-            Text("Clear everything on this page? You can bring it back with Undo.", color = Color(0xFF6B7280), fontSize = 14.sp)
+            Text(stringResource(R.string.dialog_clear_msg), color = Color(0xFF6B7280), fontSize = 14.sp)
         }
     }
 
     if (showExportDialog && exportedUri != null) {
         BoardModal(
-            title = "Exported",
+            title = stringResource(R.string.dialog_exported_title),
             onDismiss = {
                 showExportDialog = false
                 exportedUri = null
             },
-            confirmLabel = "Share",
+            confirmLabel = stringResource(R.string.share),
             onConfirm = {
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "image/png"
@@ -4507,7 +4584,7 @@ fun CanvasScreen(
             },
             cancelLabel = null
         ) {
-            Text("Note exported to Pictures/AvitriSphare", color = Color(0xFF6B7280), fontSize = 14.sp)
+            Text(stringResource(R.string.dialog_exported_msg), color = Color(0xFF6B7280), fontSize = 14.sp)
         }
     }
 
@@ -4561,6 +4638,19 @@ fun CanvasScreen(
                 val center = canvasCenter()
                 viewModel.insertSticker(kind, center, text)
             }
+        )
+    }
+
+    if (showLanguageDialog) {
+        LanguageSelectionDialog(
+            currentLanguage = currentLanguage,
+            onLanguageSelected = { newLang ->
+                onLanguageChange(newLang)
+                panelSession?.setUiLocaleTag(newLang.code)
+                viewModel.setUiLocaleTag(newLang.code)
+                showLanguageDialog = false
+            },
+            onDismiss = { showLanguageDialog = false }
         )
     }
 }

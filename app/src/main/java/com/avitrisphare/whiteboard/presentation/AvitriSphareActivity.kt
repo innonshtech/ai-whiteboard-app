@@ -41,6 +41,18 @@ import kotlinx.coroutines.withContext
 import java.util.UUID
 import javax.inject.Inject
 
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.res.AssetManager
+import android.content.res.Configuration
+import android.content.res.Resources
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import com.avitrisphare.whiteboard.core.localization.AppLanguage
+import com.avitrisphare.whiteboard.core.localization.LocalAppLanguage
+import java.util.Locale
+
 @AndroidEntryPoint
 class AvitriSphareActivity : ComponentActivity() {
 
@@ -49,6 +61,18 @@ class AvitriSphareActivity : ComponentActivity() {
 
     @Inject
     lateinit var panelApi: PanelApi
+
+    override fun attachBaseContext(newBase: Context) {
+        val prefs = newBase.getSharedPreferences("gyoash_panel", Context.MODE_PRIVATE)
+        val lang = prefs.getString("ui_locale", "en") ?: "en"
+        val locale = Locale(lang)
+        Locale.setDefault(locale)
+        val config = Configuration(newBase.resources.configuration)
+        config.setLocale(locale)
+        config.setLayoutDirection(locale)
+        val ctx = newBase.createConfigurationContext(config)
+        super.attachBaseContext(ctx)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,6 +84,29 @@ class AvitriSphareActivity : ComponentActivity() {
 
         setContent {
             val session = remember { PanelSessionStore(this@AvitriSphareActivity) }
+            var currentLanguage by remember { mutableStateOf(AppLanguage.fromCode(session.uiLocaleTag())) }
+            val onLanguageChange: (AppLanguage) -> Unit = { newLang ->
+                currentLanguage = newLang
+                session.setUiLocaleTag(newLang.code)
+                Locale.setDefault(Locale(newLang.code))
+            }
+
+            val currentLocale = remember(currentLanguage) { Locale(currentLanguage.code) }
+            val localizedConfiguration = remember(currentLanguage) {
+                Configuration(resources.configuration).apply {
+                    setLocale(currentLocale)
+                    setLayoutDirection(currentLocale)
+                }
+            }
+            val activity = this@AvitriSphareActivity
+            val localizedContext = remember(currentLanguage, localizedConfiguration) {
+                val configContext = activity.createConfigurationContext(localizedConfiguration)
+                object : ContextWrapper(activity) {
+                    override fun getResources(): Resources = configContext.resources
+                    override fun getAssets(): AssetManager = configContext.assets
+                }
+            }
+
             val defaultTeacher = remember {
                 PanelTeacher(
                     id = "teacher_1",
@@ -110,7 +157,12 @@ class AvitriSphareActivity : ComponentActivity() {
                 }
             }
             
-            AvitriSphareTheme(darkTheme = isDarkMode) {
+            CompositionLocalProvider(
+                LocalConfiguration provides localizedConfiguration,
+                LocalContext provides localizedContext,
+                LocalAppLanguage provides currentLanguage
+            ) {
+                AvitriSphareTheme(darkTheme = isDarkMode) {
                 val navController = rememberNavController()
 
                 Surface(
@@ -199,7 +251,9 @@ class AvitriSphareActivity : ComponentActivity() {
                                 onNewNote = {
                                     showNewNoteDialog = true
                                 },
-                                onToggleTheme = { isDarkMode = !isDarkMode }
+                                onToggleTheme = { isDarkMode = !isDarkMode },
+                                currentLanguage = currentLanguage,
+                                onLanguageChange = onLanguageChange
                             )
 
                             if (showNewNoteDialog) {
@@ -226,7 +280,9 @@ class AvitriSphareActivity : ComponentActivity() {
                                 noteTitle = "",
                                 onNavigateBack = {
                                     navController.popBackStack()
-                                }
+                                },
+                                currentLanguage = currentLanguage,
+                                onLanguageChange = onLanguageChange
                             )
                         }
 
@@ -251,12 +307,15 @@ class AvitriSphareActivity : ComponentActivity() {
                                 },
                                 demoMode = true,
                                 panelSession = session,
-                                initialImportUri = importUriStr?.let { android.net.Uri.parse(it) }
+                                initialImportUri = importUriStr?.let { android.net.Uri.parse(it) },
+                                currentLanguage = currentLanguage,
+                                onLanguageChange = onLanguageChange
                             )
                         }
                     }
                 }
             }
+        }
         }
     }
 }

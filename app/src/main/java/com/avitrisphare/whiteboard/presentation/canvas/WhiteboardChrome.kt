@@ -32,15 +32,28 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.AutoFixNormal
+import androidx.compose.material.icons.filled.Draw
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Category
@@ -132,6 +145,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.drawscope.Stroke as ThumbStroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
+
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -140,6 +156,20 @@ import androidx.compose.ui.unit.sp
 import com.avitrisphare.whiteboard.domain.model.CanvasBackground
 import com.avitrisphare.whiteboard.domain.model.Stroke
 import com.avitrisphare.whiteboard.domain.model.StrokeType
+
+@Composable
+fun localizedToolLabel(tool: WhiteboardTool): String = when (tool) {
+    WhiteboardTool.SELECT -> stringResource(R.string.tool_select)
+    WhiteboardTool.PEN -> stringResource(R.string.tool_pen)
+    WhiteboardTool.PENCIL -> stringResource(R.string.tool_pencil)
+    WhiteboardTool.MARKER -> stringResource(R.string.tool_marker)
+    WhiteboardTool.HIGHLIGHTER -> stringResource(R.string.tool_highlighter)
+    WhiteboardTool.BRUSH -> stringResource(R.string.tool_brush)
+    WhiteboardTool.ERASER -> stringResource(R.string.tool_eraser)
+    WhiteboardTool.LASER -> stringResource(R.string.tool_laser)
+    WhiteboardTool.SHAPE -> stringResource(R.string.tool_shapes)
+    else -> tool.label
+}
 
 private val DockColor = Color(0x66FFFFFF) // Figma: #FFFFFF 40%
 private val DockLabel = Color(0xFF475569)
@@ -279,6 +309,7 @@ fun AvitriSphareWhiteboardChrome(
     onCopySelection: () -> Unit = {},
     onPasteClipboard: () -> Unit = {},
     onToggleLocale: () -> Unit = {},
+    onOpenLanguageDialog: () -> Unit = {},
     isTimerVisible: Boolean = false,
     onToggleTimer: () -> Unit = {},
     isStopwatchVisible: Boolean = false,
@@ -371,7 +402,7 @@ fun AvitriSphareWhiteboardChrome(
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
-                            "Class",
+                            stringResource(R.string.tool_class),
                             color = Color(0xFF1F2937),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -911,7 +942,7 @@ fun AvitriSphareWhiteboardChrome(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom
             ) {
-                // 1) Left Bar: Profile, Main Menu, Exit
+                // 1) Left Bar: Main Menu, Exit
                 DockBar(
                     modifier = Modifier.onGloballyPositioned {
                         leftBarBounds = it.boundsInRoot().keptIfSame(leftBarBounds)
@@ -919,21 +950,23 @@ fun AvitriSphareWhiteboardChrome(
                     isDark = state.isDarkCanvas
                 ) {
                     DockItem(
-                        icon = Icons.Default.Person,
-                        label = "Profile",
-                        active = panel == "profile",
-                        tint = Color(0xFF2563EB)
-                    ) { toggle("profile") }
-
-                    DockItem(
                         icon = Icons.Default.Menu,
-                        label = "Main Menu",
+                        label = stringResource(R.string.tool_main_menu),
                         tint = Color(0xFF2563EB)
                     ) { panel = null; onOpenMenu() }
 
+                    // Divider between Main Menu and Exit
+                    Box(
+                        modifier = Modifier
+                            .height(28.dp)
+                            .padding(horizontal = 4.dp)
+                            .width(1.dp)
+                            .background(Color(0x3394A3B8))
+                    )
+
                     DockItem(
                         icon = Icons.Default.Logout,
-                        label = "Exit",
+                        label = stringResource(R.string.tool_exit),
                         tint = Color(0xFFEF4444)
                     ) { panel = null; onExit() }
                 }
@@ -997,34 +1030,36 @@ fun AvitriSphareWhiteboardChrome(
 
                         DockItem(
                             icon = Icons.Default.NearMe,
-                            label = "Select",
+                            label = stringResource(R.string.tool_select),
                             active = activeDockTool == ActiveDockTool.SELECT,
                             tint = Color(0xFF0EA5E9)
                         ) {
                             panel = null
                             viewModel.setTool(WhiteboardTool.SELECT)
                         }
-                        DockItem(
-                            icon = Icons.Default.Edit,
-                            label = state.inkTool.label,
+                        PenSplitDockItem(
+                            label = localizedToolLabel(state.inkTool),
                             active = activeDockTool == ActiveDockTool.PEN,
-                            tint = Color(0xFF2563EB),
-                            swatch = state.selectedColor
-                        ) {
-                            viewModel.setTool(state.inkTool)
-                            toggle("ink")
-                        }
+                            onPenClick = {
+                                viewModel.setTool(state.inkTool)
+                                panel = null
+                            },
+                            onDropdownClick = {
+                                viewModel.setTool(state.inkTool)
+                                toggle("ink")
+                            }
+                        )
                         TwoColorPenQuickSwap(
                             primaryColor = state.selectedColor,
                             secondaryColor = state.secondaryColor,
                             onSwap = {
                                 viewModel.swapPenColors()
-                                Toast.makeText(context, "Color swapped", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.toast_color_swapped), Toast.LENGTH_SHORT).show()
                             }
                         )
                         DockItem(
                             icon = Icons.Default.Hub,
-                            label = "Flowchart",
+                            label = stringResource(R.string.tool_flowchart),
                             active = activeDockTool == ActiveDockTool.FLOWCHART,
                             tint = Color(0xFF2563EB)
                         ) {
@@ -1032,7 +1067,7 @@ fun AvitriSphareWhiteboardChrome(
                         }
                         DockItem(
                             icon = Icons.Default.Star,
-                            label = "Stickers",
+                            label = stringResource(R.string.tool_stickers),
                             active = activeDockTool == ActiveDockTool.STICKERS,
                             tint = Color(0xFFF59E0B)
                         ) {
@@ -1041,7 +1076,7 @@ fun AvitriSphareWhiteboardChrome(
                         }
                         DockItem(
                             icon = Icons.Default.Category,
-                            label = "Shapes",
+                            label = stringResource(R.string.tool_shapes),
                             active = activeDockTool == ActiveDockTool.SHAPES,
                             tint = Color(0xFF8B5CF6)
                         ) {
@@ -1054,7 +1089,7 @@ fun AvitriSphareWhiteboardChrome(
                         }
                         DockItem(
                             icon = Icons.Default.AutoFixNormal,
-                            label = "Eraser",
+                            label = stringResource(R.string.tool_eraser),
                             active = activeDockTool == ActiveDockTool.ERASER,
                             tint = Color(0xFFEC4899)
                         ) {
@@ -1063,7 +1098,7 @@ fun AvitriSphareWhiteboardChrome(
                         }
                         DockItem(
                             icon = Icons.Default.Highlight,
-                            label = "Laser",
+                            label = stringResource(R.string.tool_laser),
                             active = activeDockTool == ActiveDockTool.LASER,
                             tint = Color(0xFFEAB308)
                         ) {
@@ -1072,19 +1107,19 @@ fun AvitriSphareWhiteboardChrome(
                         }
                         DockItem(
                             icon = Icons.Default.ChangeHistory,
-                            label = "Geometry",
+                            label = stringResource(R.string.tool_geometry),
                             active = activeDockTool == ActiveDockTool.GEOMETRY,
                             tint = Color(0xFF10B981)
                         ) { toggle("geometry") }
                         DockItem(
                             icon = Icons.Default.Widgets,
-                            label = "Tools",
+                            label = stringResource(R.string.tool_tools),
                             active = activeDockTool == ActiveDockTool.TOOLS,
                             tint = Color(0xFF8B5CF6)
                         ) { toggle("utilities") }
                         DockItem(
                             icon = Icons.Default.Undo,
-                            label = "Undo",
+                            label = stringResource(R.string.tool_undo),
                             enabled = state.canUndo,
                             tint = Color(0xFFF59E0B)
                         ) {
@@ -1093,7 +1128,7 @@ fun AvitriSphareWhiteboardChrome(
                         }
                         DockItem(
                             icon = Icons.Default.Redo,
-                            label = "Redo",
+                            label = stringResource(R.string.tool_redo),
                             enabled = state.canRedo,
                             tint = Color(0xFFF97316)
                         ) {
@@ -1102,12 +1137,12 @@ fun AvitriSphareWhiteboardChrome(
                         }
                         DockItem(
                             icon = Icons.Default.Save,
-                            label = "Save",
+                            label = stringResource(R.string.tool_save),
                             tint = Color(0xFF10B981)
                         ) {
                             panel = null
                             onSave()
-                            Toast.makeText(context, "Saved", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.toast_saved), Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -1124,7 +1159,7 @@ fun AvitriSphareWhiteboardChrome(
                     ) {
                         DockItem(
                             icon = Icons.Default.ChevronLeft,
-                            label = "Prev",
+                            label = stringResource(R.string.tool_prev_page),
                             enabled = state.pageIndex > 0,
                             tint = Color(0xFF2563EB)
                         ) {
@@ -1145,7 +1180,7 @@ fun AvitriSphareWhiteboardChrome(
 
                         DockItem(
                             icon = Icons.Default.ChevronRight,
-                            label = "Next",
+                            label = stringResource(R.string.tool_next_page),
                             enabled = state.pageIndex < state.pageCount - 1,
                             tint = Color(0xFF2563EB)
                         ) {
@@ -1176,7 +1211,7 @@ fun AvitriSphareWhiteboardChrome(
                             )
                             Spacer(Modifier.height(1.dp))
                             Text(
-                                text = "Add",
+                                text = stringResource(R.string.tool_add_page),
                                 color = Color.White,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -1195,28 +1230,6 @@ fun AvitriSphareWhiteboardChrome(
                     .padding(bottom = 96.dp)
             ) {
                 when (panel) {
-                    "profile" -> DockPopover(title = "Profile", onClose = { panel = null }) {
-                        OutlinedTextField(
-                            value = state.userName,
-                            onValueChange = { viewModel.setUserName(it) },
-                            singleLine = true,
-                            label = { Text("Your name") },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color(0xFF6366F1),
-                                focusedLabelColor = Color(0xFF6366F1)
-                            )
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        PopoverRow(Icons.Default.Edit, "Rename board") {
-                            panel = null
-                            onRename()
-                        }
-                        PopoverRow(Icons.Default.Group, "Live collaboration") {
-                            panel = null
-                            onLive()
-                        }
-                    }
                     "flowchart" -> DockPopover(title = "Flowchart & Nodes", onClose = { panel = null }) {
                         PopoverRow(Icons.Default.Dashboard, "3-Node Connected Flowchart") {
                             viewModel.createThreeNodeFlowchart(Offset(320f, 360f))
@@ -1322,62 +1335,197 @@ fun AvitriSphareWhiteboardChrome(
                         PopoverRow(Icons.Default.Highlight, "Laser", state.currentTool == WhiteboardTool.LASER) {
                             viewModel.setTool(WhiteboardTool.LASER); panel = null
                         }
-                        PopoverRow(Icons.Default.Gesture, "Lasso", state.currentTool == WhiteboardTool.LASSO) {
+                        PopoverRow(Icons.Default.Gesture, stringResource(R.string.util_lasso), state.currentTool == WhiteboardTool.LASSO) {
                             viewModel.setTool(WhiteboardTool.LASSO); panel = null
                         }
-                        PopoverRow(Icons.Default.FormatColorFill, "Bucket fill", state.currentTool == WhiteboardTool.BUCKET_FILL) {
+                        PopoverRow(Icons.Default.FormatColorFill, stringResource(R.string.util_bucket_fill), state.currentTool == WhiteboardTool.BUCKET_FILL) {
                             viewModel.setTool(WhiteboardTool.BUCKET_FILL); panel = null
                         }
-                        PopoverRow(Icons.Default.Edit, "Stroke colour") {
+                        PopoverRow(Icons.Default.Edit, stringResource(R.string.util_stroke_colour)) {
                             viewModel.setTool(state.inkTool)
                             panel = "ink"
                         }
-                        PopoverRow(Icons.Default.AutoFixHigh, "Magic pen", state.isDrawToShapeEnabled) {
+                        PopoverRow(Icons.Default.AutoFixHigh, stringResource(R.string.magic_pen), state.isDrawToShapeEnabled) {
                             viewModel.toggleDrawToShape()
                         }
                         if (state.smartWriteEnabled) {
                             Text(
-                                "Turn off Smart Write to use Magic pen.",
+                                stringResource(R.string.smart_write_tip),
                                 fontSize = 11.sp,
                                 color = Color(0xFF6B7280)
                             )
                         }
-                        PopoverRow(Icons.Default.GridOn, "Background") { panel = "background" }
-                        PopoverRow(Icons.Default.IosShare, "Export lesson...") { panel = null; onExport() }
-                        PopoverRow(Icons.Default.FolderOpen, "Open GYOASH Lesson (.iwb)...") { panel = null; onOpenIwb() }
-                        PopoverRow(Icons.Default.Group, "Live collaboration") { panel = null; onLive() }
-                        PopoverRow(Icons.Default.HelpOutline, "Help") { panel = null; onHelp() }
-                        PopoverRow(Icons.Default.HourglassBottom, "Countdown Timer", isTimerVisible) { panel = null; onToggleTimer() }
-                        PopoverRow(Icons.Default.Timer, "Stopwatch", isStopwatchVisible) { panel = null; onToggleStopwatch() }
-                        PopoverRow(Icons.Default.Calculate, "Calculator", isCalculatorVisible) { panel = null; onToggleCalculator() }
-                        PopoverRow(Icons.Default.Science, "Periodic Table", isPeriodicTableVisible) { panel = null; onTogglePeriodicTable() }
-                        PopoverRow(Icons.Default.LayersClear, "Clear all") { panel = null; onClear() }
-                        PopoverRow(Icons.Default.Save, "Save") { panel = null; onSave() }
-                        PopoverRow(Icons.Default.Description, "Save slides (PDF)") { panel = null; onSaveSlides() }
-                        PopoverRow(Icons.Default.Language, if (state.uiLocaleTag == "hi") "English" else "हिंदी") {
-                            onToggleLocale()
+                        PopoverRow(Icons.Default.GridOn, stringResource(R.string.popover_background)) { panel = "background" }
+                        PopoverRow(Icons.Default.IosShare, stringResource(R.string.menu_export_lesson)) { panel = null; onExport() }
+                        PopoverRow(Icons.Default.FolderOpen, stringResource(R.string.menu_open_iwb)) { panel = null; onOpenIwb() }
+                        PopoverRow(Icons.Default.Group, stringResource(R.string.menu_live_collab)) { panel = null; onLive() }
+                        PopoverRow(Icons.Default.HelpOutline, stringResource(R.string.menu_help)) { panel = null; onHelp() }
+                        PopoverRow(Icons.Default.HourglassBottom, stringResource(R.string.util_timer), isTimerVisible) { panel = null; onToggleTimer() }
+                        PopoverRow(Icons.Default.Timer, stringResource(R.string.util_stopwatch), isStopwatchVisible) { panel = null; onToggleStopwatch() }
+                        PopoverRow(Icons.Default.Calculate, stringResource(R.string.util_calculator), isCalculatorVisible) { panel = null; onToggleCalculator() }
+                        PopoverRow(Icons.Default.Science, stringResource(R.string.util_periodic), isPeriodicTableVisible) { panel = null; onTogglePeriodicTable() }
+                        PopoverRow(Icons.Default.LayersClear, stringResource(R.string.clear_all)) { panel = null; onClear() }
+                        PopoverRow(Icons.Default.Save, stringResource(R.string.tool_save)) { panel = null; onSave() }
+                        PopoverRow(Icons.Default.Description, stringResource(R.string.save_slides_pdf)) { panel = null; onSaveSlides() }
+                        PopoverRow(Icons.Default.Language, stringResource(R.string.change_language)) {
                             panel = null
+                            onOpenLanguageDialog()
                         }
-                        PopoverRow(Icons.Default.Add, "Zoom in") { onZoomIn() }
-                        PopoverRow(Icons.Default.ChevronLeft, "Zoom out") { onZoomOut() }
-                        PopoverRow(Icons.Default.CropFree, "Fit to content") { panel = null; onFit() }
+                        PopoverRow(Icons.Default.Add, stringResource(R.string.popover_zoom_in)) { onZoomIn() }
+                        PopoverRow(Icons.Default.ChevronLeft, stringResource(R.string.popover_zoom_out)) { onZoomOut() }
+                        PopoverRow(Icons.Default.CropFree, stringResource(R.string.popover_fit)) { panel = null; onFit() }
                     }
-                    "utilities" -> DockPopover(title = "Class Utilities", onClose = { panel = null }) {
-                        PopoverRow(Icons.Default.HourglassBottom, "Countdown Timer", isTimerVisible) {
-                            panel = null
-                            onToggleTimer()
+                    "utilities" -> DockPopover(maxWidth = 580.dp) {
+                        val utilityTools = setOf(
+                            WhiteboardTool.SPOTLIGHT,
+                            WhiteboardTool.SHADE,
+                            WhiteboardTool.MAGNIFIER,
+                            WhiteboardTool.TEXT
+                        )
+                        var toolTab by remember {
+                            mutableStateOf(if (state.currentTool in utilityTools) 2 else 0)
                         }
-                        PopoverRow(Icons.Default.Timer, "Stopwatch", isStopwatchVisible) {
-                            panel = null
-                            onToggleStopwatch()
+                        val tabs = listOf(
+                            stringResource(R.string.tab_board),
+                            stringResource(R.string.tab_media),
+                            stringResource(R.string.tab_utilities),
+                            stringResource(R.string.tab_lesson),
+                            stringResource(R.string.tab_view)
+                        )
+                        ToolCategoryTabs(tabs, toolTab) { toolTab = it }
+                        Spacer(Modifier.height(12.dp))
+                        val tiles = when (toolTab) {
+                            0 -> listOf(
+                                ToolTile(Icons.Default.PanTool, stringResource(R.string.util_hand), Color(0xFF2563EB), state.currentTool == WhiteboardTool.HAND) {
+                                    viewModel.setTool(WhiteboardTool.HAND); panel = null
+                                },
+                                ToolTile(Icons.Default.Gesture, stringResource(R.string.util_lasso), Color(0xFF0EA5E9), state.currentTool == WhiteboardTool.LASSO) {
+                                    viewModel.setTool(WhiteboardTool.LASSO); panel = null
+                                },
+                                ToolTile(Icons.Default.FormatColorFill, stringResource(R.string.util_bucket_fill), Color(0xFF8B5CF6), state.currentTool == WhiteboardTool.BUCKET_FILL) {
+                                    viewModel.setTool(WhiteboardTool.BUCKET_FILL); panel = null
+                                },
+                                ToolTile(Icons.Default.Edit, stringResource(R.string.util_stroke_colour), Color(0xFF2563EB)) {
+                                    viewModel.setTool(state.inkTool)
+                                    panel = "ink"
+                                },
+                                ToolTile(Icons.Default.AutoFixHigh, stringResource(R.string.magic_pen), Color(0xFFEC4899), state.isDrawToShapeEnabled) {
+                                    viewModel.toggleDrawToShape()
+                                },
+                                ToolTile(Icons.Default.GridOn, stringResource(R.string.popover_background), Color(0xFF10B981)) { panel = "background" }
+                            )
+                            1 -> listOf(
+                                ToolTile(Icons.Default.Description, stringResource(R.string.util_pdf), Color(0xFFEF4444)) { panel = null; onOpenDocument() },
+                                ToolTile(Icons.Default.Image, stringResource(R.string.util_image), Color(0xFF2563EB)) { panel = null; onInsertImage() },
+                                ToolTile(Icons.Default.Search, stringResource(R.string.util_google), Color(0xFF0EA5E9)) { panel = null; onSearchImages() },
+                                ToolTile(Icons.Default.Videocam, stringResource(R.string.util_video), Color(0xFF8B5CF6)) { panel = null; onInsertVideo() },
+                                ToolTile(Icons.Default.OndemandVideo, stringResource(R.string.util_youtube), Color(0xFFEF4444)) { panel = null; onYouTube() },
+                                ToolTile(Icons.Default.Language, stringResource(R.string.util_website), Color(0xFF10B981)) { panel = null; onWebEmbed() }
+                            )
+                            2 -> listOf(
+                                ToolTile(Icons.Default.HourglassBottom, stringResource(R.string.util_timer), Color(0xFFF59E0B), isTimerVisible) {
+                                    panel = null; onToggleTimer()
+                                },
+                                ToolTile(Icons.Default.Timer, stringResource(R.string.util_stopwatch), Color(0xFF6366F1), isStopwatchVisible) {
+                                    panel = null; onToggleStopwatch()
+                                },
+                                ToolTile(Icons.Default.Calculate, stringResource(R.string.util_calculator), Color(0xFF0EA5E9), isCalculatorVisible) {
+                                    panel = null; onToggleCalculator()
+                                },
+                                ToolTile(Icons.Default.Science, stringResource(R.string.util_periodic), Color(0xFF10B981), isPeriodicTableVisible) {
+                                    panel = null; onTogglePeriodicTable()
+                                },
+                                ToolTile(Icons.Default.CenterFocusStrong, stringResource(R.string.util_spotlight), Color(0xFFF59E0B), state.currentTool == WhiteboardTool.SPOTLIGHT) {
+                                    viewModel.setTool(WhiteboardTool.SPOTLIGHT)
+                                },
+                                ToolTile(Icons.Default.VisibilityOff, stringResource(R.string.util_shade), Color(0xFF1F2937), state.currentTool == WhiteboardTool.SHADE) {
+                                    viewModel.setTool(WhiteboardTool.SHADE)
+                                },
+                                ToolTile(Icons.Default.ZoomIn, stringResource(R.string.util_magnifier), Color(0xFF6366F1), state.currentTool == WhiteboardTool.MAGNIFIER) {
+                                    viewModel.setTool(WhiteboardTool.MAGNIFIER); panel = null
+                                },
+                                ToolTile(Icons.Default.TextFields, stringResource(R.string.util_text), Color(0xFF2563EB), state.currentTool == WhiteboardTool.TEXT) {
+                                    viewModel.setTool(WhiteboardTool.TEXT); panel = null
+                                }
+                            )
+                            3 -> listOf(
+                                ToolTile(Icons.Default.FolderOpen, "GYOASH", Color(0xFF2563EB)) { panel = null; onOpenIwb() },
+                                ToolTile(Icons.Default.Group, stringResource(R.string.menu_live_collab), Color(0xFF8B5CF6)) { panel = null; onLive() },
+                                ToolTile(Icons.Default.IosShare, stringResource(R.string.menu_export_lesson), Color(0xFF2563EB)) { panel = null; onExport() },
+                                ToolTile(Icons.Default.Description, stringResource(R.string.save_slides_pdf), Color(0xFFEF4444)) { panel = null; onSaveSlides() },
+                                ToolTile(Icons.Default.LayersClear, stringResource(R.string.clear_all), Color(0xFFEF4444)) { panel = null; onClear() },
+                                ToolTile(Icons.Default.HelpOutline, stringResource(R.string.menu_help), Color(0xFF6B7280)) { panel = null; onHelp() }
+                            )
+                            else -> buildList {
+                                add(
+                                    ToolTile(
+                                        Icons.Default.Language,
+                                        stringResource(R.string.change_language),
+                                        Color(0xFF2563EB)
+                                    ) {
+                                        panel = null
+                                        onOpenLanguageDialog()
+                                    }
+                                )
+                                add(ToolTile(Icons.Default.ZoomIn, stringResource(R.string.popover_zoom_in), Color(0xFF0EA5E9)) { onZoomIn() })
+                                add(ToolTile(Icons.Default.ZoomOut, stringResource(R.string.popover_zoom_out), Color(0xFF6366F1)) { onZoomOut() })
+                                add(ToolTile(Icons.Default.CropFree, stringResource(R.string.popover_fit), Color(0xFF10B981)) { panel = null; onFit() })
+                                listOf(2, 3, 4, 6).forEach { count ->
+                                    add(
+                                        ToolTile(
+                                            Icons.Default.Dashboard,
+                                            context.getString(R.string.util_panels, count),
+                                            Color(0xFF6366F1),
+                                            state.splitCount == count
+                                        ) {
+                                            viewModel.setSplit(count)
+                                            panel = null
+                                        }
+                                    )
+                                }
+                                if (state.splitCount > 1) {
+                                    add(
+                                        ToolTile(Icons.Default.CropFree, "Full", Color(0xFF1F2937)) {
+                                            viewModel.requestCloseSplit()
+                                            panel = null
+                                        }
+                                    )
+                                }
+                            }
                         }
-                        PopoverRow(Icons.Default.Calculate, "Scientific Calculator", isCalculatorVisible) {
-                            panel = null
-                            onToggleCalculator()
+                        ToolIconGrid(tiles)
+                        if (toolTab == 0 && state.smartWriteEnabled) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                stringResource(R.string.smart_write_tip),
+                                fontSize = 11.sp,
+                                color = Color(0xFF6B7280)
+                            )
                         }
-                        PopoverRow(Icons.Default.Science, "Periodic Table", isPeriodicTableVisible) {
-                            panel = null
-                            onTogglePeriodicTable()
+                        if (toolTab == 2 && state.currentTool == WhiteboardTool.SHADE) {
+                            Spacer(Modifier.height(4.dp))
+                            PopoverRow(
+                                Icons.Default.SwapVert,
+                                if (shadeFromTop) "Shade from top" else "Shade from bottom"
+                            ) { onToggleShadeSide() }
+                        }
+                        if (toolTab == 2 && state.currentTool == WhiteboardTool.SPOTLIGHT) {
+                            Spacer(Modifier.height(4.dp))
+                            Text("Spotlight size", fontSize = 12.sp, color = Color(0xFF6B7280))
+                            Slider(
+                                value = spotlightRadius.coerceIn(60f, 360f),
+                                onValueChange = onSpotlightRadius,
+                                valueRange = 60f..360f,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        if (toolTab == 4) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Each split panel keeps its own ink.",
+                                fontSize = 11.sp,
+                                color = Color(0xFF6B7280)
+                            )
                         }
                     }
                     "eraser" -> DockPopover(onClose = { panel = null }) {
@@ -1554,6 +1702,84 @@ private fun DockItem(
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1
         )
+    }
+}
+
+@Composable
+private fun PenSplitDockItem(
+    label: String,
+    active: Boolean,
+    onPenClick: () -> Unit,
+    onDropdownClick: () -> Unit
+) {
+    val activeColor = Color(0xFF00BCD4)
+    val activeContentColor = Color.White
+    val inactiveIconColor = Color(0xFF2563EB)
+    val inactiveTextColor = DockLabel
+
+    Row(
+        modifier = Modifier
+            .height(48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (active) activeColor else Color.Transparent),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Left: Pen Tool Button (Activates Pen when tapped)
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .clickable(onClick = onPenClick)
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Draw,
+                    contentDescription = label,
+                    tint = if (active) activeContentColor else inactiveIconColor,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = label,
+                    color = if (active) activeContentColor else inactiveTextColor,
+                    fontSize = 9.sp,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 1
+                )
+            }
+        }
+
+        // Middle: Vertical Divider Line
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .padding(vertical = 4.dp)
+                .width(1.dp)
+                .background(
+                    if (active) Color.White.copy(alpha = 0.5f)
+                    else Color(0x3394A3B8)
+                )
+        )
+
+        // Right: Dropdown Arrow (Opens/toggles the Settings panel when tapped)
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .clickable(onClick = onDropdownClick)
+                .padding(horizontal = 6.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
+                contentDescription = "Pen settings",
+                tint = if (active) activeContentColor else Color(0xFF64748B),
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 
@@ -1949,73 +2175,275 @@ private fun PageActionsDialog(
     val canDelete = !documentOpen && pageCount > 1
     val canDuplicate = !documentOpen && pageCount < 50
 
-    androidx.compose.material3.AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text("Page ${pageIndex + 1} Actions") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (documentOpen) {
-                    Surface(
-                        color = Color(0xFFFEF3C7),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "This board is tied to an imported PDF document. Pages cannot be added, duplicated, or deleted.",
-                            color = Color(0xFF92400E),
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(10.dp)
-                        )
-                    }
-                } else if (pageCount <= 1) {
-                    Surface(
-                        color = Color(0xFFEFF6FF),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "The last remaining page cannot be deleted.",
-                            color = Color(0xFF1E40AF),
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(8.dp)
-                        )
-                    }
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .widthIn(min = 320.dp, max = 540.dp)
+        ) {
+            val isCompact = maxWidth < 400.dp
+            val isUltraNarrow = maxWidth < 320.dp
+            val cardHorizontalPadding = if (isCompact) 18.dp else 24.dp
+            val buttonPadding = if (isCompact) PaddingValues(horizontal = 10.dp, vertical = 6.dp) else PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+            val savePadding = if (isCompact) PaddingValues(horizontal = 16.dp, vertical = 6.dp) else PaddingValues(horizontal = 22.dp, vertical = 8.dp)
+            val cancelPadding = if (isCompact) PaddingValues(horizontal = 8.dp, vertical = 6.dp) else PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            val buttonSpacing = if (isCompact) 6.dp else 10.dp
+            val fontSize = if (isCompact) 12.5.sp else 14.sp
+            val iconSize = if (isCompact) 16.dp else 18.dp
+
+            val deleteBtn = @Composable {
+                OutlinedButton(
+                    onClick = {
+                        if (canDelete) {
+                            onDelete()
+                            onDismiss()
+                        }
+                    },
+                    enabled = canDelete,
+                    shape = CircleShape,
+                    border = BorderStroke(
+                        1.5.dp,
+                        if (canDelete) Color(0xFFEF4444) else Color(0xFFEF4444).copy(alpha = 0.35f)
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color(0xFFEF4444),
+                        disabledContentColor = Color(0xFFEF4444).copy(alpha = 0.35f)
+                    ),
+                    contentPadding = buttonPadding,
+                    modifier = Modifier.height(38.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = "Delete",
+                        modifier = Modifier.size(iconSize),
+                        tint = if (canDelete) Color(0xFFEF4444) else Color(0xFFEF4444).copy(alpha = 0.35f)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "Delete",
+                        color = if (canDelete) Color(0xFFEF4444) else Color(0xFFEF4444).copy(alpha = 0.35f),
+                        fontSize = fontSize,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        softWrap = false
+                    )
                 }
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    label = { Text("Page Title") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
-        },
-        confirmButton = {
-            androidx.compose.material3.Button(
-                onClick = { onRename(draft); onDismiss() }
+
+            val duplicateBtn = @Composable {
+                OutlinedButton(
+                    onClick = {
+                        if (canDuplicate) {
+                            onDuplicate()
+                            onDismiss()
+                        }
+                    },
+                    enabled = canDuplicate,
+                    shape = CircleShape,
+                    border = BorderStroke(
+                        1.5.dp,
+                        if (canDuplicate) Color(0xFF405C6B) else Color(0xFF405C6B).copy(alpha = 0.35f)
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        disabledContentColor = Color.White.copy(alpha = 0.35f)
+                    ),
+                    contentPadding = buttonPadding,
+                    modifier = Modifier.height(38.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "Duplicate",
+                        modifier = Modifier.size(iconSize),
+                        tint = if (canDuplicate) Color.White else Color.White.copy(alpha = 0.35f)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "Duplicate",
+                        color = if (canDuplicate) Color.White else Color.White.copy(alpha = 0.35f),
+                        fontSize = fontSize,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
+
+            val cancelBtn = @Composable {
+                TextButton(
+                    onClick = onDismiss,
+                    shape = CircleShape,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = Color.White
+                    ),
+                    contentPadding = cancelPadding,
+                    modifier = Modifier.height(38.dp)
+                ) {
+                    Text(
+                        text = "Cancel",
+                        color = Color.White,
+                        fontSize = fontSize,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
+
+            val saveBtn = @Composable {
+                Button(
+                    onClick = {
+                        onRename(draft)
+                        onDismiss()
+                    },
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF50E8A7),
+                        contentColor = Color(0xFF0F1E19)
+                    ),
+                    contentPadding = savePadding,
+                    modifier = Modifier.height(38.dp)
+                ) {
+                    Text(
+                        text = "Save",
+                        color = Color(0xFF0F1E19),
+                        fontSize = fontSize,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = Color(0xFF0F1E22),
+                shadowElevation = 16.dp,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (canDuplicate) {
-                    androidx.compose.material3.OutlinedButton(onClick = { onDuplicate(); onDismiss() }) {
-                        Text("Duplicate")
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = cardHorizontalPadding, vertical = 22.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = "Page ${pageIndex + 1} Actions",
+                        color = Color.White,
+                        fontSize = if (isCompact) 20.sp else 22.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (documentOpen) {
+                        Surface(
+                            color = Color(0xFFFEF3C7),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                        ) {
+                            Text(
+                                text = "This board is tied to an imported PDF document. Pages cannot be added, duplicated, or deleted.",
+                                color = Color(0xFF92400E),
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    } else if (pageCount <= 1) {
+                        Surface(
+                            color = Color(0xFF1E293B),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color(0xFF334155)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                        ) {
+                            Text(
+                                text = "The last remaining page cannot be deleted.",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
                     }
-                }
-                if (canDelete) {
-                    androidx.compose.material3.Button(
-                        onClick = { onDelete(); onDismiss() },
-                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
-                    ) {
-                        Text("Delete", color = Color.White)
+
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        label = {
+                            Text(
+                                text = "Page Title",
+                                color = Color(0xFF8E9EA5),
+                                fontSize = 12.sp
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedBorderColor = Color(0xFF426372),
+                            unfocusedBorderColor = Color(0xFF2B414B),
+                            focusedLabelColor = Color(0xFF8E9EA5),
+                            unfocusedLabelColor = Color(0xFF8E9EA5),
+                            cursorColor = Color(0xFF50E8A7)
+                        ),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = {
+                            onRename(draft)
+                            onDismiss()
+                        }),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    if (isUltraNarrow) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(buttonSpacing)
+                        ) {
+                            deleteBtn()
+                            duplicateBtn()
+                            cancelBtn()
+                            saveBtn()
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(buttonSpacing)
+                            ) {
+                                deleteBtn()
+                                duplicateBtn()
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(buttonSpacing)
+                            ) {
+                                cancelBtn()
+                                saveBtn()
+                            }
+                        }
                     }
-                }
-                androidx.compose.material3.TextButton(onClick = onDismiss) {
-                    Text("Cancel")
                 }
             }
         }
-    )
+    }
 }
