@@ -143,6 +143,8 @@ class BoardStageView(context: Context) : FrameLayout(context) {
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean = false
 
+    private var currentPageIndex = -1
+
     fun syncPage(
         strokes: List<Stroke>,
         background: CanvasBackground,
@@ -151,12 +153,15 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         scale: Float,
         offsetX: Float,
         offsetY: Float,
-        selected: Set<String>
+        selected: Set<String>,
+        pageIndex: Int = 0
     ) {
         if (previewing) return
-        val pageChanged = background != this.pageBackground || showGrid != this.showGrid || dark != this.dark
+        val pageIndexChanged = this.currentPageIndex != pageIndex
+        this.currentPageIndex = pageIndex
+        val pageChanged = pageIndexChanged || background != this.pageBackground || showGrid != this.showGrid || dark != this.dark
         val moved = scale != this.scale || offsetX != this.offsetX || offsetY != this.offsetY
-        val inkChanged = this.strokes !== strokes || this.selected !== selected
+        val inkChanged = pageIndexChanged || this.strokes != strokes || this.selected != selected
         this.pageBackground = background
         this.showGrid = showGrid
         this.dark = dark
@@ -164,6 +169,12 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         this.offsetX = offsetX
         this.offsetY = offsetY
         this.selected = selected
+        if (pageIndexChanged) {
+            gestureStrokes = null
+            activeLive = null
+            currentStroke = null
+            marquee = null
+        }
         if (gestureStrokes == null) this.strokes = strokes
         if (inkChanged || pageChanged) {
             bindMedia(if (gestureStrokes == null) strokes else this.strokes)
@@ -177,7 +188,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
             ink.invalidate()
             blurredInk.invalidate()
         }
-        if (moved) live.invalidate()
+        if (moved || pageIndexChanged) live.invalidate()
     }
 
     fun viewScale(): Float = scale

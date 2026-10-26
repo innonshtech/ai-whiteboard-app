@@ -178,6 +178,8 @@ data class CanvasState(
     val documentFrameScale: Float = 1f,
     val saveToast: String? = null,
     val showCloseSplitDialog: Boolean = false,
+    val pageEpoch: Long = 0L,
+    val mathTools: List<PlacedMathTool> = emptyList(),
     val uiLocaleTag: String = "en",
     val panelIdForHelp: String = "",
     val licenseStateForHelp: String = "",
@@ -315,6 +317,7 @@ class CanvasViewModel @Inject constructor(
     private val pageTitles = mutableListOf("Page 1")
     private val pageBackgroundKeys = mutableListOf(CanvasBackground.DOTTED.key)
     private val pageCustomBackgroundUris = mutableListOf("")
+    private val pageMathTools = mutableListOf<List<PlacedMathTool>>(emptyList())
     private var strokeClipboard: List<Stroke> = emptyList()
     private var pdfOcrCancelled = false
 
@@ -1640,6 +1643,15 @@ class CanvasViewModel @Inject constructor(
         scheduleSave()
     }
 
+    private fun renumberDefaultPageTitles() {
+        for (i in pageTitles.indices) {
+            val title = pageTitles[i]
+            if (title.matches(Regex("^Page\\s+\\d+$", RegexOption.IGNORE_CASE))) {
+                pageTitles[i] = "Page ${i + 1}"
+            }
+        }
+    }
+
     fun addPage() {
         if (_state.value.document != null) {
             _state.update { it.copy(errorMessage = "Adding pages is disabled for document-backed boards.") }
@@ -1651,9 +1663,12 @@ class CanvasViewModel @Inject constructor(
         }
         commitActivePage()
         pages.add(emptyList())
-        pageTitles.add("Page ${pages.size}")
-        pageBackgroundKeys.add(CanvasBackground.DOTTED.key)
+        pageTitles.add("Page ${pages.size + 1}")
+        val newBgKey = if (_state.value.isDarkCanvas) CanvasBackground.DARK.key else CanvasBackground.DOTTED.key
+        pageBackgroundKeys.add(newBgKey)
         pageCustomBackgroundUris.add("")
+        pageMathTools.add(emptyList())
+        renumberDefaultPageTitles()
         switchTo(pages.lastIndex)
         scheduleSave()
     }
@@ -1704,6 +1719,8 @@ class CanvasViewModel @Inject constructor(
         pageTitles.removeAt(index)
         pageBackgroundKeys.removeAt(index)
         pageCustomBackgroundUris.removeAt(index)
+        if (index in pageMathTools.indices) pageMathTools.removeAt(index)
+        renumberDefaultPageTitles()
         activePage = activePage.coerceIn(0, pages.lastIndex)
         if (activePage >= index && activePage > 0) activePage -= 1
         switchTo(activePage, clearPageUndo = false)
@@ -1724,6 +1741,9 @@ class CanvasViewModel @Inject constructor(
         pageTitles.add(index + 1, "${pageTitles.getOrElse(index) { "Page" }} copy")
         pageBackgroundKeys.add(index + 1, pageBackgroundKeys.getOrElse(index) { CanvasBackground.DOTTED.key })
         pageCustomBackgroundUris.add(index + 1, pageCustomBackgroundUris.getOrElse(index) { "" })
+        while (pageMathTools.size <= index) pageMathTools.add(emptyList())
+        val copyTools = pageMathTools.getOrElse(index) { emptyList() }.map { it.copy(id = UUID.randomUUID().toString()) }
+        pageMathTools.add(index + 1, copyTools)
         switchTo(index + 1)
         scheduleSave()
     }
@@ -1826,11 +1846,24 @@ class CanvasViewModel @Inject constructor(
 
     fun setPageBackground(background: CanvasBackground, customUri: String = "") {
         syncPageMetadataLists()
+        val toDark = (background == CanvasBackground.DARK)
+        val wasDark = (_state.value.canvasBackground == CanvasBackground.DARK)
         pageBackgroundKeys[activePage] = background.key
         pageCustomBackgroundUris[activePage] = if (background == CanvasBackground.CUSTOM) customUri else ""
+        val updatedStrokes = if (toDark != wasDark) {
+            CanvasInkTheme.remapStrokesForTheme(_state.value.strokes, toDark)
+        } else {
+            _state.value.strokes
+        }
+        if (activePage in pages.indices) {
+            pages[activePage] = updatedStrokes
+        }
         _state.update {
             it.copy(
                 canvasBackground = background,
+                isDarkCanvas = toDark,
+                strokes = updatedStrokes,
+                pagePreviews = pages.toList(),
                 pageBackgroundKeys = pageBackgroundKeys.toList(),
                 pageCustomBackgroundUris = pageCustomBackgroundUris.toList()
             )
@@ -2422,13 +2455,41 @@ class CanvasViewModel @Inject constructor(
         }
         selectionUndoCaptured = false
         syncPageMetadataLists()
-        val bgKey = pageBackgroundKeys.getOrElse(index) { CanvasBackground.DOTTED.key }
+        val bgKey = pageBackgroundKeys.getOrElse(index) {
+            if (_state.value.isDarkCanvas) CanvasBackground.DARK.key else CanvasBackground.DOTTED.key
+        }
         val bg = CanvasBackground.fromKey(bgKey)
+        val isDark = (bg == CanvasBackground.DARK)
+        while (pageMathTools.size < pages.size) pageMathTools.add(emptyList())
+        val currentTools = pageMathTools.getOrElse(index) { emptyList() }
+        val curTool = _state.value.currentTool
+        val resetTool = if (curTool in setOf(
+                WhiteboardTool.RULER,
+                WhiteboardTool.COMPASS,
+                WhiteboardTool.PROTRACTOR,
+                WhiteboardTool.SET_SQUARE,
+                WhiteboardTool.TRIANGLE
+            )
+        ) {
+            val matchingKind = when (curTool) {
+                WhiteboardTool.RULER -> MathToolKind.RULER
+                WhiteboardTool.COMPASS -> MathToolKind.COMPASS
+                WhiteboardTool.PROTRACTOR -> MathToolKind.PROTRACTOR
+                WhiteboardTool.SET_SQUARE -> MathToolKind.SET_SQUARE
+                WhiteboardTool.TRIANGLE -> MathToolKind.TRIANGLE
+                else -> null
+            }
+            if (currentTools.any { it.kind == matchingKind }) curTool else _state.value.inkTool
+        } else curTool
+
         _state.update {
             it.copy(
                 strokes = pages[index],
+                mathTools = currentTools,
                 currentStroke = null,
                 selectedStrokeIds = emptySet(),
+                laserPoints = emptyList(),
+                currentTool = resetTool,
                 pageIndex = index,
                 pageCount = pages.size,
                 pagePreviews = pages.toList(),
@@ -2436,6 +2497,8 @@ class CanvasViewModel @Inject constructor(
                 pageBackgroundKeys = pageBackgroundKeys.toList(),
                 pageCustomBackgroundUris = pageCustomBackgroundUris.toList(),
                 canvasBackground = bg,
+                isDarkCanvas = isDark,
+                pageEpoch = it.pageEpoch + 1,
                 canUndo = undoActionStack.isNotEmpty(),
                 canRedo = redoActionStack.isNotEmpty()
             )
@@ -2443,24 +2506,42 @@ class CanvasViewModel @Inject constructor(
     }
 
     private fun syncPageMetadataLists() {
+        val defaultBgKey = if (_state.value.isDarkCanvas) CanvasBackground.DARK.key else CanvasBackground.DOTTED.key
         while (pageTitles.size < pages.size) {
             pageTitles.add("Page ${pageTitles.size + 1}")
         }
         while (pageBackgroundKeys.size < pages.size) {
-            pageBackgroundKeys.add(CanvasBackground.DOTTED.key)
+            pageBackgroundKeys.add(defaultBgKey)
         }
         while (pageCustomBackgroundUris.size < pages.size) {
             pageCustomBackgroundUris.add("")
         }
+        while (pageMathTools.size < pages.size) {
+            pageMathTools.add(emptyList())
+        }
         while (pageTitles.size > pages.size) pageTitles.removeAt(pageTitles.lastIndex)
         while (pageBackgroundKeys.size > pages.size) pageBackgroundKeys.removeAt(pageBackgroundKeys.lastIndex)
         while (pageCustomBackgroundUris.size > pages.size) pageCustomBackgroundUris.removeAt(pageCustomBackgroundUris.lastIndex)
+        while (pageMathTools.size > pages.size) pageMathTools.removeAt(pageMathTools.lastIndex)
+        renumberDefaultPageTitles()
     }
 
     private fun commitActivePage() {
         if (pages.isEmpty()) pages.add(emptyList())
         if (activePage !in pages.indices) activePage = 0
         pages[activePage] = _state.value.strokes
+        while (pageMathTools.size < pages.size) pageMathTools.add(emptyList())
+        if (activePage in pageMathTools.indices) {
+            pageMathTools[activePage] = _state.value.mathTools
+        }
+    }
+
+    fun setMathTools(tools: List<PlacedMathTool>) {
+        while (pageMathTools.size <= activePage) pageMathTools.add(emptyList())
+        if (activePage in pageMathTools.indices) {
+            pageMathTools[activePage] = tools
+        }
+        _state.update { it.copy(mathTools = tools) }
     }
 
     fun loadNote(noteId: String) {
@@ -2472,6 +2553,7 @@ class CanvasViewModel @Inject constructor(
             pageTitles.clear()
             pageBackgroundKeys.clear()
             pageCustomBackgroundUris.clear()
+            pageMathTools.clear()
             val restored = loaded.pages.map { page -> page.strokes.map { it.toDomain() } }
             if (restored.isEmpty()) pages.add(emptyList()) else pages.addAll(restored)
             loaded.pageTitles?.let { pageTitles.addAll(it) }
@@ -3255,9 +3337,6 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun setCanvasBackground(background: CanvasBackground) {
-        val noteId = _state.value.noteId
-        if (noteId.isEmpty()) return
-
         val toDark = background == CanvasBackground.DARK
         val wasDark = _state.value.isDarkCanvas
         if (toDark != wasDark) {
@@ -3265,28 +3344,41 @@ class CanvasViewModel @Inject constructor(
             return
         }
 
-        _state.update {
-            it.copy(canvasBackground = background, isDarkCanvas = toDark)
+        syncPageMetadataLists()
+        if (activePage in pageBackgroundKeys.indices) {
+            pageBackgroundKeys[activePage] = background.key
         }
 
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val note = noteRepository.getNoteById(noteId)
-                if (note != null) {
-                    val updatedNote = note.copy(
-                        canvasBackground = background,
-                        updatedAt = System.currentTimeMillis()
-                    )
-                    noteRepository.updateNote(updatedNote)
+        _state.update {
+            it.copy(
+                canvasBackground = background,
+                isDarkCanvas = toDark,
+                pageBackgroundKeys = pageBackgroundKeys.toList()
+            )
+        }
+
+        val noteId = _state.value.noteId
+        if (noteId.isNotEmpty()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val note = noteRepository.getNoteById(noteId)
+                    if (note != null) {
+                        val updatedNote = note.copy(
+                            canvasBackground = background,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                        noteRepository.updateNote(updatedNote)
+                    }
+                } catch (e: Exception) {
+                    _state.update { it.copy(errorMessage = "Failed to update background: ${e.message}") }
                 }
-            } catch (e: Exception) {
-                _state.update { it.copy(errorMessage = "Failed to update background: ${e.message}") }
             }
         }
         scheduleSave()
     }
 
     private fun applyThemeChange(toDark: Boolean, background: CanvasBackground) {
+        commitActivePage()
         saveToUndoStack()
         redoStack.clear()
         if (pages.isEmpty()) pages.add(emptyList())
@@ -3294,10 +3386,26 @@ class CanvasViewModel @Inject constructor(
         pages.clear()
         pages.addAll(remappedPages)
         val activeStrokes = remappedPages.getOrElse(activePage) { emptyList() }
+
+        syncPageMetadataLists()
+        for (i in pageBackgroundKeys.indices) {
+            val oldBg = CanvasBackground.fromKey(pageBackgroundKeys[i])
+            if (toDark) {
+                if (oldBg != CanvasBackground.DARK) {
+                    pageBackgroundKeys[i] = CanvasBackground.DARK.key
+                }
+            } else {
+                if (oldBg == CanvasBackground.DARK) {
+                    pageBackgroundKeys[i] = CanvasBackground.DOTTED.key
+                }
+            }
+        }
+
         _state.update { s ->
             s.copy(
                 isDarkCanvas = toDark,
                 canvasBackground = background,
+                pageBackgroundKeys = pageBackgroundKeys.toList(),
                 selectedColor = CanvasInkTheme.penColorForTheme(s.selectedColor, toDark),
                 strokes = activeStrokes,
                 pagePreviews = pages.toList(),
