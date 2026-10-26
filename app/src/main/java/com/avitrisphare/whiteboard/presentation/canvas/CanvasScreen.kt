@@ -1343,6 +1343,7 @@ fun CanvasScreen(
                 .pointerInput(
                     state.currentTool,
                     state.selectedColor,
+                    state.secondaryColor,
                     state.strokeWidth,
                     state.eraserMode,
                     state.eraserSize,
@@ -1408,6 +1409,7 @@ fun CanvasScreen(
                         var prevPosition = down.position
                         var shapePoints = listOf(downWorld)
                         val stylusDraw = down.isStylusPointer()
+                        val activeInkColor = if (stylusDraw) state.selectedColor else state.secondaryColor
                         val isShapeActive = state.currentTool == WhiteboardTool.SHAPE || state.currentTool in setOf(
                             WhiteboardTool.RECTANGLE,
                             WhiteboardTool.CIRCLE,
@@ -1468,7 +1470,7 @@ fun CanvasScreen(
                             Stroke(
                                 points = inkPoints,
                                 pointPressures = inkPressures,
-                                colorValue = state.selectedColor,
+                                colorValue = activeInkColor,
                                 strokeWidth = state.strokeWidth,
                                 isHighlighter = activeTool == WhiteboardTool.HIGHLIGHTER,
                                 strokeType = activeTool.toStrokeType()
@@ -1625,7 +1627,7 @@ fun CanvasScreen(
                                 canvasScale,
                                 Offset(canvasOffsetX, canvasOffsetY)
                             )
-                            val strokeColor = if (state.selectedColor != 0) state.selectedColor else (if (state.isDarkCanvas) 0xFFFFFFFF.toInt() else 0xFF1E293B.toInt())
+                            val strokeColor = if (activeInkColor != 0) activeInkColor else (if (state.isDarkCanvas) 0xFFFFFFFF.toInt() else 0xFF1E293B.toInt())
                             val strokeWidth = if (state.strokeWidth > 0f) state.strokeWidth else 6f
                             val newStroke = Stroke(
                                 points = listOf(snappedStartWorld, snappedStartWorld),
@@ -1753,7 +1755,7 @@ fun CanvasScreen(
                                 }
                                 val newStroke = Stroke(
                                     points = listOf(downWorld, downWorld),
-                                    colorValue = if (activeTool == WhiteboardTool.SHAPE) state.shapeBorderColor else state.selectedColor,
+                                    colorValue = if (activeTool == WhiteboardTool.SHAPE) state.shapeBorderColor else activeInkColor,
                                     fillColor = if (activeTool == WhiteboardTool.SHAPE) state.shapeFillColor else state.fillColor,
                                     strokeWidth = state.strokeWidth,
                                     strokeType = sType,
@@ -2005,7 +2007,7 @@ fun CanvasScreen(
                                             shapePoints = listOf(snappedStartWorld, snappedCurrentWorld)
                                             viewModel.updateStroke(shapePoints)
 
-                                            val strokeColor = if (state.selectedColor != 0) state.selectedColor else (if (state.isDarkCanvas) 0xFFFFFFFF.toInt() else 0xFF1E293B.toInt())
+                                            val strokeColor = if (activeInkColor != 0) activeInkColor else (if (state.isDarkCanvas) 0xFFFFFFFF.toInt() else 0xFF1E293B.toInt())
                                             val strokeWidth = if (state.strokeWidth > 0f) state.strokeWidth else 6f
                                             val liveStroke = Stroke(
                                                 id = viewModel.state.value.currentStroke?.id ?: "ruler_live",
@@ -2241,7 +2243,7 @@ fun CanvasScreen(
                                 val labelAt = mid + labelOffsetWorld
 
                                 val lengthText = formatCentimetres(lengthPx, pxPerCm)
-                                val labelColor = if (state.selectedColor != 0) state.selectedColor else (if (state.isDarkCanvas) 0xFFFFFFFF.toInt() else 0xFF1E293B.toInt())
+                                val labelColor = if (activeInkColor != 0) activeInkColor else (if (state.isDarkCanvas) 0xFFFFFFFF.toInt() else 0xFF1E293B.toInt())
                                 viewModel.commitStroke(
                                     measurementLabel(
                                         lengthText,

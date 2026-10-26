@@ -55,6 +55,7 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
     private var dark = false
     private var showGrid = false
     private var inkColor = 0xFF1B1F2A.toInt()
+    private var secondaryInkColor = 0xFF3B82F6.toInt()
     private var inkWidth = 4f
     private var inkSampleGapMm = DEFAULT_INK_SAMPLE_GAP_MM
     private var xdpi = 160f
@@ -86,6 +87,7 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
         dark = state.isDarkCanvas
         showGrid = state.showGrid
         inkColor = state.selectedColor
+        secondaryInkColor = state.secondaryColor
         inkWidth = state.strokeWidth
         inkSampleGapMm = state.inkSampleGapMm
         val metrics = resources.displayMetrics
@@ -575,7 +577,7 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
     }
 
     private fun publishInk(index: Int) {
-        val targetColor = panes.getOrNull(index)?.color ?: inkColor
+        val targetColor = if (stylusInk) (panes.getOrNull(index)?.color ?: inkColor) else secondaryInkColor
         val targetWidth = panes.getOrNull(index)?.strokeWidth ?: inkWidth
         val width = if (stylusInk) {
             stylusPressureWidth(targetWidth, pressures.lastOrNull() ?: 1f)
@@ -666,7 +668,7 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
                         points.add(points[0].copy(x = points[0].x + 0.1f))
                         if (pressures.isNotEmpty()) pressures.add(pressures[0]) else pressures.add(1f)
                     }
-                    val targetColor = panes.getOrNull(index)?.color ?: inkColor
+                    val targetColor = if (stylusInk) (panes.getOrNull(index)?.color ?: inkColor) else secondaryInkColor
                     val targetWidth = panes.getOrNull(index)?.strokeWidth ?: inkWidth
                     val width = if (stylusInk && pressures.isNotEmpty()) {
                         stylusPressureWidth(targetWidth, pressures.average().toFloat())
