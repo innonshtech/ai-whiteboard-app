@@ -111,7 +111,7 @@ class MathGesture {
 }
 
 private const val RULER_THICKNESS = 96f
-private const val RULER_EDGE_INSET = 18f
+const val RULER_INSET = 24f
 private const val HANDLE_RADIUS = 24f
 private const val HANDLE_TOUCH_RADIUS = 46f
 const val COMPASS_MIN_RADIUS = 50f
@@ -385,17 +385,22 @@ private fun hitTestRuler(tool: PlacedMathTool, point: Offset): MathToolZone {
     val half = tool.span / 2f
     val halfT = RULER_THICKNESS / 2f
 
-    // Close button (top right inside ruler)
+    val distToTopEdge = abs(local.y - (-halfT))
+    val distToBottomEdge = abs(local.y - halfT)
+    val isNearDrawingEdge = (distToTopEdge <= RULER_EDGE_SLOP || distToBottomEdge <= RULER_EDGE_SLOP) &&
+        abs(local.x) <= half + RULER_EDGE_SLOP &&
+        abs(local.y) >= 20f
+
+    // Close button (top right inside ruler) - safe area check:
+    // Only triggers when tapping inside ruler body, never when drawing along top edge
     val closeBtnCenter = Offset(half - 24f, -halfT + 22f)
-    if (near(local, closeBtnCenter, 22f)) return MathToolZone.CLOSE
+    if (near(local, closeBtnCenter, 20f) && distToTopEdge > 10f) {
+        return MathToolZone.CLOSE
+    }
 
     // If touching near the top edge or bottom edge (where ticks and numbers are),
     // always return NONE so straightedge line drawing triggers seamlessly!
-    val distToTopEdge = abs(local.y - (-halfT))
-    val distToBottomEdge = abs(local.y - halfT)
-    if ((distToTopEdge <= RULER_EDGE_SLOP || distToBottomEdge <= RULER_EDGE_SLOP) &&
-        abs(local.x) <= half + RULER_EDGE_SLOP &&
-        abs(local.y) >= 16f) {
+    if (isNearDrawingEdge) {
         return MathToolZone.NONE
     }
 
@@ -458,13 +463,47 @@ fun rulerEdgeForPoint(tool: PlacedMathTool, point: Offset): Float {
     return if (local.y < 0f) -1f else 1f
 }
 
-fun snapToRulerEdge(tool: PlacedMathTool, screenPoint: Offset, edgeSign: Float): Offset {
+fun snapToRulerEdge(
+    tool: PlacedMathTool,
+    screenPoint: Offset,
+    edgeSign: Float,
+    pxPerCm: Float = 0f
+): Offset {
     val dir = direction(tool.rotationDeg)
     val perp = perpendicular(tool.rotationDeg)
     val local = toLocal(screenPoint, tool.center, tool.rotationDeg)
     val half = tool.span / 2f
     val halfT = RULER_THICKNESS / 2f
-    val clampedX = local.x.coerceIn(-half, half)
+
+    var clampedX = local.x.coerceIn(-half, half)
+
+    if (tool.kind == MathToolKind.RULER && pxPerCm > 0f) {
+        val inset = RULER_INSET
+        val zeroX = -half + inset
+        val maxMarkX = half - inset
+        val mmPx = pxPerCm / 10f
+
+        if (clampedX <= zeroX) {
+            clampedX = zeroX
+        } else if (clampedX >= maxMarkX) {
+            clampedX = maxMarkX
+        } else if (mmPx >= 1.5f) {
+            val relX = clampedX - zeroX
+            val nearestMm = (relX / mmPx).roundToInt()
+            val tickX = zeroX + nearestMm * mmPx
+            val isCm = nearestMm % 10 == 0
+            val isHalf = nearestMm % 5 == 0
+            val snapThreshold = when {
+                isCm -> 6.0f
+                isHalf -> 4.5f
+                else -> 3.2f
+            }
+            if (abs(clampedX - tickX) <= snapThreshold) {
+                clampedX = tickX.coerceIn(zeroX, maxMarkX)
+            }
+        }
+    }
+
     return tool.center + dir * clampedX + perp * (edgeSign * halfT)
 }
 
@@ -752,11 +791,18 @@ fun rotateToolByEnd(tool: PlacedMathTool, pointer: Offset, draggingPositiveEnd: 
     val rawRotation = if (draggingPositiveEnd) angle else angle + 180f
     var norm = (rawRotation % 360f + 360f) % 360f
 
-    // Magnetic angle snapping: snap to nearest 15° if within 2.2°
-    val snapInterval = 15f
-    val nearestSnap = (norm / snapInterval).roundToInt() * snapInterval
-    if (abs(norm - nearestSnap) <= 2.2f) {
-        norm = (nearestSnap % 360f + 360f) % 360f
+    // Stronger magnetic snap to cardinal angles (0°, 90°, 180°, 270°, 360°) within 3.5°
+    val cardinalInterval = 90f
+    val nearestCardinal = (norm / cardinalInterval).roundToInt() * cardinalInterval
+    if (abs(norm - nearestCardinal) <= 3.5f) {
+        norm = (nearestCardinal % 360f + 360f) % 360f
+    } else {
+        // Standard magnetic angle snapping: snap to nearest 15° if within 2.2°
+        val snapInterval = 15f
+        val nearestSnap = (norm / snapInterval).roundToInt() * snapInterval
+        if (abs(norm - nearestSnap) <= 2.2f) {
+            norm = (nearestSnap % 360f + 360f) % 360f
+        }
     }
 
     val dir = direction(norm)
@@ -775,18 +821,24 @@ fun dragRulerEnd(tool: PlacedMathTool, pointer: Offset, draggingPositiveEnd: Boo
     val dy = pointer.y - pivot.y
     if (dx * dx + dy * dy < 36f) return tool
     val dist = hypot(dx, dy)
-    // Dynamic extension: min 180f (~4.5 cm), max 3600f (~90 cm)
-    val newSpan = dist.coerceIn(180f, 3600f)
+    val newSpan = clampMathSpan(MathToolKind.RULER, dist)
 
     val angle = atan2(dy, dx) * RAD_TO_DEG
     val rawRotation = if (draggingPositiveEnd) angle else angle + 180f
     var norm = (rawRotation % 360f + 360f) % 360f
 
-    // Magnetic angle snapping: snap to nearest 15° if within 2.5°
-    val snapInterval = 15f
-    val nearestSnap = (norm / snapInterval).roundToInt() * snapInterval
-    if (abs(norm - nearestSnap) <= 2.5f) {
-        norm = (nearestSnap % 360f + 360f) % 360f
+    // Stronger magnetic snap to cardinal angles (0°, 90°, 180°, 270°, 360°) within 3.5°
+    val cardinalInterval = 90f
+    val nearestCardinal = (norm / cardinalInterval).roundToInt() * cardinalInterval
+    if (abs(norm - nearestCardinal) <= 3.5f) {
+        norm = (nearestCardinal % 360f + 360f) % 360f
+    } else {
+        // Standard magnetic angle snapping: snap to nearest 15° if within 2.5°
+        val snapInterval = 15f
+        val nearestSnap = (norm / snapInterval).roundToInt() * snapInterval
+        if (abs(norm - nearestSnap) <= 2.5f) {
+            norm = (nearestSnap % 360f + 360f) % 360f
+        }
     }
 
     val dir = direction(norm)
@@ -992,10 +1044,13 @@ private fun DrawScope.drawRulerTool(
 
         // Ticks and centimeter numbers along both edges
         val mm = (pxPerCm / 10f).coerceAtLeast(1.5f)
-        var index = 0
-        var x = left + 14f
-        val usableRight = left + length - 34f
-        while (x <= usableRight) {
+        val inset = RULER_INSET
+        val x0 = left + inset
+        val usableWidth = (length - 2 * inset).coerceAtLeast(0f)
+        val totalMm = (usableWidth / mm).toInt()
+
+        for (index in 0..totalMm) {
+            val x = x0 + index * mm
             val isCm = index % 10 == 0
             val isHalf = index % 5 == 0
             val tickHeight = when {
@@ -1013,13 +1068,16 @@ private fun DrawScope.drawRulerTool(
             if (isCm) {
                 val cmVal = index / 10
                 drawLabel("$cmVal", Offset(x, top + thickness / 2f + 4.5f), tick, 11.5f)
+                if (cmVal == 0) {
+                    drawLabel("cm", Offset(x + 13f, top + thickness / 2f + 4.5f), tickSubtle, 9f)
+                }
             }
-            index++
-            x += mm
         }
 
-        // Length readout label above ruler
-        val rulerTitle = "Ruler  •  ${formatCentimetres(length, pxPerCm)}"
+        // Length readout label above ruler matching exact usable markings
+        val capacityCm = totalMm / 10f
+        val capacityText = String.format(Locale.US, "%.1f cm", capacityCm)
+        val rulerTitle = "Ruler  •  $capacityText"
         drawLabel(rulerTitle, Offset(tool.center.x, top - 18f), tick, 13f)
 
         if (segmentLabel != null) {
@@ -1034,13 +1092,14 @@ private fun DrawScope.drawRulerTool(
         drawLine(Color(0xFFEF4444), closeCenter - Offset(xRadius, xRadius), closeCenter + Offset(xRadius, xRadius), 1.8f)
         drawLine(Color(0xFFEF4444), closeCenter - Offset(-xRadius, xRadius), closeCenter + Offset(-xRadius, xRadius), 1.8f)
 
-        // Rotation & extension handles at both ends with intuitive extend/rotate styling
+        // Rotation & extension handles at both ends with compact radius 16f
+        // so the "0" mark and label at left + 24f are 100% visible and unobstructed!
         listOf(Offset(left, tool.center.y), Offset(left + length, tool.center.y)).forEach { handleCenter ->
-            drawCircle(Color.White, HANDLE_RADIUS * 0.85f, handleCenter)
-            drawCircle(handle, HANDLE_RADIUS * 0.85f, handleCenter, style = DrawStroke(2.5f))
-            drawCircle(handle, 4f, handleCenter)
+            drawCircle(Color.White, 16f, handleCenter)
+            drawCircle(handle, 16f, handleCenter, style = DrawStroke(2.2f))
+            drawCircle(handle, 3.5f, handleCenter)
             // Horizontal extension arrow indicator
-            drawLine(handle, handleCenter - Offset(7f, 0f), handleCenter + Offset(7f, 0f), 1.8f)
+            drawLine(handle, handleCenter - Offset(6f, 0f), handleCenter + Offset(6f, 0f), 1.6f)
         }
     }
 }

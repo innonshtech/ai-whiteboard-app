@@ -742,7 +742,7 @@ private fun instrumentForTool(tool: WhiteboardTool, placed: List<PlacedMathTool>
 private fun sizeLabel(kind: MathToolKind, span: Float, pxPerCm: Float): String {
     val safe = pxPerCm.coerceAtLeast(1f)
     return when (kind) {
-        MathToolKind.RULER -> "Length: ${formatCentimetres(span, safe)}"
+        MathToolKind.RULER -> "Length: ${formatCentimetres((span - 2 * RULER_INSET).coerceAtLeast(0f), safe)}"
         MathToolKind.COMPASS -> "Radius: ${formatCentimetres(span, safe)}"
         MathToolKind.PROTRACTOR -> "Radius: ${formatCentimetres(span, safe)}"
         MathToolKind.SET_SQUARE -> {

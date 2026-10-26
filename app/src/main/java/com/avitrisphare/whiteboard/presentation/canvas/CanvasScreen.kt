@@ -662,11 +662,18 @@ fun DrawScope.renderStroke(
                     isAntiAlias = true
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 }
-                val lines = stroke.text.split("\n")
-                var curY = origin.y + 20f
-                for (line in lines) {
-                    drawText(line, origin.x, curY, paint)
-                    curY += 26f
+                val isMeasurement = stroke.strokeWidth == 18f && !stroke.text.contains("\n")
+                if (isMeasurement) {
+                    paint.textAlign = Paint.Align.CENTER
+                    val textY = origin.y - (paint.descent() + paint.ascent()) / 2f
+                    drawText(stroke.text, origin.x, textY, paint)
+                } else {
+                    val lines = stroke.text.split("\n")
+                    var curY = origin.y + 20f
+                    for (line in lines) {
+                        drawText(line, origin.x, curY, paint)
+                        curY += 26f
+                    }
                 }
             }
         }
@@ -1621,7 +1628,7 @@ fun CanvasScreen(
                             mathGesture.drawDir = direction(straightedge.rotationDeg)
                             mathGesture.rulerEdgeSign = rulerEdgeForPoint(straightedge, down.position)
 
-                            val snappedStartScreen = snapToRulerEdge(straightedge, down.position, mathGesture.rulerEdgeSign)
+                            val snappedStartScreen = snapToRulerEdge(straightedge, down.position, mathGesture.rulerEdgeSign, pxPerCm)
                             val snappedStartWorld = CanvasTransform.screenToWorld(
                                 snappedStartScreen,
                                 canvasScale,
@@ -1830,7 +1837,7 @@ fun CanvasScreen(
                                     val rotation = event.calculateRotation()
                                     val zoom = event.calculateZoom()
                                     val newSpan = if (zoom != 1f && (pinchedTool.kind == MathToolKind.RULER || pinchedTool.kind == MathToolKind.COMPASS)) {
-                                        (pinchedTool.span * zoom).coerceIn(180f, 3600f)
+                                        clampMathSpan(pinchedTool.kind, pinchedTool.span * zoom)
                                     } else pinchedTool.span
                                     val updated = translateAndRotate(
                                         pinchedTool.copy(span = newSpan),
@@ -1840,7 +1847,8 @@ fun CanvasScreen(
                                     replaceMathTool(updated)
                                     if (updated.kind == MathToolKind.RULER) {
                                         val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
-                                        mathReadout = "${formatCentimetres(updated.span, pxPerCm)} • $deg°" to centroid + Offset(0f, -42f)
+                                        val markedSpan = (updated.span - 2 * RULER_INSET).coerceAtLeast(0f)
+                                        mathReadout = "${formatCentimetres(markedSpan, pxPerCm)} • $deg°" to centroid + Offset(0f, -42f)
                                     } else {
                                         mathReadout = null
                                     }
@@ -1944,7 +1952,8 @@ fun CanvasScreen(
                                                     replaceMathTool(updated)
                                                     val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
                                                     val text = if (tool.kind == MathToolKind.RULER) {
-                                                        "${formatCentimetres(updated.span, pxPerCm)} • $deg°"
+                                                        val markedSpan = (updated.span - 2 * RULER_INSET).coerceAtLeast(0f)
+                                                        "${formatCentimetres(markedSpan, pxPerCm)} • $deg°"
                                                     } else {
                                                         "$deg°"
                                                     }
@@ -1998,7 +2007,7 @@ fun CanvasScreen(
                                         val ruler = mathTools.find { it.id == mathGesture.toolId }
                                         if (ruler != null && shapePoints.isNotEmpty()) {
                                             val snappedStartWorld = shapePoints.first()
-                                            val snappedCurrentScreen = snapToRulerEdge(ruler, change.position, mathGesture.rulerEdgeSign)
+                                            val snappedCurrentScreen = snapToRulerEdge(ruler, change.position, mathGesture.rulerEdgeSign, pxPerCm)
                                             val snappedCurrentWorld = CanvasTransform.screenToWorld(
                                                 snappedCurrentScreen,
                                                 canvasScale,

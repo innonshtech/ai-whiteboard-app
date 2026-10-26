@@ -287,15 +287,87 @@ class MathToolsTest {
     }
 
     @Test
-    fun rulerMagneticAngleSnapping() {
+    fun rulerZeroMarkAndTicksVisibility() {
         val ruler = PlacedMathTool(
             kind = MathToolKind.RULER,
             center = Offset(200f, 200f),
             span = 400f
         )
-        // Rotate dragging positive end to almost horizontal (e.g. angle around 1.2 degrees)
-        // Pivot is (0, 200). Drag point (400, 204) -> angle ~ 1.14 degrees -> snaps to 0.0
-        val rotated = rotateToolByEnd(ruler, Offset(400f, 204f), draggingPositiveEnd = true)
-        assertEquals(0f, rotated.rotationDeg, 0.01f)
+        val half = ruler.span / 2f
+        val zeroXLocal = -half + RULER_INSET
+        assertEquals(-176f, zeroXLocal, 0.01f)
+
+        // Handle radius is 16f centered at -half (-200f), so handle reaches -184f.
+        // zeroXLocal is at -176f, giving an 8px clear gap so "0" tick and number are never covered!
+        val handleInnerEdgeLocal = -half + 16f
+        assertTrue(zeroXLocal > handleInnerEdgeLocal)
+        assertEquals(8f, zeroXLocal - handleInnerEdgeLocal, 0.01f)
+    }
+
+    @Test
+    fun rulerMagneticMillimeterSnapping() {
+        val ruler = PlacedMathTool(
+            kind = MathToolKind.RULER,
+            center = Offset(400f, 400f),
+            span = 400f,
+            rotationDeg = 0f
+        )
+        val half = ruler.span / 2f
+        val pxPerCm = 100f
+        val zeroXScreen = ruler.center.x - half + RULER_INSET // 400 - 200 + 24 = 224f
+
+        // Touch near 0.0 cm mark (e.g. at x = 220f or x = 228f) on top edge
+        val nearZeroTouch = Offset(228f, 352f)
+        val snappedZero = snapToRulerEdge(ruler, nearZeroTouch, edgeSign = -1f, pxPerCm = pxPerCm)
+        assertEquals(zeroXScreen, snappedZero.x, 0.01f)
+        assertEquals(352f, snappedZero.y, 0.01f)
+
+        // Touch near 2.0 cm mark (zeroX + 200px = 424f): touch at 422f
+        val near2cmTouch = Offset(422f, 352f)
+        val snapped2cm = snapToRulerEdge(ruler, near2cmTouch, edgeSign = -1f, pxPerCm = pxPerCm)
+        assertEquals(zeroXScreen + 200f, snapped2cm.x, 0.01f)
+
+        // Touch near 3.5 cm mark (zeroX + 350px = 574f): touch at 572f
+        val near3Point5cmTouch = Offset(572f, 352f)
+        val snapped3Point5cm = snapToRulerEdge(ruler, near3Point5cmTouch, edgeSign = -1f, pxPerCm = pxPerCm)
+        assertEquals(zeroXScreen + 350f, snapped3Point5cm.x, 0.01f)
+
+        // Touch past max mark (e.g. at x = 590f): snaps to max mark (zeroX + 352px = 576f)
+        val pastMaxTouch = Offset(590f, 352f)
+        val maxMarkScreen = ruler.center.x + half - RULER_INSET // 400 + 200 - 24 = 576f
+        val snappedMax = snapToRulerEdge(ruler, pastMaxTouch, edgeSign = -1f, pxPerCm = pxPerCm)
+        assertEquals(maxMarkScreen, snappedMax.x, 0.01f)
+    }
+
+    @Test
+    fun rulerDrawingAlongTopEdgeDoesNotHitCloseButton() {
+        val ruler = PlacedMathTool(
+            kind = MathToolKind.RULER,
+            center = Offset(300f, 300f),
+            span = 440f,
+            rotationDeg = 0f
+        )
+        // half = 220f, halfT = 48f.
+        // Close button center is at (300 + 220 - 24, 300 - 48 + 22) = (496f, 274f).
+        // 1. Tapping directly inside at the close button returns CLOSE:
+        val closeInside = Offset(496f, 274f)
+        assertEquals(MathToolZone.CLOSE, hitTestMathTool(ruler, closeInside))
+
+        // 2. Drawing along top edge right past the close button (y = 300 - 48 = 252f) returns NONE:
+        val drawOnTopEdge = Offset(496f, 252f)
+        assertEquals(MathToolZone.NONE, hitTestMathTool(ruler, drawOnTopEdge))
+    }
+
+    @Test
+    fun rulerDragRulerEndCardinalAngleSnapping() {
+        val ruler = PlacedMathTool(
+            kind = MathToolKind.RULER,
+            center = Offset(200f, 200f),
+            span = 400f
+        )
+        // Rotate dragging positive end to nearly vertical (~91.5 degrees)
+        // Pivot is (0, 200). Drag point (5, 600) -> dy = 400, dx = 5 -> angle ~ 89.3° -> snaps to 90.0°
+        val rotated = dragRulerEnd(ruler, Offset(5f, 600f), draggingPositiveEnd = true)
+        assertEquals(90f, rotated.rotationDeg, 0.01f)
     }
 }
