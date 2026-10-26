@@ -679,7 +679,7 @@ fun DrawScope.renderStroke(
     }
 
     if (isSelected) {
-        val b = stroke.bounds
+        val b = strokeSelectionBounds(stroke)
         val pad = 8f / safeScale
         val handleRadius = 5f / safeScale
         val selColor = Color(0xFF6366F1)
@@ -1004,6 +1004,13 @@ fun CanvasScreen(
     var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
     val chromeBounds = remember { ChromeBounds() }
     var dockDismissNonce by remember { mutableIntStateOf(0) }
+    var selectionToolbarDismissed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.selectedStrokeIds) {
+        if (state.selectedStrokeIds.isNotEmpty()) {
+            selectionToolbarDismissed = false
+        }
+    }
 
     // Math instruments live in screen space so centimetre marks stay physical size.
     var mathTools by remember { mutableStateOf(listOf<PlacedMathTool>()) }
@@ -1352,6 +1359,10 @@ fun CanvasScreen(
                         }
                         var down = awaitFirstDown(requireUnconsumed = false)
                         dockDismissNonce++
+                        val toolbarWasOpen = state.selectedStrokeIds.isNotEmpty() && !selectionToolbarDismissed
+                        if (toolbarWasOpen) {
+                            selectionToolbarDismissed = true
+                        }
                         while (down.rejectedPalm(stylusDrawing = false)) {
                             down.consume()
                             val skipped = awaitPointerEvent()
@@ -1378,7 +1389,17 @@ fun CanvasScreen(
                             WhiteboardTool.DIAMOND,
                             WhiteboardTool.LINE,
                             WhiteboardTool.ARROW,
-                            WhiteboardTool.FRAME
+                            WhiteboardTool.FRAME,
+                            WhiteboardTool.TRIANGLE,
+                            WhiteboardTool.STAR,
+                            WhiteboardTool.ELLIPSE,
+                            WhiteboardTool.SQUARE,
+                            WhiteboardTool.HEXAGON,
+                            WhiteboardTool.ROUND_RECT,
+                            WhiteboardTool.CUBE,
+                            WhiteboardTool.CYLINDER,
+                            WhiteboardTool.CONE,
+                            WhiteboardTool.PYRAMID
                         )
                         val activeTool = if (isPalmEraser) {
                             WhiteboardTool.ERASER
@@ -1599,29 +1620,45 @@ fun CanvasScreen(
                             mathReadout = "Line: 0.0 cm" to readoutPos
                         }
 
+                        if (state.selectedStrokeIds.isNotEmpty() && activeTool != WhiteboardTool.SELECT) {
+                            viewModel.clearSelection()
+                        }
+
                         if (mathHit == null && straightedge == null) when (activeTool) {
                             WhiteboardTool.HAND -> {
                                 // Hand pan mode
                             }
                             WhiteboardTool.SELECT -> {
-                                val slop = 28f / canvasScale.coerceAtLeast(0.001f)
+                                val handleSlop = 16f / canvasScale.coerceAtLeast(0.001f)
+                                val moveSlop = 36f / canvasScale.coerceAtLeast(0.001f)
                                 val selectedHandle = viewModel.state.value.strokes.firstNotNullOfOrNull { stroke ->
                                     if (stroke.id !in state.selectedStrokeIds) {
                                         null
                                     } else {
-                                        hitShapeHandle(stroke, downWorld, slop)?.let { stroke.id to it }
+                                        hitShapeHandle(stroke, downWorld, handleSlop)?.let { stroke.id to it }
                                     }
                                 }
                                 if (selectedHandle != null) {
                                     resizeStrokeId = selectedHandle.first
                                     resizeHandle = selectedHandle.second
                                 } else {
-                                    val hit = viewModel.strokeAt(downWorld)
-                                    strokeHit = hit != null
-                                    if (hit != null && hit.id in state.selectedStrokeIds) {
+                                    val selectedStrokes = viewModel.state.value.strokes.filter { it.id in state.selectedStrokeIds }
+                                    val hitSelected = selectedStrokes.isNotEmpty() && selectedStrokes.any { stroke ->
+                                        val b = strokeSelectionBounds(stroke)
+                                        downWorld.x >= b.left - moveSlop && downWorld.x <= b.right + moveSlop &&
+                                        downWorld.y >= b.top - moveSlop && downWorld.y <= b.bottom + moveSlop
+                                    }
+                                    if (hitSelected) {
                                         isDraggingSelection = true
                                     } else {
-                                        selectingBox = true
+                                        val hit = viewModel.strokeAt(downWorld)
+                                        strokeHit = hit != null
+                                        if (hit != null) {
+                                            viewModel.selectStrokeAt(downWorld)
+                                            isDraggingSelection = true
+                                        } else {
+                                            selectingBox = true
+                                        }
                                     }
                                 }
                             }
@@ -2024,17 +2061,48 @@ fun CanvasScreen(
                                             appendInk(change.position, change.inkPressure())
                                         }
                                         publishInk()
-                                    } else if (activeTool in listOf(
+                                    } else if (isShapeActive || activeTool in listOf(
                                             WhiteboardTool.RECTANGLE,
                                             WhiteboardTool.DIAMOND,
                                             WhiteboardTool.CIRCLE,
                                             WhiteboardTool.ARROW,
                                             WhiteboardTool.LINE,
                                             WhiteboardTool.FRAME,
+                                            WhiteboardTool.TRIANGLE,
+                                            WhiteboardTool.STAR,
+                                            WhiteboardTool.ELLIPSE,
+                                            WhiteboardTool.SQUARE,
+                                            WhiteboardTool.HEXAGON,
+                                            WhiteboardTool.ROUND_RECT,
+                                            WhiteboardTool.CUBE,
+                                            WhiteboardTool.CYLINDER,
+                                            WhiteboardTool.CONE,
+                                            WhiteboardTool.PYRAMID,
                                             WhiteboardTool.SHAPE
                                         )
                                     ) {
-                                        shapePoints = listOf(downWorld, curWorld)
+                                        val sType = when (activeTool) {
+                                            WhiteboardTool.RECTANGLE -> StrokeType.RECTANGLE
+                                            WhiteboardTool.DIAMOND -> StrokeType.DIAMOND
+                                            WhiteboardTool.CIRCLE -> StrokeType.CIRCLE
+                                            WhiteboardTool.ARROW -> StrokeType.ARROW
+                                            WhiteboardTool.LINE -> StrokeType.LINE
+                                            WhiteboardTool.FRAME -> StrokeType.FRAME
+                                            WhiteboardTool.TRIANGLE -> StrokeType.TRIANGLE
+                                            WhiteboardTool.STAR -> StrokeType.STAR
+                                            WhiteboardTool.ELLIPSE -> StrokeType.ELLIPSE
+                                            WhiteboardTool.SQUARE -> StrokeType.SQUARE
+                                            WhiteboardTool.HEXAGON -> StrokeType.HEXAGON
+                                            WhiteboardTool.ROUND_RECT -> StrokeType.ROUND_RECT
+                                            WhiteboardTool.CUBE -> StrokeType.CUBE
+                                            WhiteboardTool.CYLINDER -> StrokeType.CYLINDER
+                                            WhiteboardTool.CONE -> StrokeType.CONE
+                                            WhiteboardTool.PYRAMID -> StrokeType.PYRAMID
+                                            WhiteboardTool.SHAPE -> state.activeShapeType
+                                            else -> StrokeType.PEN
+                                        }
+                                        val endPoint = if (sType in lockedAspect) lockToSquare(downWorld, curWorld) else curWorld
+                                        shapePoints = listOf(downWorld, endPoint)
                                         viewModel.updateStroke(shapePoints)
                                     }
                                     prevPosition = change.position
@@ -2043,14 +2111,20 @@ fun CanvasScreen(
                             }
                         } while (event.changes.any { it.pressed })
 
+                        val moved = kotlin.math.hypot(
+                            (prevPosition.x - down.position.x).toDouble(),
+                            (prevPosition.y - down.position.y).toDouble()
+                        ).toFloat()
+
                         if (selectingBox) {
                             boardStage?.setMarquee(null, null)
-                            val moved = kotlin.math.hypot(
-                                (prevPosition.x - down.position.x).toDouble(),
-                                (prevPosition.y - down.position.y).toDouble()
-                            ).toFloat()
                             if (moved < 14f) {
-                                viewModel.selectStrokeAt(downWorld)
+                                val clickedStroke = viewModel.strokeAt(downWorld)
+                                if (clickedStroke != null) {
+                                    viewModel.selectStrokeAt(downWorld)
+                                } else if (!toolbarWasOpen) {
+                                    viewModel.clearSelection()
+                                }
                             } else {
                                 val endWorld = CanvasTransform.screenToWorld(
                                     prevPosition,
@@ -2066,6 +2140,9 @@ fun CanvasScreen(
                                     )
                                 )
                             }
+                        } else if (isDraggingSelection && moved < 14f && !toolbarWasOpen) {
+                            // Tapping an already-selected shape when toolbar was closed re-opens the toolbar
+                            selectionToolbarDismissed = false
                         }
                         viewModel.endSelectionMove()
 
@@ -2526,21 +2603,28 @@ fun CanvasScreen(
                                         )
                                     }
                                 }
-                            } else if (activeTool in listOf(
+                            } else if ((isShapeActive || activeTool in listOf(
                                     WhiteboardTool.RECTANGLE,
                                     WhiteboardTool.DIAMOND,
                                     WhiteboardTool.CIRCLE,
                                     WhiteboardTool.ARROW,
                                     WhiteboardTool.LINE,
                                     WhiteboardTool.FRAME,
+                                    WhiteboardTool.TRIANGLE,
+                                    WhiteboardTool.STAR,
+                                    WhiteboardTool.ELLIPSE,
+                                    WhiteboardTool.SQUARE,
+                                    WhiteboardTool.HEXAGON,
+                                    WhiteboardTool.ROUND_RECT,
+                                    WhiteboardTool.CUBE,
+                                    WhiteboardTool.CYLINDER,
+                                    WhiteboardTool.CONE,
+                                    WhiteboardTool.PYRAMID,
                                     WhiteboardTool.SHAPE
-                                ) && shapePoints.size >= 2
+                                )) && shapePoints.size >= 2
                             ) {
                                 viewModel.updateStroke(shapePoints)
                                 viewModel.finishStroke()
-                                if (!state.isToolLocked) {
-                                    viewModel.setTool(WhiteboardTool.SELECT)
-                                }
                             }
                         }
                     }
@@ -2803,6 +2887,8 @@ fun CanvasScreen(
             onInsertImage = { imagePickerLauncher.launch("image/*") },
             onExport = {
                 exportResult = null
+                viewModel.clearSelection()
+                selectionToolbarDismissed = true
                 showExportLessonDialog = true
             },
             onOpenIwb = {
@@ -2909,6 +2995,8 @@ fun CanvasScreen(
             },
             demoMode = demoMode,
             dockDismissNonce = dockDismissNonce,
+            selectionToolbarDismissed = selectionToolbarDismissed,
+            onDismissSelectionToolbar = { selectionToolbarDismissed = it },
             onSave = { viewModel.confirmSave() },
             onSaveSlides = {
                 viewModel.exportAllSlidesPdf { uri ->
@@ -2949,7 +3037,11 @@ fun CanvasScreen(
                 periodicTableState = periodicTableState.copy(isVisible = next)
                 if (next) bringToolToFront(UtilityToolKind.PERIODIC_TABLE)
             },
-            onOpenStickerEmoji = { showStickerEmojiDialog = true },
+            onOpenStickerEmoji = {
+                viewModel.clearSelection()
+                selectionToolbarDismissed = true
+                showStickerEmojiDialog = true
+            },
             onEditNodeText = { strokeId, currentText ->
                 editingNodeStrokeId = strokeId
                 editingNodeText = currentText
@@ -4418,6 +4510,7 @@ fun CanvasScreen(
             Text("Note exported to Pictures/AvitriSphare", color = Color(0xFF6B7280), fontSize = 14.sp)
         }
     }
+
     // Export lesson dialog (PDF, PNG ZIP, IWB)
     if (showExportLessonDialog) {
         val allPages = viewModel.getAllPages()

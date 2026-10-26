@@ -311,6 +311,17 @@ fun strokeSelectionBounds(stroke: Stroke): Rect {
         val (width, height) = formulaExtent(stroke.text, size)
         return Rect(origin.x, origin.y, origin.x + width, origin.y + height)
     }
+    if (stroke.strokeType == StrokeType.SQUARE && stroke.points.size >= 2) {
+        val p1 = stroke.points.first()
+        val p2 = stroke.points.last()
+        val left = minOf(p1.x, p2.x)
+        val top = minOf(p1.y, p2.y)
+        val width = kotlin.math.abs(p2.x - p1.x)
+        val height = kotlin.math.abs(p2.y - p1.y)
+        val side = minOf(width, height)
+        val halfW = stroke.strokeWidth / 2f
+        return Rect(left - halfW, top - halfW, left + side + halfW, top + side + halfW)
+    }
     return stroke.bounds
 }
 

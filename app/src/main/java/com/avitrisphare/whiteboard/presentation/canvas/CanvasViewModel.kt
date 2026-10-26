@@ -1281,10 +1281,33 @@ class CanvasViewModel @Inject constructor(
 
     fun strokeAt(worldPoint: Offset): Stroke? {
         return _state.value.strokes.lastOrNull { stroke ->
-            if (stroke.isPlacedMedia() || stroke.strokeType in listOf(StrokeType.STICKY_NOTE, StrokeType.TEXT, StrokeType.FRAME, StrokeType.EQUATION)) {
-                strokeSelectionBounds(stroke).contains(worldPoint)
+            if (stroke.isPlacedMedia() ||
+                isFillableShape(stroke.strokeType) ||
+                stroke.strokeType in listOf(
+                    StrokeType.STICKY_NOTE,
+                    StrokeType.TEXT,
+                    StrokeType.FRAME,
+                    StrokeType.EQUATION,
+                    StrokeType.RECTANGLE,
+                    StrokeType.SQUARE,
+                    StrokeType.CIRCLE,
+                    StrokeType.ELLIPSE,
+                    StrokeType.TRIANGLE,
+                    StrokeType.DIAMOND,
+                    StrokeType.STAR,
+                    StrokeType.HEXAGON,
+                    StrokeType.ROUND_RECT,
+                    StrokeType.CUBE,
+                    StrokeType.CYLINDER,
+                    StrokeType.CONE,
+                    StrokeType.PYRAMID
+                )
+            ) {
+                val b = strokeSelectionBounds(stroke)
+                worldPoint.x >= b.left - 16f && worldPoint.x <= b.right + 16f &&
+                worldPoint.y >= b.top - 16f && worldPoint.y <= b.bottom + 16f
             } else {
-                CanvasTransform.strokeIntersectsPoint(stroke, worldPoint, thresholdRadius = 16f)
+                CanvasTransform.strokeIntersectsPoint(stroke, worldPoint, thresholdRadius = 24f)
             }
         }
     }

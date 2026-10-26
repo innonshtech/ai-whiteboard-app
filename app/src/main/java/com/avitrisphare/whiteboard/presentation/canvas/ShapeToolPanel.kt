@@ -22,8 +22,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -67,16 +74,14 @@ private val SHAPE_PRESET_COLORS = listOf(
     0xFFFFFFFF.toInt()  // White
 )
 
-private val TOP_CATEGORIES = listOf("Media", "Tools", "Shapes", "Widgets", "Templates")
-
 @Composable
 fun ShapeToolPanel(
     state: CanvasState,
     viewModel: CanvasViewModel,
     onClose: () -> Unit,
+    onDrag: ((Offset) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    var selectedTopTab by remember { mutableStateOf("Shapes") }
     var selectedCategory by remember { mutableStateOf(ShapeCategory.SHAPES_2D) }
     var showColorPicker by remember { mutableStateOf(false) }
 
@@ -97,56 +102,80 @@ fun ShapeToolPanel(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 4.dp, vertical = 2.dp)
     ) {
-        // --- Top Category Bar ---
+        // --- Header (Drag Handle & Close Button) ---
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFFF1F5F9))
+                .then(
+                    if (onDrag != null) {
+                        Modifier.pointerInput(Unit) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                onDrag(dragAmount)
+                            }
+                        }
+                    } else Modifier
+                )
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TOP_CATEGORIES.forEach { tab ->
-                    val isSelected = tab == selectedTopTab
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) Color(0xFFEFF6FF) else Color.Transparent)
-                            .clickable { selectedTopTab = tab }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = tab,
-                            fontSize = 13.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) Color(0xFF2563EB) else Color(0xFF6B7280)
-                        )
-                    }
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFFF3F4F6))
-                    .clickable(onClick = onClose),
-                contentAlignment = Alignment.Center
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = Color(0xFF4B5563),
+                    imageVector = Icons.Default.DragHandle,
+                    contentDescription = "Move Shapes Window",
+                    tint = Color(0xFF64748B),
                     modifier = Modifier.size(18.dp)
                 )
+                Text(
+                    text = "Shapes",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF334155)
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (onDrag != null) {
+                    Text(
+                        text = "Drag to move",
+                        fontSize = 11.sp,
+                        color = Color(0xFF94A3B8)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(32.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color(0xFFCBD5E1))
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE2E8F0))
+                        .clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color(0xFF475569),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
 
         // --- Sub-category Pills (2D Shapes, Lines & Rays, 3D Solids) ---
         Row(
@@ -154,34 +183,34 @@ fun ShapeToolPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ShapeCategory.values().forEach { cat ->
-                val isCatSelected = cat == selectedCategory
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (isCatSelected) Color(0xFF2563EB) else Color(0xFFF3F4F6))
-                        .clickable { selectedCategory = cat }
-                        .padding(vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = cat.label,
-                        fontSize = 12.sp,
-                        fontWeight = if (isCatSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isCatSelected) Color.White else Color(0xFF374151),
-                        maxLines = 1
-                    )
+                ShapeCategory.values().forEach { cat ->
+                    val isCatSelected = cat == selectedCategory
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isCatSelected) Color(0xFF2563EB) else Color(0xFFF3F4F6))
+                            .clickable { selectedCategory = cat }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = cat.label,
+                            fontSize = 12.sp,
+                            fontWeight = if (isCatSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isCatSelected) Color.White else Color(0xFF374151),
+                            maxLines = 1
+                        )
+                    }
                 }
             }
-        }
 
-        Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(12.dp))
 
-        // --- Horizontal Shape Cards Grid ---
-        val shapesInCat = remember(selectedCategory) {
-            ALL_SHAPES.filter { it.category == selectedCategory }
-        }
+            // --- Horizontal Shape Cards Grid ---
+            val shapesInCat = remember(selectedCategory) {
+                ALL_SHAPES.filter { it.category == selectedCategory }
+            }
 
         Row(
             modifier = Modifier
@@ -496,6 +525,12 @@ private fun ShapeIconPreview(spec: ShapeSpec, tint: Color) {
             StrokeType.RECTANGLE -> {
                 drawRect(tint, topLeft = box.topLeft, size = box.size, style = stroke)
             }
+            StrokeType.SQUARE -> {
+                val side = minOf(box.width, box.height)
+                val left = box.center.x - side / 2f
+                val top = box.center.y - side / 2f
+                drawRect(tint, topLeft = Offset(left, top), size = Size(side, side), style = stroke)
+            }
             StrokeType.ROUNDED_RECTANGLE -> {
                 drawRoundRect(
                     tint,
@@ -704,3 +739,4 @@ private fun CustomColorPicker(
         }
     }
 }
+
