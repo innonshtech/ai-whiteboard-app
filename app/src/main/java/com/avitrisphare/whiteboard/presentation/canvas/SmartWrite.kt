@@ -94,6 +94,13 @@ fun candidateTexts(raw: String): List<String> {
     return listOf(text, text.lowercase(), titled).distinct().take(3)
 }
 
+fun isConvertibleEquationInk(stroke: Stroke): Boolean {
+    if (stroke.points.isEmpty()) return false
+    return stroke.strokeType in HANDWRITING_TYPES ||
+        stroke.strokeType == StrokeType.LINE ||
+        stroke.strokeType == StrokeType.HIGHLIGHTER
+}
+
 fun isStraightMark(stroke: Stroke): Boolean {
     return strokeStraightness(stroke.points) >= 0.8f
 }
@@ -220,29 +227,21 @@ class HandwritingReader(@Suppress("UNUSED_PARAMETER") context: Context) {
         return recognizeAfterDownload(strokes, language)
     }
 
-    suspend fun readMath(strokes: List<Stroke>): List<HandwritingGuess> {
+    suspend fun readMath(strokes: List<Stroke>, allowDownload: Boolean = true): List<HandwritingGuess> {
         if (strokes.isEmpty()) return emptyList()
 
-        // 1. Unbiased on-device Digital Ink Recognition (primary engine)
-        // No preContext bias so letters like Y, y, a, b are never falsely coerced into x.
+        // Unbiased on-device Digital Ink, only when the model is already on the panel.
+        // A download is not allowed to hold up Convert Equation.
         val inkGuesses = recognizeDownloadedInk(
             strokes,
             SmartWriteLanguage("en", "English", SmartWriteScript.LATIN),
             preContext = null
         )
-        if (inkGuesses.isNotEmpty()) {
-            return inkGuesses
-        }
+        if (inkGuesses.isNotEmpty()) return inkGuesses
 
-        prefetch(SmartWriteLanguage("en", "English", SmartWriteScript.LATIN))
-
-        // 2. Fallback: Vision Text Recognition (OCR) on rendered bitmap
         val fromOcr = recognizeImage(strokes, SmartWriteScript.LATIN)
-        if (fromOcr.isNotEmpty()) {
-            return fromOcr
-        }
+        if (fromOcr.isNotEmpty() || !allowDownload) return fromOcr
 
-        // 3. Fallback: Wait for downloaded Digital Ink model
         return recognizeAfterDownload(
             strokes,
             SmartWriteLanguage("en", "English", SmartWriteScript.LATIN)

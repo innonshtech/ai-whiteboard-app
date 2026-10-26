@@ -84,8 +84,8 @@ fun normalizeMathReading(raw: String): String {
         .replace("÷", "\\div ").replace("·", "\\cdot ").replace("√", "\\sqrt ")
         .replace("∫", "\\int ").replace("π", "\\pi ").replace("α", "\\alpha ")
         .replace("β", "\\beta ").replace("γ", "\\gamma ").replace("Δ", "\\Delta ")
-        .replace("δ", "\\delta ").replace("θ", "\\theta ").replace("λ", "\\lambda ")
-        .replace("μ", "\\mu ").replace("σ", "\\sigma ").replace("Ω", "\\omega ")
+        .replace("δ", "\\delta ").replace("Δ", "\\Delta ").replace("θ", "\\theta ").replace("λ", "\\lambda ")
+        .replace("μ", "\\mu ").replace("σ", "\\sigma ").replace("Ω", "\\Omega ")
         .replace("ω", "\\omega ")
     greekWords.forEach { (word, command) ->
         text = Regex("(?<!\\\\)\\b$word\\b", RegexOption.IGNORE_CASE).replace(text) { command }
@@ -311,6 +311,17 @@ fun strokeSelectionBounds(stroke: Stroke): Rect {
         val (width, height) = formulaExtent(stroke.text, size)
         return Rect(origin.x, origin.y, origin.x + width, origin.y + height)
     }
+    if (stroke.strokeType == StrokeType.SQUARE && stroke.points.size >= 2) {
+        val p1 = stroke.points.first()
+        val p2 = stroke.points.last()
+        val left = minOf(p1.x, p2.x)
+        val top = minOf(p1.y, p2.y)
+        val width = kotlin.math.abs(p2.x - p1.x)
+        val height = kotlin.math.abs(p2.y - p1.y)
+        val side = minOf(width, height)
+        val halfW = stroke.strokeWidth / 2f
+        return Rect(left - halfW, top - halfW, left + side + halfW, top + side + halfW)
+    }
     return stroke.bounds
 }
 
@@ -440,7 +451,9 @@ private class LatexCursor(val source: String) {
             "alpha" -> Formula.Atom("α")
             "beta" -> Formula.Atom("β")
             "gamma" -> Formula.Atom("γ")
-            "delta", "Delta" -> Formula.Atom("δ")
+            "Delta" -> Formula.Atom("Δ")
+            "delta" -> Formula.Atom("δ")
+            "Omega" -> Formula.Atom("Ω")
             "theta" -> Formula.Atom("θ")
             "lambda" -> Formula.Atom("λ")
             "mu" -> Formula.Atom("μ")

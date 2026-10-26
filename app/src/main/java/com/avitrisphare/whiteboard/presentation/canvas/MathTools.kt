@@ -59,6 +59,13 @@ data class PlacedMathTool(
     val angleMode: Int = 0
 )
 
+/** Size, rotation, or protractor arm sent from the Geometry panel. Null fields stay as they are. */
+data class MathToolAdjust(
+    val span: Float? = null,
+    val rotationDeg: Float? = null,
+    val pointerAngleDeg: Float? = null
+)
+
 data class MathToolHit(
     val tool: PlacedMathTool,
     val zone: MathToolZone
@@ -123,6 +130,23 @@ fun defaultMathSpan(kind: MathToolKind): Float = when (kind) {
     MathToolKind.SET_SQUARE -> 280f
     MathToolKind.TRIANGLE -> 220f
 }
+
+/** Span limits already used by the on-board scale handles, in screen pixels. */
+fun mathSpanRange(kind: MathToolKind): ClosedFloatingPointRange<Float> = when (kind) {
+    MathToolKind.RULER -> 200f..1800f
+    MathToolKind.COMPASS -> COMPASS_MIN_RADIUS..COMPASS_MAX_RADIUS
+    MathToolKind.PROTRACTOR -> 120f..800f
+    MathToolKind.SET_SQUARE -> 120f..1000f
+    MathToolKind.TRIANGLE -> 120f..900f
+}
+
+fun clampMathSpan(kind: MathToolKind, span: Float): Float {
+    val range = mathSpanRange(kind)
+    return span.coerceIn(range.start, range.endInclusive)
+}
+
+/** Equilateral side length. Matches the triangle instrument drawing. */
+fun triangleSidePx(span: Float): Float = span * 1.8f
 
 fun newMathTool(kind: MathToolKind, center: Offset): PlacedMathTool {
     return PlacedMathTool(kind = kind, center = center, span = defaultMathSpan(kind))
