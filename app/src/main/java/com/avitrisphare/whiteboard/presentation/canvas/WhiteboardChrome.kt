@@ -1,6 +1,17 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -16,6 +27,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -180,9 +192,10 @@ private val ButtonGradient = listOf(
     Color(0xFFA855F7)  // 100%
 )
 
-// Figma: #FFFFFF 40% translucent + #2563EB 20% frosted glass composite (#E4ECFC at 35% opacity for authentic glass translucency)
-private val DockBackgroundColor = Color(0x59E4ECFC)
-private val DockGlassBorder = BorderStroke(1.dp, Color.White.copy(alpha = 0.9f))
+// Figma: Plain solid white background (#FFFFFF) + blue border (#9DC1FE)
+private val DockBackgroundColor = Color.White
+private val DockBorderColor = Color(0xFF9DC1FE)
+private val DockBorder = BorderStroke(1.dp, DockBorderColor)
 
 // Figma: Drop shadow X: 0, Y: 8, Blur: 28, Spread: 0, Behind transparent areas: checked, Color: #2563EB 20% (#2563EB33)
 // We clip at top = 0 so the shadow casts downward and does NOT bleed upwards onto the canvas!
@@ -334,10 +347,25 @@ fun AvitriSphareWhiteboardChrome(
     var leftBarBounds by remember { mutableStateOf<Rect?>(null) }
     var centerBarBounds by remember { mutableStateOf<Rect?>(null) }
     var rightBarBounds by remember { mutableStateOf<Rect?>(null) }
+    var isNavbarVisible by rememberSaveable { mutableStateOf(true) }
+    var isPagesListVisible by rememberSaveable { mutableStateOf(true) }
+    var leftBarOffset by remember { mutableStateOf(Offset.Zero) }
+    var centerBarOffset by remember { mutableStateOf(Offset.Zero) }
+    var rightBarOffset by remember { mutableStateOf(Offset.Zero) }
 
-    androidx.compose.runtime.LaunchedEffect(topBarBounds, leftBarBounds, centerBarBounds, rightBarBounds) {
-        val list = listOfNotNull(topBarBounds, leftBarBounds, centerBarBounds, rightBarBounds)
+    androidx.compose.runtime.LaunchedEffect(topBarBounds, leftBarBounds, centerBarBounds, rightBarBounds, isNavbarVisible) {
+        val list = if (isNavbarVisible) {
+            listOfNotNull(topBarBounds, leftBarBounds, centerBarBounds, rightBarBounds)
+        } else {
+            listOfNotNull(topBarBounds)
+        }
         onFrostedBounds(list)
+    }
+
+    androidx.compose.runtime.LaunchedEffect(isNavbarVisible) {
+        if (!isNavbarVisible) {
+            onDockBounds(Rect.Zero)
+        }
     }
 
     androidx.compose.runtime.LaunchedEffect(dockDismissNonce) {
@@ -379,8 +407,8 @@ fun AvitriSphareWhiteboardChrome(
                     shadowColor = if (state.isDarkCanvas) Color(0x40000000) else Color(0x332563EB)
                 ),
             shape = RoundedCornerShape(18.dp),
-            color = if (state.isDarkCanvas) Color(0x661E293B) else DockBackgroundColor,
-            border = if (state.isDarkCanvas) BorderStroke(1.dp, Color(0x40FFFFFF)) else DockGlassBorder,
+            color = if (state.isDarkCanvas) Color(0xFF1E293B) else DockBackgroundColor,
+            border = if (state.isDarkCanvas) BorderStroke(1.dp, Color(0xFF334155)) else DockBorder,
             shadowElevation = 0.dp
         ) {
             Row(
@@ -458,12 +486,18 @@ fun AvitriSphareWhiteboardChrome(
             }
         }
 
-        Column(
+        AnimatedVisibility(
+            visible = isNavbarVisible,
+            enter = fadeIn() + slideInVertically { it },
+            exit = fadeOut() + slideOutVertically { it },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxWidth()
         ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
             if (state.selectedStrokeIds.isNotEmpty() && !selectionToolbarDismissed) {
                 val selectedStrokes = remember(state.strokes, state.selectedStrokeIds) {
                     state.strokes.filter { it.id in state.selectedStrokeIds }
@@ -840,53 +874,81 @@ fun AvitriSphareWhiteboardChrome(
             }
             Spacer(Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            AnimatedVisibility(
+                visible = isPagesListVisible,
+                enter = fadeIn(tween(250)) + slideInHorizontally(tween(300)) { -it } + expandHorizontally(tween(300), expandFrom = Alignment.Start),
+                exit = fadeOut(tween(250)) + slideOutHorizontally(tween(300)) { -it } + shrinkHorizontally(tween(300), shrinkTowards = Alignment.Start),
+                modifier = Modifier.align(Alignment.Start)
             ) {
-                val count = state.pageCount.coerceAtLeast(1)
-                val documentOpen = state.document != null
-                val firstThumb = if (documentOpen) (state.pageIndex - 2).coerceAtLeast(0) else 0
-                val lastThumb = if (documentOpen) (state.pageIndex + 3).coerceAtMost(count - 1) else count - 1
-                for (index in firstThumb..lastThumb) {
-                    val strokes = if (index == state.pageIndex) {
-                        state.strokes
-                    } else {
-                        state.pagePreviews.getOrElse(index) { emptyList() }
-                    }
-                    PageThumbnail(
-                        index = index,
-                        title = state.pageTitles.getOrElse(index) { "Page ${index + 1}" },
-                        strokes = strokes,
-                        selected = index == state.pageIndex,
-                        dark = state.isDarkCanvas,
-                        onClick = { viewModel.selectPage(index) },
-                        onOptionsClick = { pageMenuIndex = index },
-                        onLongClick = { pageMenuIndex = index }
-                    )
-                }
-                if (state.document == null && state.pageCount < 50) {
-                    Surface(
-                        modifier = Modifier
-                            .size(width = 72.dp, height = 52.dp)
-                            .clickable { viewModel.addPage() },
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (state.isDarkCanvas) Color(0xFF262626) else Color(0xFFF1F5F9),
-                        border = BorderStroke(1.dp, if (state.isDarkCanvas) Color(0xFF404040) else Color(0xFFCBD5E1)),
-                        shadowElevation = 0.dp
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = "Add page",
-                                tint = Color(0xFF2563EB),
-                                modifier = Modifier.size(22.dp)
-                            )
+                Row(
+                    modifier = Modifier
+                        .wrapContentWidth(Alignment.Start)
+                        .horizontalScroll(rememberScrollState())
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val count = state.pageCount.coerceAtLeast(1)
+                    val documentOpen = state.document != null
+                    val firstThumb = if (documentOpen) (state.pageIndex - 2).coerceAtLeast(0) else 0
+                    val lastThumb = if (documentOpen) (state.pageIndex + 3).coerceAtMost(count - 1) else count - 1
+                    for (index in firstThumb..lastThumb) {
+                        val strokes = if (index == state.pageIndex) {
+                            state.strokes
+                        } else {
+                            state.pagePreviews.getOrElse(index) { emptyList() }
                         }
+                        val pageBgKey = state.pageBackgroundKeys.getOrElse(index) {
+                            if (state.isDarkCanvas) CanvasBackground.DARK.key else CanvasBackground.DOTTED.key
+                        }
+                        val isPageDark = CanvasBackground.fromKey(pageBgKey) == CanvasBackground.DARK
+                        PageThumbnail(
+                            index = index,
+                            title = state.pageTitles.getOrElse(index) { "Page ${index + 1}" },
+                            strokes = strokes,
+                            selected = index == state.pageIndex,
+                            dark = isPageDark,
+                            onClick = { viewModel.selectPage(index) },
+                            onOptionsClick = { pageMenuIndex = index },
+                            onLongClick = { pageMenuIndex = index }
+                        )
+                    }
+                    if (state.document == null && state.pageCount < 50) {
+                        Surface(
+                            modifier = Modifier
+                                .size(width = 72.dp, height = 52.dp)
+                                .clickable { viewModel.addPage() },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (state.isDarkCanvas) Color(0xFF262626) else Color(0xFFF1F5F9),
+                            border = BorderStroke(1.dp, if (state.isDarkCanvas) Color(0xFF404040) else Color(0xFFCBD5E1)),
+                            shadowElevation = 0.dp
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = "Add page",
+                                    tint = Color(0xFF2563EB),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .height(42.dp)
+                            .width(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Brush.horizontalGradient(ButtonGradient))
+                            .clickable { isPagesListVisible = false },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.ChevronLeft,
+                            contentDescription = "Hide pages list",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
             }
@@ -944,11 +1006,58 @@ fun AvitriSphareWhiteboardChrome(
             ) {
                 // 1) Left Bar: Main Menu, Exit
                 DockBar(
-                    modifier = Modifier.onGloballyPositioned {
-                        leftBarBounds = it.boundsInRoot().keptIfSame(leftBarBounds)
-                    },
+                    modifier = Modifier
+                        .offset { IntOffset(leftBarOffset.x.roundToInt(), leftBarOffset.y.roundToInt()) }
+                        .onGloballyPositioned {
+                            leftBarBounds = it.boundsInRoot().keptIfSame(leftBarBounds)
+                        },
                     isDark = state.isDarkCanvas
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 2.dp)
+                            .size(width = 16.dp, height = 36.dp)
+                            .pointerInput(Unit) {
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    leftBarOffset = Offset(
+                                        (leftBarOffset.x + dragAmount.x).coerceIn(-1200f, 1200f),
+                                        (leftBarOffset.y + dragAmount.y).coerceIn(-1600f, 100f)
+                                    )
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DragHandle,
+                            contentDescription = "Drag Left Bar",
+                            tint = if (state.isDarkCanvas) Color(0xFF94A3B8) else Color(0xFF64748B),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+
+                    if (leftBarOffset != Offset.Zero) {
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .size(16.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF2563EB))
+                                .clickable {
+                                    leftBarOffset = Offset.Zero
+                                    Toast.makeText(context, "Left bar reset", Toast.LENGTH_SHORT).show()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Reset position",
+                                tint = Color.White,
+                                modifier = Modifier.size(10.dp)
+                            )
+                        }
+                    }
+
                     DockItem(
                         icon = Icons.Default.Menu,
                         label = stringResource(R.string.tool_main_menu),
@@ -974,6 +1083,7 @@ fun AvitriSphareWhiteboardChrome(
                 // 2) Center Bar: Main Tools
                 DockBar(
                     modifier = Modifier
+                        .offset { IntOffset(centerBarOffset.x.roundToInt(), centerBarOffset.y.roundToInt()) }
                         .weight(1f, fill = false)
                         .padding(horizontal = 8.dp)
                         .onGloballyPositioned {
@@ -1026,6 +1136,51 @@ fun AvitriSphareWhiteboardChrome(
                                 state.currentTool == WhiteboardTool.SHADE ||
                                 state.currentTool == WhiteboardTool.MAGNIFIER -> ActiveDockTool.TOOLS
                             else -> ActiveDockTool.SELECT
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 2.dp)
+                                .size(width = 16.dp, height = 36.dp)
+                                .pointerInput(Unit) {
+                                    detectDragGestures { change, dragAmount ->
+                                        change.consume()
+                                        centerBarOffset = Offset(
+                                            (centerBarOffset.x + dragAmount.x).coerceIn(-1200f, 1200f),
+                                            (centerBarOffset.y + dragAmount.y).coerceIn(-1600f, 100f)
+                                        )
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DragHandle,
+                                contentDescription = "Drag Center Bar",
+                                tint = if (state.isDarkCanvas) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        if (centerBarOffset != Offset.Zero) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(end = 4.dp)
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF2563EB))
+                                    .clickable {
+                                        centerBarOffset = Offset.Zero
+                                        Toast.makeText(context, "Tools bar reset", Toast.LENGTH_SHORT).show()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Reset position",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                            }
                         }
 
                         DockItem(
@@ -1147,8 +1302,9 @@ fun AvitriSphareWhiteboardChrome(
                     }
                 }
 
-                // 3) Right Bar: Prev, Page Counter, Next (compact DockBar) + Add button
+                // 3) Right Bar: Prev, Page Counter, Next (compact DockBar) + Hide Arrow button
                 Row(
+                    modifier = Modifier.offset { IntOffset(rightBarOffset.x.roundToInt(), rightBarOffset.y.roundToInt()) },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     DockBar(
@@ -1157,6 +1313,51 @@ fun AvitriSphareWhiteboardChrome(
                         },
                         isDark = state.isDarkCanvas
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 2.dp)
+                                .size(width = 16.dp, height = 36.dp)
+                                .pointerInput(Unit) {
+                                    detectDragGestures { change, dragAmount ->
+                                        change.consume()
+                                        rightBarOffset = Offset(
+                                            (rightBarOffset.x + dragAmount.x).coerceIn(-1200f, 1200f),
+                                            (rightBarOffset.y + dragAmount.y).coerceIn(-1600f, 100f)
+                                        )
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DragHandle,
+                                contentDescription = "Drag Right Bar",
+                                tint = if (state.isDarkCanvas) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+
+                        if (rightBarOffset != Offset.Zero) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(end = 4.dp)
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF2563EB))
+                                    .clickable {
+                                        rightBarOffset = Offset.Zero
+                                        Toast.makeText(context, "Right bar reset", Toast.LENGTH_SHORT).show()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Reset position",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                            }
+                        }
+
                         DockItem(
                             icon = Icons.Default.ChevronLeft,
                             label = stringResource(R.string.tool_prev_page),
@@ -1175,6 +1376,7 @@ fun AvitriSphareWhiteboardChrome(
                                 .padding(horizontal = 4.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(Color(0xFFE2E8F0))
+                                .clickable { isPagesListVisible = !isPagesListVisible }
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
                         )
 
@@ -1196,31 +1398,77 @@ fun AvitriSphareWhiteboardChrome(
                             .width(44.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(Brush.horizontalGradient(ButtonGradient))
-                            .clickable { toggle("add") },
+                            .clickable {
+                                panel = null
+                                isNavbarVisible = false
+                            },
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = "Add page",
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.height(1.dp))
-                            Text(
-                                text = stringResource(R.string.tool_add_page),
-                                color = Color.White,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1
-                            )
-                        }
+                        Icon(
+                            Icons.Default.ChevronLeft,
+                            contentDescription = "Hide navigation bar",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
             }
+        }
+    }
+
+        AnimatedVisibility(
+            visible = !isNavbarVisible,
+            enter = fadeIn() + slideInHorizontally { -it },
+            exit = fadeOut() + slideOutHorizontally { -it },
+            modifier = Modifier.align(Alignment.BottomStart)
+        ) {
+            Box(
+                modifier = Modifier
+                    .height(42.dp)
+                    .width(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Brush.horizontalGradient(ButtonGradient))
+                    .clickable { isNavbarVisible = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = "Show navigation bar",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = !isPagesListVisible && isNavbarVisible,
+            enter = fadeIn(tween(250)) + slideInHorizontally(tween(300)) { -it },
+            exit = fadeOut(tween(250)) + slideOutHorizontally(tween(300)) { -it },
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(bottom = 76.dp, start = 8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .height(42.dp)
+                    .width(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Brush.horizontalGradient(ButtonGradient))
+                    .clickable { isPagesListVisible = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = "Show pages list",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+
+        val panelOffset = when (panel) {
+            "profile" -> leftBarOffset
+            else -> centerBarOffset
         }
 
         if (panel != null && panel != "shapes") {
@@ -1228,8 +1476,27 @@ fun AvitriSphareWhiteboardChrome(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 96.dp)
+                    .offset { IntOffset(panelOffset.x.roundToInt(), panelOffset.y.roundToInt()) }
             ) {
                 when (panel) {
+                    "profile" -> DockPopover(title = "Profile", onClose = { panel = null }) {
+                        OutlinedTextField(
+                            value = state.userName,
+                            onValueChange = { viewModel.setUserName(it) },
+                            singleLine = true,
+                            label = { Text("Your name") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF6366F1),
+                                focusedLabelColor = Color(0xFF6366F1)
+                            )
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        PopoverRow(Icons.Default.Edit, "Rename board") {
+                            panel = null
+                            onRename()
+                        }
+                    }
                     "flowchart" -> DockPopover(title = "Flowchart & Nodes", onClose = { panel = null }) {
                         PopoverRow(Icons.Default.Dashboard, "3-Node Connected Flowchart") {
                             viewModel.createThreeNodeFlowchart(Offset(320f, 360f))
@@ -1597,7 +1864,7 @@ fun AvitriSphareWhiteboardChrome(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 96.dp)
-                    .offset { IntOffset(shapesWindowOffset.x.roundToInt(), shapesWindowOffset.y.roundToInt()) }
+                    .offset { IntOffset((shapesWindowOffset.x + centerBarOffset.x).roundToInt(), (shapesWindowOffset.y + centerBarOffset.y).roundToInt()) }
             ) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -1638,8 +1905,8 @@ private fun DockBar(
             shadowColor = if (isDark) Color(0x40000000) else Color(0x332563EB)
         ),
         shape = RoundedCornerShape(cornerRadius),
-        color = if (isDark) Color(0x661E293B) else DockBackgroundColor,
-        border = if (isDark) BorderStroke(1.dp, Color(0x40FFFFFF)) else DockGlassBorder,
+        color = if (isDark) Color(0xFF1E293B) else DockBackgroundColor,
+        border = if (isDark) BorderStroke(1.dp, Color(0xFF334155)) else DockBorder,
         shadowElevation = 0.dp
     ) {
         Row(
@@ -2126,9 +2393,16 @@ private fun PageThumbnail(
                         val point = stroke.points[i]
                         path.lineTo(point.x * scale + ox, point.y * scale + oy)
                     }
+                    val strokeColor = if (!dark && CanvasInkTheme.isLightInk(stroke.colorValue)) {
+                        Color(CanvasInkTheme.lightSurfaceInkArgb)
+                    } else if (dark && CanvasInkTheme.isDarkInk(stroke.colorValue)) {
+                        Color(CanvasInkTheme.darkSurfaceInkArgb)
+                    } else {
+                        Color(stroke.colorValue)
+                    }
                     drawPath(
                         path = path,
-                        color = Color(stroke.colorValue),
+                        color = strokeColor,
                         style = ThumbStroke(width = 1.5f)
                     )
                 }

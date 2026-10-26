@@ -1023,7 +1023,7 @@ fun CanvasScreen(
     }
 
     // Math instruments live in screen space so centimetre marks stay physical size.
-    var mathTools by remember { mutableStateOf(listOf<PlacedMathTool>()) }
+    var mathTools by remember { mutableStateOf(state.mathTools) }
     var mathGhost by remember { mutableStateOf<PlacedMathTool?>(null) }
     var mathReadout by remember { mutableStateOf<Pair<String, Offset>?>(null) }
     var rulerLivePreview by remember { mutableStateOf<Pair<Offset, Offset>?>(null) }
@@ -1062,6 +1062,7 @@ fun CanvasScreen(
     fun removeMathTool(id: String) {
         val removed = mathTools.find { it.id == id } ?: return
         mathTools = mathTools.filter { it.id != id }
+        viewModel.setMathTools(mathTools)
         val active = when (removed.kind) {
             MathToolKind.RULER -> WhiteboardTool.RULER
             MathToolKind.COMPASS -> WhiteboardTool.COMPASS
@@ -1070,9 +1071,9 @@ fun CanvasScreen(
             MathToolKind.TRIANGLE -> WhiteboardTool.TRIANGLE
         }
         if (viewModel.state.value.currentTool == active) {
-            val remaining = mathTools.lastOrNull()
-            if (remaining != null) {
-                val nextTool = when (remaining.kind) {
+            val remainingTool = mathTools.lastOrNull()
+            if (remainingTool != null) {
+                val nextTool = when (remainingTool.kind) {
                     MathToolKind.RULER -> WhiteboardTool.RULER
                     MathToolKind.COMPASS -> WhiteboardTool.COMPASS
                     MathToolKind.PROTRACTOR -> WhiteboardTool.PROTRACTOR
@@ -1088,12 +1089,47 @@ fun CanvasScreen(
 
     fun removeAllMathTools() {
         mathTools = emptyList()
+        viewModel.setMathTools(emptyList())
         val current = viewModel.state.value.currentTool
         if (current == WhiteboardTool.RULER || current == WhiteboardTool.COMPASS || current == WhiteboardTool.PROTRACTOR ||
             current == WhiteboardTool.SET_SQUARE || current == WhiteboardTool.TRIANGLE
         ) {
             viewModel.setTool(WhiteboardTool.SELECT)
         }
+    }
+
+    LaunchedEffect(state.pageIndex, state.pageEpoch) {
+        rulerLivePreview = null
+        mathReadout = null
+        mathGhost = null
+        shapePrompt = null
+        shapePromptVisible = false
+        boardStage?.setLiveInk(null)
+        boardStage?.clearGestureStrokes()
+        boardStage?.setMarquee(null, null)
+        mathTools = viewModel.state.value.mathTools
+        val curTool = viewModel.state.value.currentTool
+        if (curTool in setOf(
+                WhiteboardTool.RULER,
+                WhiteboardTool.COMPASS,
+                WhiteboardTool.PROTRACTOR,
+                WhiteboardTool.SET_SQUARE,
+                WhiteboardTool.TRIANGLE
+            )
+        ) {
+            val matchingKind = when (curTool) {
+                WhiteboardTool.RULER -> MathToolKind.RULER
+                WhiteboardTool.COMPASS -> MathToolKind.COMPASS
+                WhiteboardTool.PROTRACTOR -> MathToolKind.PROTRACTOR
+                WhiteboardTool.SET_SQUARE -> MathToolKind.SET_SQUARE
+                WhiteboardTool.TRIANGLE -> MathToolKind.TRIANGLE
+                else -> null
+            }
+            if (mathTools.none { it.kind == matchingKind }) {
+                viewModel.setTool(viewModel.state.value.inkTool)
+            }
+        }
+        viewModel.cancelCurrentStroke()
     }
 
     fun placeMathTool(kind: MathToolKind, center: Offset, isDrag: Boolean = false) {
@@ -1110,17 +1146,10 @@ fun CanvasScreen(
         if (existingIndex >= 0) {
             // Tool is already on the whiteboard:
             if (isDrag) {
-                val otherTools = mathTools.filterIndexed { i, _ -> i != existingIndex }
-                val resolvedCenter = findNonOverlappingPosition(
-                    desiredCenter = center,
-                    kind = kind,
-                    span = mathTools[existingIndex].span,
-                    existingTools = otherTools,
-                    canvasSize = canvasSize
-                )
                 mathTools = mathTools.toMutableList().also {
-                    it[existingIndex] = it[existingIndex].copy(center = resolvedCenter)
+                    it[existingIndex] = it[existingIndex].copy(center = center)
                 }
+                viewModel.setMathTools(mathTools)
                 viewModel.setTool(tool)
             } else {
                 // Tapped in the dock when already active: toggle close!
@@ -1130,17 +1159,19 @@ fun CanvasScreen(
             return
         }
 
-        // Tool is new: add it to the whiteboard alongside existing tools without overlapping
-        val targetCenter = if (isDrag) center else canvasCenter()
-        val resolvedCenter = findNonOverlappingPosition(
-            desiredCenter = targetCenter,
-            kind = kind,
-            span = defaultMathSpan(kind),
-            existingTools = mathTools,
-            canvasSize = canvasSize
-        )
-        val newTool = newMathTool(kind, resolvedCenter)
+        // Tool is new: add it to the whiteboard without overlapping when spawned at center, or exactly at dragged center
+        val targetCenter = if (isDrag) center else {
+            findNonOverlappingPosition(
+                desiredCenter = canvasCenter(),
+                kind = kind,
+                span = defaultMathSpan(kind),
+                existingTools = mathTools,
+                canvasSize = canvasSize
+            )
+        }
+        val newTool = newMathTool(kind, targetCenter)
         mathTools = mathTools + newTool
+        viewModel.setMathTools(mathTools)
         viewModel.setTool(tool)
     }
 
@@ -1157,6 +1188,7 @@ fun CanvasScreen(
                 pointerAngleDeg = adjust.pointerAngleDeg?.coerceIn(0f, 180f) ?: current.pointerAngleDeg
             )
         )
+        viewModel.setMathTools(mathTools)
     }
 
     fun rootToCanvas(root: Offset): Offset = root - canvasOrigin
@@ -2257,17 +2289,7 @@ fun CanvasScreen(
                                 Toast.makeText(context, "Tool removed", Toast.LENGTH_SHORT).show()
                             } else {
                                 if (tool != null && mathGesture.movedPx > MATH_TAP_SLOP) {
-                                    val otherTools = mathTools.filter { it.id != tool.id }
-                                    val resolved = findNonOverlappingPosition(
-                                        desiredCenter = tool.center,
-                                        kind = tool.kind,
-                                        span = tool.span,
-                                        existingTools = otherTools,
-                                        canvasSize = canvasSize
-                                    )
-                                    if (resolved != tool.center) {
-                                        replaceMathTool(tool.copy(center = resolved))
-                                    }
+                                    viewModel.setMathTools(mathTools)
                                 }
                                 if (tool != null && mathGesture.zone == MathToolZone.CLOSE && mathGesture.movedPx <= MATH_TAP_SLOP) {
                                 viewModel.cancelCurrentStroke()
@@ -2638,6 +2660,11 @@ fun CanvasScreen(
                                 viewModel.updateStroke(shapePoints)
                                 viewModel.finishStroke()
                             }
+                            rulerLivePreview = null
+                            mathReadout = null
+                        }
+                        if (wasMultiTouch) {
+                            viewModel.setMathTools(mathTools)
                         }
                     }
                 }
@@ -2656,7 +2683,8 @@ fun CanvasScreen(
                         scale = page.scale,
                         offsetX = page.offsetX,
                         offsetY = page.offsetY,
-                        selected = page.selectedStrokeIds
+                        selected = page.selectedStrokeIds,
+                        pageIndex = page.pageIndex
                     )
                     stage.currentStroke = page.currentStroke
                     val document = page.document
