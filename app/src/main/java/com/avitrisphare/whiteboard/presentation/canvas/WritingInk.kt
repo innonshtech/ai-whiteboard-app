@@ -403,7 +403,7 @@ fun InkToolPanel(
             )
         }
         Spacer(Modifier.height(6.dp))
-        Text("Two-colour pen (Pen vs Finger)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF374151))
+        Text("Two-colour pen (One-tap swap)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF374151))
         Spacer(Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             // Primary Swatch
@@ -425,7 +425,7 @@ fun InkToolPanel(
                             else Modifier.border(1.dp, Color(0xFFD1D5DB), CircleShape)
                         )
                 )
-                Text("Primary (Pen)", fontSize = 10.sp, fontWeight = if (!editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (!editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
+                Text("Primary (Active)", fontSize = 10.sp, fontWeight = if (!editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (!editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
             }
 
             // Swap Button
@@ -461,12 +461,12 @@ fun InkToolPanel(
                             else Modifier.border(1.dp, Color(0xFFD1D5DB), CircleShape)
                         )
                 )
-                Text("Secondary (Finger)", fontSize = 10.sp, fontWeight = if (editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
+                Text("Secondary", fontSize = 10.sp, fontWeight = if (editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
             }
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            if (editingSecondary) "Palette sets: Secondary Color (Finger / Touch)" else "Palette sets: Primary Color (Pen / Stylus)",
+            if (editingSecondary) "Palette sets: Secondary Color" else "Palette sets: Primary (Active) Color",
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             color = Color(0xFF4F46E5)
