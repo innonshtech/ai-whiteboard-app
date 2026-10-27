@@ -2608,7 +2608,6 @@ fun AvitriSphareWhiteboardChrome(
         }
     }
 }
-}
 
 data class ToolDisplayInfo(
     val id: String,
