@@ -48,6 +48,14 @@ import com.avitrisphare.whiteboard.domain.model.Note
 import java.util.Calendar
 import kotlinx.coroutines.launch
 
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
+import com.avitrisphare.whiteboard.core.localization.AppLanguage
+import com.avitrisphare.whiteboard.presentation.common.LanguageSelectionDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+
 private val CardLine = Color(0xFF2A3348)
 
 @Composable
@@ -61,12 +69,16 @@ fun ClassHomeScreen(
     onOpenBoard: (String) -> Unit,
     onNewBoard: () -> Unit,
     onOpenBoards: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    currentLanguage: AppLanguage = AppLanguage.ENGLISH,
+    onLanguageChange: (AppLanguage) -> Unit = {}
 ) {
     val subject = briefing.subject?.takeIf { it.isNotBlank() } ?: teacher.subject
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var showLanguageDialog by remember { mutableStateOf(false) }
+
     val comingSoon: () -> Unit = {
         scope.launch {
             snackbar.currentSnackbarData?.dismiss()
@@ -98,7 +110,7 @@ fun ClassHomeScreen(
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "AvitriSphare Education Portal",
+                        stringResource(R.string.portal_title),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
@@ -114,18 +126,18 @@ fun ClassHomeScreen(
                     )
                 }
                 Text(
-                    "English",
+                    text = currentLanguage.nativeName,
                     color = Color.White,
                     fontSize = 12.sp,
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
                         .background(Color.White.copy(alpha = 0.14f))
-                        .clickable(onClick = comingSoon)
+                        .clickable { showLanguageDialog = true }
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 )
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    "Log out",
+                    stringResource(R.string.log_out),
                     color = EntryCyan,
                     fontSize = 13.sp,
                     modifier = Modifier.clickable(onClick = onLogout)
@@ -170,8 +182,8 @@ fun ClassHomeScreen(
                 ActionTile(
                     icon = Icons.Default.Draw,
                     iconTint = Color(0xFF2563EB),
-                    title = "Open whiteboard",
-                    subtitle = "Continue today's board",
+                    title = stringResource(R.string.open_whiteboard),
+                    subtitle = stringResource(R.string.continue_today_board),
                     onClick = onOpenWhiteboard,
                     emphasized = true
                 )
@@ -180,7 +192,7 @@ fun ClassHomeScreen(
                     ActionTile(
                         icon = Icons.Default.FactCheck,
                         iconTint = Color(0xFFEA580C),
-                        title = "Mark Attendance",
+                        title = stringResource(R.string.mark_attendance),
                         subtitle = briefing.attendance,
                         onClick = comingSoon,
                         modifier = Modifier.weight(1f)
@@ -188,7 +200,7 @@ fun ClassHomeScreen(
                     ActionTile(
                         icon = Icons.Default.CalendarMonth,
                         iconTint = Color(0xFF7C3AED),
-                        title = "Weekly Timetable",
+                        title = stringResource(R.string.weekly_timetable),
                         subtitle = "Today's periods",
                         onClick = comingSoon,
                         modifier = Modifier.weight(1f)
@@ -198,7 +210,7 @@ fun ClassHomeScreen(
                     ActionTile(
                         icon = Icons.Default.MenuBook,
                         iconTint = Color(0xFF059669),
-                        title = "Assign Homework",
+                        title = stringResource(R.string.assign_homework),
                         subtitle = briefing.homework,
                         onClick = comingSoon,
                         modifier = Modifier.weight(1f)
@@ -206,7 +218,7 @@ fun ClassHomeScreen(
                     ActionTile(
                         icon = Icons.Default.ChatBubbleOutline,
                         iconTint = Color(0xFF0284C7),
-                        title = "Student Doubts",
+                        title = stringResource(R.string.student_doubts),
                         subtitle = "Questions from class",
                         onClick = comingSoon,
                         modifier = Modifier.weight(1f)
@@ -231,7 +243,7 @@ fun ClassHomeScreen(
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        "Class Tests & Grading",
+                        stringResource(R.string.tests_grading),
                         color = EntryText,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 15.sp,
@@ -248,10 +260,10 @@ fun ClassHomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Past whiteboards", color = EntryText, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Text(stringResource(R.string.past_whiteboards), color = EntryText, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "New board",
+                        stringResource(R.string.new_board),
                         color = EntryCyan,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -260,7 +272,7 @@ fun ClassHomeScreen(
                             .padding(horizontal = 8.dp, vertical = 6.dp)
                     )
                     Text(
-                        "View all",
+                        stringResource(R.string.view_all),
                         color = EntryMuted,
                         fontSize = 13.sp,
                         modifier = Modifier
@@ -271,7 +283,7 @@ fun ClassHomeScreen(
 
                 if (boards.isEmpty()) {
                     Text(
-                        "No boards yet. Open the whiteboard to start today's lesson.",
+                        stringResource(R.string.no_boards_yet),
                         color = EntryMuted,
                         fontSize = 14.sp
                     )
@@ -289,6 +301,17 @@ fun ClassHomeScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 24.dp)
         )
+
+        if (showLanguageDialog) {
+            LanguageSelectionDialog(
+                currentLanguage = currentLanguage,
+                onLanguageSelected = { newLang ->
+                    onLanguageChange(newLang)
+                    showLanguageDialog = false
+                },
+                onDismiss = { showLanguageDialog = false }
+            )
+        }
     }
 }
 

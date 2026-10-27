@@ -145,6 +145,8 @@ class BoardStageView(context: Context) : FrameLayout(context) {
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean = false
 
+    private var currentPageIndex = -1
+
     fun syncPage(
         strokes: List<Stroke>,
         background: CanvasBackground,
@@ -154,13 +156,16 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         offsetX: Float,
         offsetY: Float,
         selected: Set<String>,
-        customBackgroundUri: String = ""
+        customBackgroundUri: String = "",
+        pageIndex: Int = 0
     ) {
         if (previewing) return
         val customBgChanged = customBackgroundUri != this.customBackgroundUri
-        val pageChanged = background != this.pageBackground || showGrid != this.showGrid || dark != this.dark || customBgChanged
+        val pageIndexChanged = this.currentPageIndex != pageIndex
+        this.currentPageIndex = pageIndex
+        val pageChanged = pageIndexChanged || background != this.pageBackground || showGrid != this.showGrid || dark != this.dark || customBgChanged
         val moved = scale != this.scale || offsetX != this.offsetX || offsetY != this.offsetY
-        val inkChanged = this.strokes !== strokes || this.strokes != strokes || this.selected !== selected || this.selected != selected
+        val inkChanged = pageIndexChanged || this.strokes !== strokes || this.strokes != strokes || this.selected !== selected || this.selected != selected
         this.pageBackground = background
         this.customBackgroundUri = customBackgroundUri
         this.showGrid = showGrid
@@ -176,7 +181,12 @@ class BoardStageView(context: Context) : FrameLayout(context) {
                 null
             }
         }
-        if (gestureStrokes != null && gestureStrokes !== strokes) {
+        if (pageIndexChanged) {
+            gestureStrokes = null
+            activeLive = null
+            currentStroke = null
+            marquee = null
+        } else if (gestureStrokes != null && gestureStrokes !== strokes) {
             gestureStrokes = null
         }
         this.strokes = ArrayList(strokes)
@@ -192,7 +202,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
             ink.invalidate()
             blurredInk.invalidate()
         }
-        if (moved) live.invalidate()
+        if (moved || pageIndexChanged) live.invalidate()
     }
 
     fun viewScale(): Float = scale

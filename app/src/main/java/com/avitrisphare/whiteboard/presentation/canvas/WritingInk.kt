@@ -58,6 +58,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import com.avitrisphare.whiteboard.domain.model.Stroke
 import com.avitrisphare.whiteboard.domain.model.StrokeType
 import kotlin.math.atan2
@@ -403,7 +405,7 @@ fun InkToolPanel(
             )
         }
         Spacer(Modifier.height(6.dp))
-        Text("Two-colour pen (One-tap swap)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF374151))
+        Text(stringResource(R.string.pen_two_colour), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF374151))
         Spacer(Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             // Primary Swatch
@@ -425,7 +427,7 @@ fun InkToolPanel(
                             else Modifier.border(1.dp, Color(0xFFD1D5DB), CircleShape)
                         )
                 )
-                Text("Primary (Active)", fontSize = 10.sp, fontWeight = if (!editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (!editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
+                Text(stringResource(R.string.pen_primary_active), fontSize = 10.sp, fontWeight = if (!editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (!editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
             }
 
             // Swap Button
@@ -438,8 +440,8 @@ fun InkToolPanel(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Icon(Icons.Default.SwapHoriz, contentDescription = "Swap colors", tint = Color(0xFF4F46E5), modifier = Modifier.size(16.dp))
-                Text("Swap", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4F46E5))
+                Icon(Icons.Default.SwapHoriz, contentDescription = stringResource(R.string.pen_swap), tint = Color(0xFF4F46E5), modifier = Modifier.size(16.dp))
+                Text(stringResource(R.string.pen_swap), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4F46E5))
             }
 
             // Secondary Swatch
@@ -461,12 +463,12 @@ fun InkToolPanel(
                             else Modifier.border(1.dp, Color(0xFFD1D5DB), CircleShape)
                         )
                 )
-                Text("Secondary", fontSize = 10.sp, fontWeight = if (editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
+                Text(stringResource(R.string.pen_secondary), fontSize = 10.sp, fontWeight = if (editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
             }
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            if (editingSecondary) "Palette sets: Secondary Color" else "Palette sets: Primary (Active) Color",
+            if (editingSecondary) stringResource(R.string.pen_palette_secondary) else stringResource(R.string.pen_palette_primary),
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             color = Color(0xFF4F46E5)
@@ -609,7 +611,7 @@ fun EraserToolPanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Eraser", fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+            Text(stringResource(R.string.eraser_title), fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
             Box(
                 modifier = Modifier
                     .size(28.dp)
@@ -620,7 +622,7 @@ fun EraserToolPanel(
             ) {
                 Icon(
                     Icons.Default.Close,
-                    contentDescription = "Close",
+                    contentDescription = stringResource(R.string.dialog_close),
                     tint = Color(0xFF4B5563),
                     modifier = Modifier.size(16.dp)
                 )
@@ -629,8 +631,8 @@ fun EraserToolPanel(
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(
-                EraserMode.STANDARD to "Standard",
-                EraserMode.SMART to "Smart"
+                EraserMode.STANDARD to stringResource(R.string.eraser_standard),
+                EraserMode.SMART to stringResource(R.string.eraser_smart)
             ).forEach { (mode, label) ->
                 val selected = state.eraserMode == mode
                 Text(
@@ -648,58 +650,15 @@ fun EraserToolPanel(
         Spacer(Modifier.height(4.dp))
         Text(
             text = if (state.eraserMode == EraserMode.STANDARD) {
-                "Erases the ink inside the circle."
+                stringResource(R.string.eraser_standard_hint)
             } else {
-                "Erases each whole stroke or object you touch."
+                stringResource(R.string.eraser_smart_hint)
             },
             fontSize = 11.sp,
             color = Color(0xFF6B7280)
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (state.palmEraserEnabled) Color(0xFFEFF6FF) else Color(0xFFF9FAFB))
-                .clickable { viewModel.setPalmEraserEnabled(!state.palmEraserEnabled) }
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text("Palm eraser", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1F2937))
-                Text("Erase using palm contact", fontSize = 10.sp, color = Color(0xFF6B7280))
-            }
-            Text(
-                text = if (state.palmEraserEnabled) "ON" else "OFF",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (state.palmEraserEnabled) Color(0xFF2563EB) else Color(0xFF9CA3AF)
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (state.restrictEraserToSelection) Color(0xFFEFF6FF) else Color(0xFFF9FAFB))
-                .clickable { viewModel.setRestrictEraserToSelection(!state.restrictEraserToSelection) }
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text("Selection eraser only", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1F2937))
-                Text("Erase only selected strokes", fontSize = 10.sp, color = Color(0xFF6B7280))
-            }
-            Text(
-                text = if (state.restrictEraserToSelection) "ON" else "OFF",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (state.restrictEraserToSelection) Color(0xFF2563EB) else Color(0xFF9CA3AF)
-            )
-        }
         Spacer(Modifier.height(8.dp))
-        Text("Size ${state.eraserSize.toInt()}px", fontSize = 12.sp, color = Color(0xFF6B7280))
+        Text(stringResource(R.string.eraser_size_px, state.eraserSize.toInt()), fontSize = 12.sp, color = Color(0xFF6B7280))
         Slider(
             value = state.eraserSize.coerceIn(8f, 80f),
             onValueChange = { viewModel.setEraserSize(it) },
@@ -711,7 +670,7 @@ fun EraserToolPanel(
             )
         )
         Text(
-            text = "Clear all",
+            text = stringResource(R.string.clear_all),
             color = Color(0xFFB91C1C),
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,

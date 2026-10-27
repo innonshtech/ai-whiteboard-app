@@ -55,6 +55,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import com.avitrisphare.whiteboard.domain.model.CanvasBackground
 import java.util.Locale
 import kotlin.math.abs
@@ -62,9 +64,49 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-private enum class GeometryCategory(val label: String) {
-    INSTRUMENTS("Instruments"),
-    AIDS("Board")
+private enum class GeometryCategory {
+    INSTRUMENTS,
+    AIDS
+}
+
+@Composable
+private fun localizedGeoCategory(cat: GeometryCategory): String = when (cat) {
+    GeometryCategory.INSTRUMENTS -> stringResource(R.string.geo_instruments)
+    GeometryCategory.AIDS -> stringResource(R.string.geo_board)
+}
+
+@Composable
+private fun localizedInstrumentName(kind: MathToolKind): String = when (kind) {
+    MathToolKind.RULER -> stringResource(R.string.geo_ruler)
+    MathToolKind.COMPASS -> stringResource(R.string.geo_compass)
+    MathToolKind.PROTRACTOR -> stringResource(R.string.geo_protractor)
+    MathToolKind.SET_SQUARE -> stringResource(R.string.geo_set_square)
+    MathToolKind.TRIANGLE -> stringResource(R.string.geo_triangle)
+}
+
+@Composable
+private fun localizedInstrumentHint(kind: MathToolKind): String = when (kind) {
+    MathToolKind.RULER -> stringResource(R.string.geo_ruler_hint)
+    MathToolKind.COMPASS -> stringResource(R.string.geo_compass_hint)
+    MathToolKind.PROTRACTOR -> stringResource(R.string.geo_protractor_hint)
+    MathToolKind.SET_SQUARE -> stringResource(R.string.geo_set_square_hint)
+    MathToolKind.TRIANGLE -> stringResource(R.string.geo_triangle_hint)
+}
+
+@Composable
+private fun localizedSizeLabel(kind: MathToolKind, span: Float, pxPerCm: Float): String {
+    val safe = pxPerCm.coerceAtLeast(1f)
+    return when (kind) {
+        MathToolKind.RULER -> stringResource(R.string.geo_length, formatCentimetres(span, safe))
+        MathToolKind.COMPASS -> stringResource(R.string.geo_radius, formatCentimetres(span, safe))
+        MathToolKind.PROTRACTOR -> stringResource(R.string.geo_radius, formatCentimetres(span, safe))
+        MathToolKind.SET_SQUARE -> {
+            val leg = span / safe
+            val hyp = leg * 1.41421356f
+            stringResource(R.string.geo_legs_hyp, leg, hyp)
+        }
+        MathToolKind.TRIANGLE -> stringResource(R.string.geo_side, formatCentimetres(triangleSidePx(span), safe))
+    }
 }
 
 private data class GeoInstrument(
@@ -195,7 +237,7 @@ fun GeometryToolPanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Geometry", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
+            Text(stringResource(R.string.geo_title), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
             Box(
                 modifier = Modifier
                     .size(32.dp)
@@ -204,7 +246,7 @@ fun GeometryToolPanel(
                     .clickable(onClick = onClose),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF4B5563), modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.dialog_close), tint = Color(0xFF4B5563), modifier = Modifier.size(16.dp))
             }
         }
 
@@ -226,7 +268,7 @@ fun GeometryToolPanel(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        cat.label,
+                        localizedGeoCategory(cat),
                         fontSize = 12.sp,
                         fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
                         color = if (on) Color.White else Ink
@@ -239,7 +281,7 @@ fun GeometryToolPanel(
 
         if (category == GeometryCategory.INSTRUMENTS) {
             Text(
-                "Drag a tool onto the board. Tap a tool to place it or take it off. A dot means it is on the board.",
+                stringResource(R.string.geo_instructions),
                 fontSize = 12.sp,
                 color = Muted
             )
@@ -263,13 +305,13 @@ fun GeometryToolPanel(
             }
 
             Spacer(Modifier.height(12.dp))
-            Text(selected.hint, fontSize = 12.sp, color = Muted)
+            Text(localizedInstrumentHint(selected.kind), fontSize = 12.sp, color = Muted)
             Spacer(Modifier.height(8.dp))
 
             val span = spanOf(selectedKind)
             val range = mathSpanRange(selectedKind)
             MeasureSlider(
-                label = sizeLabel(selectedKind, span, pxPerCm),
+                label = localizedSizeLabel(selectedKind, span, pxPerCm),
                 value = span.coerceIn(range.start, range.endInclusive),
                 valueRange = range,
                 onValueChange = { stageAndApply(selectedKind, MathToolAdjust(span = it)) }
@@ -277,7 +319,7 @@ fun GeometryToolPanel(
 
             val rotation = rotationOf(selectedKind)
             MeasureSlider(
-                label = "Rotation: ${rotation.roundToInt()}°",
+                label = stringResource(R.string.geo_rotation, rotation.roundToInt()),
                 value = rotation.coerceIn(0f, 359f),
                 valueRange = 0f..359f,
                 onValueChange = { stageAndApply(selectedKind, MathToolAdjust(rotationDeg = it)) }
@@ -291,7 +333,7 @@ fun GeometryToolPanel(
                 val other = (180f - pointer).coerceIn(0f, 180f)
                 Spacer(Modifier.height(4.dp))
                 MeasureSlider(
-                    label = "Arm ${pointer.roundToInt()}° · other ${other.roundToInt()}°",
+                    label = stringResource(R.string.geo_arm_other, pointer.roundToInt(), other.roundToInt()),
                     value = pointer,
                     valueRange = 0f..180f,
                     onValueChange = { stageAndApply(MathToolKind.PROTRACTOR, MathToolAdjust(pointerAngleDeg = it)) }
@@ -312,7 +354,7 @@ fun GeometryToolPanel(
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
                 Text(
-                    if (onBoard) "Remove from board" else "Place on board",
+                    if (onBoard) stringResource(R.string.geo_remove_board) else stringResource(R.string.geo_place_board),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = if (onBoard) Blue else Ink
@@ -320,7 +362,7 @@ fun GeometryToolPanel(
             }
         } else {
             Text(
-                "Graph paper, a straight line, an arrow, a frame, and shape recognition.",
+                stringResource(R.string.geo_aids_description),
                 fontSize = 12.sp,
                 color = Muted
             )
@@ -332,46 +374,46 @@ fun GeometryToolPanel(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 AidCard(
-                    name = "Graph",
+                    name = stringResource(R.string.geo_aid_graph),
                     selected = state.canvasBackground == CanvasBackground.GRAPH,
                     onClick = { viewModel.toggleGraphPaper() }
                 ) { tint -> GraphPaperIcon(tint) }
                 AidCard(
-                    name = "Line",
+                    name = stringResource(R.string.geo_aid_line),
                     selected = state.currentTool == WhiteboardTool.LINE,
                     onClick = { viewModel.setTool(WhiteboardTool.LINE) }
                 ) { tint -> LineIcon(tint) }
                 AidCard(
-                    name = "Arrow",
+                    name = stringResource(R.string.geo_aid_arrow),
                     selected = state.currentTool == WhiteboardTool.ARROW,
                     onClick = { viewModel.setTool(WhiteboardTool.ARROW) }
                 ) { tint -> ArrowIcon(tint) }
                 AidCard(
-                    name = "Frame",
+                    name = stringResource(R.string.geo_aid_frame),
                     selected = state.currentTool == WhiteboardTool.FRAME,
                     onClick = { viewModel.setTool(WhiteboardTool.FRAME) }
                 ) { tint -> FrameIcon(tint) }
                 AidCard(
-                    name = "Magic pen",
+                    name = stringResource(R.string.magic_pen),
                     selected = state.isDrawToShapeEnabled,
                     onClick = { viewModel.toggleDrawToShape() }
                 ) { tint -> MagicPenIcon(tint) }
             }
             if (state.smartWriteEnabled) {
                 Spacer(Modifier.height(8.dp))
-                Text("Turn off Smart Write to use Magic pen.", fontSize = 11.sp, color = Muted)
+                Text(stringResource(R.string.smart_write_tip), fontSize = 11.sp, color = Muted)
             }
         }
 
         Spacer(Modifier.height(12.dp))
         MeasureSlider(
-            label = "Stroke: ${String.format(Locale.US, "%.1f", state.strokeWidth)} px",
+            label = stringResource(R.string.stroke_px, state.strokeWidth),
             value = state.strokeWidth.coerceIn(1f, 50f),
             valueRange = 1f..50f,
             onValueChange = { viewModel.setStrokeWidth(it) }
         )
         Spacer(Modifier.height(4.dp))
-        Text("Ink colour", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Ink)
+        Text(stringResource(R.string.ink_colour), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Ink)
         Spacer(Modifier.height(6.dp))
         InkSwatches(selected = state.selectedColor, onPick = { viewModel.setColor(it) })
     }
@@ -439,7 +481,7 @@ private fun InstrumentCard(
             InstrumentIcon(spec.kind, if (selected) Blue else Ink)
             Spacer(Modifier.height(4.dp))
             Text(
-                spec.name,
+                localizedInstrumentName(spec.kind),
                 fontSize = 10.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 color = if (selected) Color(0xFF1D4ED8) else Color(0xFF4B5563),

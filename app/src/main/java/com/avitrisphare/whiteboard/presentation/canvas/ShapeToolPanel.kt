@@ -59,8 +59,51 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import com.avitrisphare.whiteboard.domain.model.StrokeType
 import kotlin.math.roundToInt
+
+@Composable
+private fun localizedShapeCategory(cat: ShapeCategory): String = when (cat) {
+    ShapeCategory.SHAPES_2D -> stringResource(R.string.shape_cat_2d)
+    ShapeCategory.LINES_RAYS -> stringResource(R.string.shape_cat_lines_rays)
+    ShapeCategory.SOLIDS_3D -> stringResource(R.string.shape_cat_3d)
+}
+
+@Composable
+private fun localizedShapeName(strokeType: StrokeType): String = when (strokeType) {
+    StrokeType.RECTANGLE -> stringResource(R.string.shape_rectangle)
+    StrokeType.SQUARE -> stringResource(R.string.shape_square)
+    StrokeType.ROUNDED_RECTANGLE -> stringResource(R.string.shape_rounded_rect)
+    StrokeType.CIRCLE -> stringResource(R.string.shape_circle)
+    StrokeType.ELLIPSE -> stringResource(R.string.shape_ellipse)
+    StrokeType.SEMICIRCLE -> stringResource(R.string.shape_semicircle)
+    StrokeType.RIGHT_TRIANGLE -> stringResource(R.string.shape_right_triangle)
+    StrokeType.TRIANGLE -> stringResource(R.string.shape_triangle)
+    StrokeType.SCALENE_TRIANGLE -> stringResource(R.string.shape_scalene)
+    StrokeType.TRAPEZOID -> stringResource(R.string.shape_trapezoid)
+    StrokeType.STAR -> stringResource(R.string.shape_star)
+    StrokeType.PARALLELOGRAM -> stringResource(R.string.shape_parallelogram)
+    StrokeType.RHOMBUS -> stringResource(R.string.shape_rhombus)
+    StrokeType.PENTAGON -> stringResource(R.string.shape_pentagon)
+    StrokeType.HEXAGON -> stringResource(R.string.shape_hexagon)
+    StrokeType.OCTAGON -> stringResource(R.string.shape_octagon)
+    StrokeType.LINE -> stringResource(R.string.shape_line)
+    StrokeType.LINE_DASHED -> stringResource(R.string.shape_dashed)
+    StrokeType.ARROW -> stringResource(R.string.shape_arrow)
+    StrokeType.DOUBLE_ARROW -> stringResource(R.string.shape_double_arrow)
+    StrokeType.DASHED_ARROW -> stringResource(R.string.shape_dashed_arrow)
+    StrokeType.ANGLE_RAY -> stringResource(R.string.shape_angle_ray)
+    StrokeType.CUBE -> stringResource(R.string.shape_cube)
+    StrokeType.CUBOID -> stringResource(R.string.shape_cuboid)
+    StrokeType.PYRAMID -> stringResource(R.string.shape_pyramid)
+    StrokeType.PRISM -> stringResource(R.string.shape_prism)
+    StrokeType.CYLINDER -> stringResource(R.string.shape_cylinder)
+    StrokeType.CONE -> stringResource(R.string.shape_cone)
+    StrokeType.SPHERE -> stringResource(R.string.shape_sphere)
+    else -> strokeType.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+}
 
 private val SHAPE_PRESET_COLORS = listOf(
     0xFFEF4444.toInt(), // Red
@@ -133,7 +176,7 @@ fun ShapeToolPanel(
                     modifier = Modifier.size(18.dp)
                 )
                 Text(
-                    text = "Shapes",
+                    text = stringResource(R.string.shapes_title),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF334155)
@@ -145,7 +188,7 @@ fun ShapeToolPanel(
             ) {
                 if (onDrag != null) {
                     Text(
-                        text = "Drag to move",
+                        text = stringResource(R.string.drag_to_move),
                         fontSize = 11.sp,
                         color = Color(0xFF94A3B8)
                     )
@@ -167,8 +210,8 @@ fun ShapeToolPanel(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = Color(0xFF475569),
+                        contentDescription = stringResource(R.string.dialog_close),
+                        tint = Color(0xFF4B5563),
                         modifier = Modifier.size(14.dp)
                     )
                 }
@@ -195,7 +238,7 @@ fun ShapeToolPanel(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = cat.label,
+                            text = localizedShapeCategory(cat),
                             fontSize = 12.sp,
                             fontWeight = if (isCatSelected) FontWeight.Bold else FontWeight.Medium,
                             color = if (isCatSelected) Color.White else Color(0xFF374151),
@@ -244,7 +287,7 @@ fun ShapeToolPanel(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = spec.name,
+                        text = localizedShapeName(spec.strokeType),
                         fontSize = 10.sp,
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (isSelected) Color(0xFF1D4ED8) else Color(0xFF4B5563),
@@ -265,7 +308,7 @@ fun ShapeToolPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Stroke: ${"%.1f".format(state.strokeWidth)} px",
+                text = stringResource(R.string.stroke_px, state.strokeWidth),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = Color(0xFF374151)
@@ -288,7 +331,7 @@ fun ShapeToolPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Opacity: ${(state.shapeOpacity * 100).roundToInt()}%",
+                text = stringResource(R.string.shape_opacity, (state.shapeOpacity * 100).roundToInt()),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = Color(0xFF374151)
@@ -313,7 +356,7 @@ fun ShapeToolPanel(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "Radius: ${state.shapeCornerRadius.toInt()} px",
+                    text = stringResource(R.string.shape_radius, state.shapeCornerRadius.toInt()),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = if (activeSpec.supportsRadius) Color(0xFF374151) else Color(0xFF9CA3AF)
@@ -349,7 +392,7 @@ fun ShapeToolPanel(
                         .padding(horizontal = 8.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = if (state.showShapeDimensions) "✓ Dims" else "Dims",
+                        text = if (state.showShapeDimensions) stringResource(R.string.shape_dims_active) else stringResource(R.string.shape_dims),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = if (state.showShapeDimensions) Color(0xFF2563EB) else Color(0xFF4B5563)
@@ -382,7 +425,7 @@ fun ShapeToolPanel(
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "● Border",
+                        text = stringResource(R.string.shape_border),
                         fontSize = 12.sp,
                         fontWeight = if (isBorder) FontWeight.Bold else FontWeight.Medium,
                         color = if (isBorder) Color(0xFF1F2937) else Color(0xFF6B7280)
@@ -398,7 +441,7 @@ fun ShapeToolPanel(
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "⊘ Fill",
+                        text = stringResource(R.string.shape_fill),
                         fontSize = 12.sp,
                         fontWeight = if (isFill) FontWeight.Bold else FontWeight.Medium,
                         color = if (isFill) Color(0xFF1F2937) else Color(0xFF6B7280)
@@ -407,7 +450,7 @@ fun ShapeToolPanel(
             }
 
             Text(
-                text = if (state.shapeStyleMode == ShapeStyleMode.BORDER) "Border Color" else "Fill Color",
+                text = if (state.shapeStyleMode == ShapeStyleMode.BORDER) stringResource(R.string.shape_border_color) else stringResource(R.string.shape_fill_color),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = Color(0xFF6B7280)
@@ -487,7 +530,7 @@ fun ShapeToolPanel(
             ) {
                 Icon(
                     imageVector = Icons.Default.ColorLens,
-                    contentDescription = "Custom color",
+                    contentDescription = stringResource(R.string.custom_color),
                     tint = Color(0xFF4B5563),
                     modifier = Modifier.size(16.dp)
                 )
@@ -681,7 +724,7 @@ private fun CustomColorPicker(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("RGB Custom Color", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4B5563))
+            Text(stringResource(R.string.rgb_custom_color), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4B5563))
             Box(
                 modifier = Modifier
                     .size(20.dp)
