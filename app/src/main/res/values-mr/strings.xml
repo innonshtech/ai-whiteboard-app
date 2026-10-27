@@ -182,6 +182,13 @@
     <string name="toggle_theme">थीम बदला</string>
     <string name="toast_color_swapped">रंग बदलला</string>
     <string name="toast_saved">जतन केले</string>
+    <string name="customize_toolbar_title">टूलबार सानुकूलित करा</string>
+    <string name="customize_toolbar_edit_mode">क्रम बदलण्यासाठी ओढा • लपवण्यासाठी ✕ दाबा</string>
+    <string name="customize_toolbar_reset">रीसेट</string>
+    <string name="customize_toolbar_done">झाले</string>
+    <string name="customize_toolbar_tools_on_bar">टूलबारमधील टूल्स</string>
+    <string name="customize_toolbar_available_tools">इतर टूल्स (जोडण्यासाठी टॅप करा)</string>
+    <string name="customize_toolbar_hint">टूलबारवर थेट क्रम बदलण्यासाठी कोणत्याही टूलवर दाबून ठेवा.</string>
 
     <!-- Geometry Panel -->
     <string name="geo_title">भूमिती</string>
@@ -274,4 +281,13 @@
     <string name="pen_swap">बदला</string>
     <string name="pen_palette_primary">पॅलेट: प्राथमिक (सक्रिय) रंग सेट करतो</string>
     <string name="pen_palette_secondary">पॅलेट: दुय्यम रंग सेट करतो</string>
+    <string name="tool_more">अधिक</string>
+    <string name="more_tools_title">अधिक टूल्स</string>
+    <string name="more_tools_empty">कोणतेही टूल लपवलेले नाही. टूल येथे हलवण्यासाठी जास्त वेळ दाबून वर ओढा.</string>
+    <string name="more_tools_hint">टूल \'अधिक\' मध्ये हलवण्यासाठी वर ओढा</string>
+    <string name="toast_moved_to_more">%s \'अधिक\' मध्ये हलवले</string>
+    <string name="toast_restored_to_toolbar">%s टूलबारमध्ये जोडले</string>
+    <string name="release_to_move_more">\'अधिक\' मध्ये हलवण्यासाठी सोडा</string>
+    <string name="action_add">जोडा</string>
+    <string name="tool_color_swap">रंग बदला</string>
 </resources>

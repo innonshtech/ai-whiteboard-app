@@ -106,6 +106,45 @@ enum class EraserMode {
     SMART
 }
 
+const val TOOLBAR_ORDER_KEY = "toolbar_tool_order"
+const val TOOLBAR_HIDDEN_KEY = "toolbar_hidden_tools"
+
+val DEFAULT_TOOLBAR_TOOLS: List<String> = listOf(
+    "select",
+    "pen",
+    "color_swap",
+    "flowchart",
+    "stickers",
+    "shapes",
+    "eraser",
+    "laser",
+    "geometry",
+    "tools",
+    "undo",
+    "redo",
+    "save"
+)
+
+val ALL_CUSTOMIZABLE_TOOLS: List<String> = listOf(
+    "select",
+    "pen",
+    "color_swap",
+    "flowchart",
+    "stickers",
+    "shapes",
+    "eraser",
+    "laser",
+    "geometry",
+    "tools",
+    "undo",
+    "redo",
+    "save",
+    "text",
+    "image",
+    "clear",
+    "background"
+)
+
 data class CanvasState(
     val strokes: List<Stroke> = emptyList(),
     val currentStroke: Stroke? = null,
@@ -150,6 +189,7 @@ data class CanvasState(
     val canvasBackground: CanvasBackground = CanvasBackground.DOTTED,
     val showGrid: Boolean = false,
     val isDarkCanvas: Boolean = false,
+    val isDarkTheme: Boolean = false,
     val pageIndex: Int = 0,
     val pageCount: Int = 1,
     val document: BoardDocument? = null,
@@ -177,6 +217,8 @@ data class CanvasState(
     val documentFrameY: Float = 0f,
     val documentFrameScale: Float = 1f,
     val saveToast: String? = null,
+    val toolbarToolOrder: List<String> = DEFAULT_TOOLBAR_TOOLS,
+    val hiddenToolbarTools: Set<String> = emptySet(),
     val showCloseSplitDialog: Boolean = false,
     val pageEpoch: Long = 0L,
     val mathTools: List<PlacedMathTool> = emptyList(),
@@ -325,12 +367,23 @@ class CanvasViewModel @Inject constructor(
         val prefs = context.getSharedPreferences(SHAPE_PREFS, Context.MODE_PRIVATE)
         val enabled = prefs.getBoolean(SHAPE_RECOGNITION_KEY, true)
         val interval = prefs.getLong(SMART_WRITE_INTERVAL_KEY, 500L).let { if (it < 400L) 500L else it }
+        val savedOrderStr = prefs.getString(TOOLBAR_ORDER_KEY, null)
+        val savedOrder = if (!savedOrderStr.isNullOrBlank()) {
+            val list = savedOrderStr.split(",").filter { it.isNotBlank() }
+            val missing = DEFAULT_TOOLBAR_TOOLS.filter { it !in list }
+            list + missing
+        } else {
+            DEFAULT_TOOLBAR_TOOLS
+        }
+        val savedHidden = prefs.getStringSet(TOOLBAR_HIDDEN_KEY, emptySet()) ?: emptySet()
         _state.update {
             it.copy(
                 isDrawToShapeEnabled = enabled,
                 smartWriteEnabled = prefs.getBoolean(SMART_WRITE_KEY, false),
                 smartWriteLanguageTag = prefs.getString(SMART_WRITE_LANG_KEY, "en") ?: "en",
-                smartWriteIntervalMs = interval
+                smartWriteIntervalMs = interval,
+                toolbarToolOrder = savedOrder,
+                hiddenToolbarTools = savedHidden
             )
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -2530,6 +2583,14 @@ class CanvasViewModel @Inject constructor(
         setCanvasBackground(_state.value.canvasBackground.withGraphPaperToggled())
     }
 
+    fun toggleAppTheme() {
+        _state.update { it.copy(isDarkTheme = !it.isDarkTheme) }
+    }
+
+    fun setAppTheme(isDark: Boolean) {
+        _state.update { it.copy(isDarkTheme = isDark) }
+    }
+
     fun toggleCanvasTheme() {
         val dark = !_state.value.isDarkCanvas
         val background = if (dark) CanvasBackground.DARK else CanvasBackground.DOTTED
@@ -3736,6 +3797,76 @@ class CanvasViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    fun setToolbarToolOrder(newOrder: List<String>) {
+        _state.update { it.copy(toolbarToolOrder = newOrder) }
+        context.getSharedPreferences(SHAPE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(TOOLBAR_ORDER_KEY, newOrder.joinToString(","))
+            .apply()
+    }
+
+    fun moveToolbarTool(fromIndex: Int, toIndex: Int) {
+        val current = _state.value.toolbarToolOrder.toMutableList()
+        if (fromIndex in current.indices && toIndex in current.indices && fromIndex != toIndex) {
+            val item = current.removeAt(fromIndex)
+            current.add(toIndex, item)
+            setToolbarToolOrder(current)
+        }
+    }
+
+    fun toggleToolbarToolVisibility(toolId: String) {
+        val currentHidden = _state.value.hiddenToolbarTools
+        val newHidden = if (toolId in currentHidden) {
+            currentHidden - toolId
+        } else {
+            currentHidden + toolId
+        }
+        _state.update { it.copy(hiddenToolbarTools = newHidden) }
+        context.getSharedPreferences(SHAPE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putStringSet(TOOLBAR_HIDDEN_KEY, newHidden)
+            .apply()
+    }
+
+    fun hideToolbarTool(toolId: String) {
+        val currentHidden = _state.value.hiddenToolbarTools
+        if (toolId !in currentHidden) {
+            val newHidden = currentHidden + toolId
+            _state.update { it.copy(hiddenToolbarTools = newHidden) }
+            context.getSharedPreferences(SHAPE_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putStringSet(TOOLBAR_HIDDEN_KEY, newHidden)
+                .apply()
+        }
+    }
+
+    fun showToolbarTool(toolId: String) {
+        val currentHidden = _state.value.hiddenToolbarTools
+        val newHidden = currentHidden - toolId
+        val currentOrder = _state.value.toolbarToolOrder
+        val newOrder = if (toolId !in currentOrder) currentOrder + toolId else currentOrder
+        _state.update { it.copy(hiddenToolbarTools = newHidden, toolbarToolOrder = newOrder) }
+        context.getSharedPreferences(SHAPE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putStringSet(TOOLBAR_HIDDEN_KEY, newHidden)
+            .putString(TOOLBAR_ORDER_KEY, newOrder.joinToString(","))
+            .apply()
+    }
+
+    fun resetToolbarTools() {
+        _state.update {
+            it.copy(
+                toolbarToolOrder = DEFAULT_TOOLBAR_TOOLS,
+                hiddenToolbarTools = emptySet()
+            )
+        }
+        context.getSharedPreferences(SHAPE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .remove(TOOLBAR_ORDER_KEY)
+            .remove(TOOLBAR_HIDDEN_KEY)
+            .apply()
     }
 }
 

@@ -313,7 +313,8 @@ fun StickerEmojiPanelContent(
 @Composable
 fun StickerEmojiPickerDialog(
     onDismiss: () -> Unit,
-    onSelectSticker: (kind: String, text: String) -> Unit
+    onSelectSticker: (kind: String, text: String) -> Unit,
+    isDark: Boolean = false
 ) {
     Box(
         modifier = Modifier
@@ -334,9 +335,9 @@ fun StickerEmojiPickerDialog(
                     onClick = {}
                 ),
             shape = RoundedCornerShape(18.dp),
-            color = Color.White,
+            color = if (isDark) Color(0xFF1E293B) else Color.White,
             shadowElevation = 16.dp,
-            border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+            border = BorderStroke(1.dp, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0))
         ) {
             StickerEmojiPanelContent(
                 onSelectSticker = onSelectSticker,
@@ -351,13 +352,18 @@ fun StickerEmojiPickerDialog(
 private fun CompactStickerCard(
     sticker: FeedbackStickerItem,
     modifier: Modifier = Modifier,
+    isDark: Boolean = false,
     onClick: () -> Unit
 ) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFFF8FAFC))
-            .border(1.dp, sticker.accentColor.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+            .background(if (isDark) Color(0xFF0F172A) else Color(0xFFF8FAFC))
+            .border(
+                1.dp,
+                if (isDark) sticker.accentColor.copy(alpha = 0.6f) else sticker.accentColor.copy(alpha = 0.45f),
+                RoundedCornerShape(10.dp)
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 7.dp)
     ) {
@@ -369,7 +375,7 @@ private fun CompactStickerCard(
                 modifier = Modifier
                     .size(30.dp)
                     .clip(CircleShape)
-                    .background(sticker.badgeBg),
+                    .background(if (isDark) sticker.badgeBg.copy(alpha = 0.25f) else sticker.badgeBg),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -382,13 +388,13 @@ private fun CompactStickerCard(
             Column {
                 Text(
                     text = sticker.title,
-                    color = Color(0xFF1E293B),
+                    color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1E293B),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = sticker.subtitle,
-                    color = Color(0xFF64748B),
+                    color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
                     fontSize = 9.5.sp,
                     maxLines = 1
                 )

@@ -36,6 +36,7 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,11 +85,13 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.CropSquare
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.FormatPaint
 import androidx.compose.material.icons.filled.Gesture
@@ -207,6 +210,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.avitrisphare.whiteboard.core.theme.LocalAvitriSphareColors
@@ -757,11 +761,22 @@ fun SidebarMenuItem(
     label: String,
     shortcut: String = "",
     isSelected: Boolean = false,
+    isDark: Boolean = false,
     onClick: () -> Unit
 ) {
-    val activeBg = if (isSelected) Color(0xFFEEF2FF) else Color.Transparent
-    val activeText = if (isSelected) Color(0xFF4338CA) else Color(0xFF1F2937)
-    val activeIcon = if (isSelected) Color(0xFF4F46E5) else Color(0xFF4B5563)
+    val activeBg = if (isSelected) {
+        if (isDark) Color(0xFF312E81) else Color(0xFFEEF2FF)
+    } else Color.Transparent
+    val activeText = if (isSelected) {
+        if (isDark) Color(0xFFA5B4FC) else Color(0xFF4338CA)
+    } else {
+        if (isDark) Color(0xFFF1F5F9) else Color(0xFF1F2937)
+    }
+    val activeIcon = if (isSelected) {
+        if (isDark) Color(0xFF818CF8) else Color(0xFF4F46E5)
+    } else {
+        if (isDark) Color(0xFF94A3B8) else Color(0xFF4B5563)
+    }
 
     Row(
         modifier = Modifier
@@ -789,7 +804,7 @@ fun SidebarMenuItem(
         if (shortcut.isNotEmpty()) {
             Text(
                 text = shortcut,
-                color = Color(0xFF9CA3AF),
+                color = if (isDark) Color(0xFF64748B) else Color(0xFF9CA3AF),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -861,23 +876,23 @@ fun BackgroundSwatch(type: CanvasBackground, isSelected: Boolean, onClick: () ->
                 CanvasBackground.DARK -> drawRect(Color(0xFF171717))
                 CanvasBackground.WHITE -> drawRect(Color.White)
                 CanvasBackground.LINED -> {
-                    drawRect(Color(0xFF171717))
+                    drawRect(Color.White)
                     for (y in 0..size.height.toInt() step 8) {
-                        drawLine(Color(0xFF2E2E2E), Offset(0f, y.toFloat()), Offset(size.width, y.toFloat()), 1f)
+                        drawLine(Color(0xFFD5D8DE), Offset(0f, y.toFloat()), Offset(size.width, y.toFloat()), 1f)
                     }
                 }
                 CanvasBackground.DOTTED -> {
-                    drawRect(Color(0xFF171717))
+                    drawRect(Color.White)
                     for (y in 0..size.height.toInt() step 8)
                         for (x in 0..size.width.toInt() step 8)
-                            drawCircle(Color(0xFF2E2E2E), 1f, Offset(x.toFloat(), y.toFloat()))
+                            drawCircle(Color(0xFF9E9E9E), 1f, Offset(x.toFloat(), y.toFloat()))
                 }
                 CanvasBackground.GRID -> {
-                    drawRect(Color(0xFF171717))
+                    drawRect(Color.White)
                     for (v in 0..size.height.toInt() step 8)
-                        drawLine(Color(0xFF2E2E2E), Offset(0f, v.toFloat()), Offset(size.width, v.toFloat()), 1f)
+                        drawLine(Color(0xFFD5D8DE), Offset(0f, v.toFloat()), Offset(size.width, v.toFloat()), 1f)
                     for (h in 0..size.width.toInt() step 8)
-                        drawLine(Color(0xFF2E2E2E), Offset(h.toFloat(), 0f), Offset(h.toFloat(), size.height), 1f)
+                        drawLine(Color(0xFFD5D8DE), Offset(h.toFloat(), 0f), Offset(h.toFloat(), size.height), 1f)
                 }
                 CanvasBackground.GRAPH -> {
                     drawRect(Color(0xFFF7FBFF))
@@ -950,7 +965,6 @@ fun CanvasScreen(
     var showProfileDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showAiPanel by remember { mutableStateOf(false) }
-    var showLiveCollabDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
     var showEditTitleDialog by remember { mutableStateOf(false) }
@@ -1319,14 +1333,21 @@ fun CanvasScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(if (state.isDarkCanvas) Color(0xFF171717) else Color.White)
+    CompositionLocalProvider(LocalDarkTheme provides state.isDarkTheme) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(if (state.isDarkCanvas) Color(0xFF171717) else Color.White)
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (event.key == Key.Delete || event.key == Key.Backspace) {
+                    if (state.selectedStrokeIds.isNotEmpty() && state.editingTextId == null) {
+                        viewModel.deleteSelectedStrokes()
+                        return@onPreviewKeyEvent true
+                    }
+                }
                 val shortcut = event.isCtrlPressed || event.isMetaPressed
                 if (!shortcut) return@onPreviewKeyEvent false
                 when (event.key) {
@@ -1424,10 +1445,6 @@ fun CanvasScreen(
                         }
                         var down = awaitFirstDown(requireUnconsumed = false)
                         dockDismissNonce++
-                        val toolbarWasOpen = state.selectedStrokeIds.isNotEmpty() && !selectionToolbarDismissed
-                        if (toolbarWasOpen) {
-                            selectionToolbarDismissed = true
-                        }
                         while (down.rejectedPalm(stylusDrawing = false)) {
                             down.consume()
                             val skipped = awaitPointerEvent()
@@ -1740,7 +1757,7 @@ fun CanvasScreen(
                                 // Hand pan mode
                             }
                             WhiteboardTool.SELECT -> {
-                                val handleSlop = 16f / canvasScale.coerceAtLeast(0.001f)
+                                val handleSlop = 28f / canvasScale.coerceAtLeast(0.001f)
                                 val moveSlop = 36f / canvasScale.coerceAtLeast(0.001f)
                                 val selectedHandle = viewModel.state.value.strokes.firstNotNullOfOrNull { stroke ->
                                     if (stroke.id !in state.selectedStrokeIds) {
@@ -2233,7 +2250,7 @@ fun CanvasScreen(
                                 val clickedStroke = viewModel.strokeAt(downWorld)
                                 if (clickedStroke != null) {
                                     viewModel.selectStrokeAt(downWorld)
-                                } else if (!toolbarWasOpen) {
+                                } else {
                                     viewModel.clearSelection()
                                 }
                             } else {
@@ -2251,8 +2268,8 @@ fun CanvasScreen(
                                     )
                                 )
                             }
-                        } else if (isDraggingSelection && moved < 14f && !toolbarWasOpen) {
-                            // Tapping an already-selected shape when toolbar was closed re-opens the toolbar
+                        } else if (isDraggingSelection && moved < 14f) {
+                            // Tapping an already-selected shape re-opens the toolbar if it was closed
                             selectionToolbarDismissed = false
                         }
                         viewModel.endSelectionMove()
@@ -3013,7 +3030,6 @@ fun CanvasScreen(
             onOpenIwb = {
                 iwbPickerLauncher.launch(arrayOf("*/*"))
             },
-            onLive = { showLiveCollabDialog = true },
             onHelp = { showHelpDialog = true },
             onClear = { showClearDialog = true },
             onRename = { showEditTitleDialog = true },
@@ -3883,9 +3899,11 @@ fun CanvasScreen(
                     .background(Color(0x40000000))
                     .clickable { showSidebar = false }
             ) {
+                val isDark = state.isDarkTheme
                 Surface(
                     shape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
-                    color = Color.White,
+                    color = if (isDark) Color(0xFF1E293B) else Color.White,
+                    border = if (isDark) BorderStroke(1.dp, Color(0xFF334155)) else null,
                     shadowElevation = 16.dp,
                     modifier = Modifier
                         .width(260.dp)
@@ -3910,20 +3928,20 @@ fun CanvasScreen(
                                     "AvitriSphare",
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF1F2937)
+                                    color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1F2937)
                                 )
                                 Text(
                                     stringResource(R.string.app_subtitle),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = Color(0xFF6B7280)
+                                    color = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
                                 )
                             }
                             IconButton(
                                 onClick = { showSidebar = false },
                                 modifier = Modifier.size(28.dp)
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), tint = Color(0xFF6B7280))
+                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), tint = if (isDark) Color(0xFFCBD5E1) else Color(0xFF6B7280))
                             }
                         }
 
@@ -3933,6 +3951,7 @@ fun CanvasScreen(
                         SidebarMenuItem(
                             icon = Icons.Default.Person,
                             label = stringResource(R.string.tool_profile),
+                            isDark = isDark,
                             onClick = {
                                 showSidebar = false
                                 showProfileDialog = true
@@ -3942,6 +3961,7 @@ fun CanvasScreen(
                         SidebarMenuItem(
                             icon = Icons.Default.Edit,
                             label = stringResource(R.string.menu_rename_board),
+                            isDark = isDark,
                             onClick = {
                                 showSidebar = false
                                 showEditTitleDialog = true
@@ -3953,6 +3973,7 @@ fun CanvasScreen(
                             icon = Icons.Default.FolderOpen,
                             label = stringResource(R.string.menu_open),
                             shortcut = "Ctrl+O",
+                            isDark = isDark,
                             onClick = {
                                 showSidebar = false
                                 onNavigateBack()
@@ -3965,6 +3986,7 @@ fun CanvasScreen(
                             label = stringResource(R.string.menu_export_lesson),
                             shortcut = "Ctrl+Shift+E",
                             isSelected = true,
+                            isDark = isDark,
                             onClick = {
                                 showSidebar = false
                                 exportResult = null
@@ -3976,24 +3998,15 @@ fun CanvasScreen(
                         SidebarMenuItem(
                             icon = Icons.Default.FolderOpen,
                             label = stringResource(R.string.menu_open_iwb),
+                            isDark = isDark,
                             onClick = {
                                 showSidebar = false
                                 iwbPickerLauncher.launch(arrayOf("*/*"))
                             }
                         )
 
-                        // 4. Live collaboration...
-                        SidebarMenuItem(
-                            icon = Icons.Default.Group,
-                            label = stringResource(R.string.menu_live_collab),
-                            onClick = {
-                                showSidebar = false
-                                showLiveCollabDialog = true
-                            }
-                        )
-
                         Divider(
-                            color = Color(0xFFF3F4F6),
+                            color = if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6),
                             thickness = 1.dp,
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
@@ -4003,6 +4016,7 @@ fun CanvasScreen(
                             icon = Icons.Default.Bolt,
                             label = stringResource(R.string.menu_command_palette),
                             shortcut = "Ctrl+/",
+                            isDark = isDark,
                             onClick = {
                                 showSidebar = false
                                 showCommandPalette = true
@@ -4014,6 +4028,7 @@ fun CanvasScreen(
                             icon = Icons.Default.Search,
                             label = stringResource(R.string.menu_find_on_canvas),
                             shortcut = "Ctrl+F",
+                            isDark = isDark,
                             onClick = {
                                 showSidebar = false
                                 showCommandPalette = true
@@ -4025,6 +4040,7 @@ fun CanvasScreen(
                             icon = Icons.Default.HelpOutline,
                             label = stringResource(R.string.menu_help),
                             shortcut = "?",
+                            isDark = isDark,
                             onClick = {
                                 showSidebar = false
                                 showHelpDialog = true
@@ -4035,6 +4051,7 @@ fun CanvasScreen(
                         SidebarMenuItem(
                             icon = Icons.Default.LayersClear,
                             label = stringResource(R.string.menu_reset_canvas),
+                            isDark = isDark,
                             onClick = {
                                 showSidebar = false
                                 showClearDialog = true
@@ -4042,7 +4059,7 @@ fun CanvasScreen(
                         )
 
                         Divider(
-                            color = Color(0xFFF3F4F6),
+                            color = if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6),
                             thickness = 1.dp,
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
@@ -4052,9 +4069,20 @@ fun CanvasScreen(
                             icon = Icons.Default.Language,
                             label = stringResource(R.string.change_language),
                             shortcut = currentLanguage.nativeName,
+                            isDark = isDark,
                             onClick = {
                                 showSidebar = false
                                 showLanguageDialog = true
+                            }
+                        )
+
+                        // 10. Theme (Light / Dark)
+                        SidebarMenuItem(
+                            icon = if (isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
+                            label = if (isDark) stringResource(R.string.theme_light) else stringResource(R.string.theme_dark),
+                            isDark = isDark,
+                            onClick = {
+                                viewModel.toggleAppTheme()
                             }
                         )
                     }
@@ -4070,217 +4098,16 @@ fun CanvasScreen(
         }
     }
 
-    // 6. Live Collaboration Modal Dialog (Exact Match to User's Images 2 & 3)
-    if (showLiveCollabDialog) {
-        Dialog(onDismissRequest = { showLiveCollabDialog = false }) {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = Color.White,
-                shadowElevation = 16.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .padding(24.dp)
-                        .verticalScroll(rememberScrollState()),
-                    horizontalAlignment = if (!state.isLiveCollabActive) Alignment.CenterHorizontally else Alignment.Start
-                ) {
-                    // Title: Live collaboration
-                    Text(
-                        text = "Live collaboration",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF5B5BD6)
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    if (!state.isLiveCollabActive) {
-                        // Image 2 State: Before Session Started
-                        Text(
-                            text = "Invite people to collaborate on your drawing.",
-                            fontSize = 14.sp,
-                            color = Color(0xFF1F2937),
-                            fontWeight = FontWeight.Medium
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            text = "Don't worry, the session is end-to-end encrypted, and fully private. Not even our server can see what you draw.",
-                            fontSize = 13.sp,
-                            color = Color(0xFF4B5563),
-                            lineHeight = 18.sp,
-                            modifier = Modifier.padding(horizontal = 4.dp)
-                        )
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        // Start Session Button
-                        Button(
-                            onClick = { viewModel.startLiveSession() },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF5B5BD6),
-                                contentColor = Color.White
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                "Start session",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    } else {
-                        // Image 3 State: Active Live Session
-                        // 1. Your name
-                        Text(
-                            text = "Your name",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF1F2937)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = state.userName,
-                            onValueChange = { viewModel.setUserName(it) },
-                            singleLine = true,
-                            shape = RoundedCornerShape(10.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = Color(0xFFF3F4F6),
-                                unfocusedContainerColor = Color(0xFFF3F4F6),
-                                focusedBorderColor = Color(0xFF5B5BD6),
-                                unfocusedBorderColor = Color.Transparent
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // 2. Link with Copy button
-                        val roomUrl = "https://avitrisphere.app/#room=${state.collabRoomId}"
-                        Text(
-                            text = "Link",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF1F2937)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            OutlinedTextField(
-                                value = roomUrl,
-                                onValueChange = {},
-                                readOnly = true,
-                                singleLine = true,
-                                shape = RoundedCornerShape(10.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = Color(0xFFF9FAFB),
-                                    unfocusedContainerColor = Color(0xFFF9FAFB),
-                                    focusedBorderColor = Color(0xFFD1D5DB),
-                                    unfocusedBorderColor = Color(0xFFE5E7EB)
-                                ),
-                                modifier = Modifier.weight(1f)
-                            )
-                            Button(
-                                onClick = {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText("AvitriSphare Live Session", roomUrl)
-                                    clipboard.setPrimaryClip(clip)
-                                    Toast.makeText(context, "Link copied to clipboard!", Toast.LENGTH_SHORT).show()
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF5B5BD6),
-                                    contentColor = Color.White
-                                ),
-                                modifier = Modifier.height(52.dp)
-                            ) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Copy link", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(18.dp))
-
-                        // 3. QR Code Preview
-                        val qrBitmap = remember(roomUrl) { QRCodeHelper.generateQRCodeBitmap(roomUrl, 240) }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFFF9FAFB))
-                                .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp))
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Image(
-                                bitmap = qrBitmap,
-                                contentDescription = "Room QR Code",
-                                modifier = Modifier.size(160.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // 4. Privacy & Disconnect note
-                        Text(
-                            text = "ðŸ”’ Don't worry, the session is end-to-end encrypted, and fully private. Not even our server can see what you draw.",
-                            fontSize = 12.sp,
-                            color = Color(0xFF4B5563),
-                            lineHeight = 16.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = "Stopping the session will disconnect you from the room, but you'll be able to continue working with the scene, locally. Note that this won't affect other people, and they'll still be able to collaborate on their version.",
-                            fontSize = 11.sp,
-                            color = Color(0xFF6B7280),
-                            lineHeight = 15.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // 5. Stop session button
-                        Button(
-                            onClick = { viewModel.stopLiveSession() },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFFEE2E2),
-                                contentColor = Color(0xFFDC2626)
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Stop session", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     // Command Palette Dialog
     if (showCommandPalette) {
+        val isDark = state.isDarkTheme || isSystemInDarkTheme()
+        val dialogBg = if (isDark) Color(0xFF1E293B) else Color.White
+
         Dialog(onDismissRequest = { showCommandPalette = false }) {
             Surface(
                 shape = RoundedCornerShape(14.dp),
-                color = Color.White,
+                color = dialogBg,
+                border = if (isDark) BorderStroke(1.dp, Color(0xFF334155)) else null,
                 shadowElevation = 12.dp,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -4290,20 +4117,18 @@ fun CanvasScreen(
                     OutlinedTextField(
                         value = commandSearchQuery,
                         onValueChange = { commandSearchQuery = it },
-                        placeholder = { Text("Search tools & commands...") },
+                        placeholder = { Text("Search tools & commands...", color = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)) },
                         singleLine = true,
-                        leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF9CA3AF)) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color(0xFFF9FAFB),
-                            unfocusedContainerColor = Color(0xFFF9FAFB),
-                            focusedBorderColor = Color(0xFF5B5BD6),
-                            unfocusedBorderColor = Color(0xFFE5E7EB)
+                        leadingIcon = { Icon(Icons.Default.Search, null, tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF9CA3AF)) },
+                        textStyle = TextStyle(
+                            color = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827),
+                            fontSize = 14.sp
                         ),
+                        colors = boardFieldColors(isDark),
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     listOf(
-                        "Start Live Collaboration" to { showCommandPalette = false; showLiveCollabDialog = true },
                         "Insert Image" to { showCommandPalette = false; imagePickerLauncher.launch("image/*") },
                         "Draw Rectangle" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.RECTANGLE) },
                         "Draw Diamond" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.DIAMOND) },
@@ -4354,7 +4179,12 @@ fun CanvasScreen(
                             ) {
                                 Icon(Icons.Default.Bolt, null, tint = Color(0xFF5B5BD6), modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(10.dp))
-                                Text(name, fontSize = 14.sp, color = Color(0xFF1F2937), fontWeight = FontWeight.Medium)
+                                Text(
+                                    name,
+                                    fontSize = 14.sp,
+                                    color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1F2937),
+                                    fontWeight = FontWeight.Medium
+                                )
                             }
                         }
                 }
@@ -4364,34 +4194,38 @@ fun CanvasScreen(
 
     // Help & Shortcuts Dialog
     if (showHelpDialog) {
+        val isDark = state.isDarkTheme || isSystemInDarkTheme()
+        val textPrimary = if (isDark) Color(0xFFE2E8F0) else Color(0xFF4B5563)
+        val textSecondary = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
         BoardModal(
             title = "Whiteboard guide",
             onDismiss = { showHelpDialog = false },
             confirmLabel = "Got it",
             onConfirm = { showHelpDialog = false },
-            cancelLabel = null
+            cancelLabel = null,
+            isDark = isDark
         ) {
             Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                 Text(
                     "V selects. H pans. R rectangle, D diamond, O circle, A arrow, L line. P pen, plus pencil, marker, highlighter, and brush. T text. E eraser: Standard erases inside the circle, Smart removes the whole stroke. Palm touches wider than 3 cm are ignored while a stylus is down. K laser, B bucket fill, 9 inserts an image.",
                     fontSize = 13.sp,
-                    color = Color(0xFF4B5563),
+                    color = textPrimary,
                     lineHeight = 20.sp
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     "Drag the ruler, compass, or protractor from the toolbar onto the board. Drag either end to rotate. On the compass, drag the pencil to set the radius in centimetres, then tap it to draw a circle or sweep it to draw an arc. On the protractor, tap the scale to mark an angle in degrees. Draw along the ruler edge to place a straight line with its length. Two fingers on a tool move and rotate it. Drag a tool back to the toolbar to remove it. Graph paper adds a squared background. A rough circle, ellipse, rectangle, square, triangle, line, arrow, star, or diamond offers Convert to shape half a second after you lift the pen. Yes converts it, No keeps the drawing, and no answer converts it after two seconds. Turn Shape recognition off in the menu for free drawing. A converted shape can be moved, resized from its corners, and recoloured.",
                     fontSize = 12.sp,
-                    color = Color(0xFF6B7280)
+                    color = textSecondary
                 )
                 Spacer(modifier = Modifier.height(10.dp))
-                Text("Pinch with 2 fingers on empty board to zoom from 10% to 500%. Two fingers also pan. Ctrl+Z undoes, Ctrl+Y redoes. Double tap fits the page.", fontSize = 12.sp, color = Color(0xFF6B7280))
+                Text("Pinch with 2 fingers on empty board to zoom from 10% to 500%. Two fingers also pan. Ctrl+Z undoes, Ctrl+Y redoes. Double tap fits the page.", fontSize = 12.sp, color = textSecondary)
                 if (state.panelIdForHelp.isNotBlank()) {
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         "Panel: ${state.panelIdForHelp} · ${state.licenseStateForHelp}",
                         fontSize = 11.sp,
-                        color = Color(0xFF9CA3AF)
+                        color = if (isDark) Color(0xFF64748B) else Color(0xFF9CA3AF)
                     )
                 }
             }
@@ -4399,27 +4233,41 @@ fun CanvasScreen(
     }
 
     if (showImageSearch) {
+        val isDark = state.isDarkTheme || isSystemInDarkTheme()
+        val dialogBg = if (isDark) Color(0xFF1E293B) else Color.White
+        val subtitleColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
+
         Dialog(onDismissRequest = { showImageSearch = false }) {
-            Surface(shape = RoundedCornerShape(20.dp), color = Color.White, modifier = Modifier.fillMaxWidth()) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = dialogBg,
+                border = if (isDark) BorderStroke(1.dp, Color(0xFF334155)) else null,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    BoardModalHeader("Google Images") { showImageSearch = false }
+                    BoardModalHeader("Google Images", isDark = isDark) { showImageSearch = false }
                     Text(
                         "Search stays in this window. Tap a picture to paste it on the board.",
                         fontSize = 12.sp,
-                        color = Color(0xFF6B7280)
+                        color = subtitleColor
                     )
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = imageQuery,
                         onValueChange = { imageQuery = it },
                         singleLine = true,
-                        placeholder = { Text("Search images") },
+                        placeholder = { Text("Search images", color = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)) },
+                        textStyle = TextStyle(
+                            color = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827),
+                            fontSize = 14.sp
+                        ),
+                        colors = boardFieldColors(isDark),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { imageSearchTerm = imageQuery.trim() }),
                         modifier = Modifier.fillMaxWidth()
                     )
                     TextButton(onClick = { imageSearchTerm = imageQuery.trim() }) {
-                        Text("Search in this window", color = Color(0xFF5B5BD6))
+                        Text("Search in this window", color = if (isDark) Color(0xFF818CF8) else Color(0xFF5B5BD6))
                     }
                     AndroidView(
                         factory = { viewContext ->
@@ -4457,17 +4305,31 @@ fun CanvasScreen(
     }
 
     if (showYouTubeDialog) {
+        val isDark = state.isDarkTheme || isSystemInDarkTheme()
+        val dialogBg = if (isDark) Color(0xFF1E293B) else Color.White
+        val subtitleColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
+
         Dialog(onDismissRequest = { showYouTubeDialog = false }) {
-            Surface(shape = RoundedCornerShape(20.dp), color = Color.White, modifier = Modifier.fillMaxWidth()) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = dialogBg,
+                border = if (isDark) BorderStroke(1.dp, Color(0xFF334155)) else null,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    BoardModalHeader("YouTube") { showYouTubeDialog = false }
-                    Text("Paste a link or tap a video in the results.", fontSize = 12.sp, color = Color(0xFF6B7280))
+                    BoardModalHeader("YouTube", isDark = isDark) { showYouTubeDialog = false }
+                    Text("Paste a link or tap a video in the results.", fontSize = 12.sp, color = subtitleColor)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = youtubeQuery,
                         onValueChange = { youtubeQuery = it },
                         singleLine = true,
-                        placeholder = { Text("Link or search") },
+                        placeholder = { Text("Link or search", color = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)) },
+                        textStyle = TextStyle(
+                            color = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827),
+                            fontSize = 14.sp
+                        ),
+                        colors = boardFieldColors(isDark),
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(8.dp))
@@ -4481,7 +4343,7 @@ fun CanvasScreen(
                             viewModel.addYouTube(youtubeQuery, centerWorld)
                             showYouTubeDialog = false
                         }
-                    }) { Text("Place link on board") }
+                    }) { Text("Place link on board", color = if (isDark) Color(0xFF818CF8) else Color(0xFF5B5BD6)) }
                     AndroidView(
                         factory = { viewContext ->
                             android.webkit.WebView(viewContext).apply {
@@ -4607,6 +4469,7 @@ fun CanvasScreen(
             title = stringResource(R.string.dialog_edit_title),
             onDismiss = { showEditTitleDialog = false },
             confirmLabel = stringResource(R.string.save),
+            isDark = state.isDarkTheme,
             onConfirm = {
                 viewModel.updateTitle(editedTitle.ifBlank { "Untitled" })
                 showEditTitleDialog = false
@@ -4616,7 +4479,7 @@ fun CanvasScreen(
                 value = editedTitle,
                 onValueChange = { editedTitle = it },
                 singleLine = true,
-                colors = boardFieldColors(),
+                colors = boardFieldColors(state.isDarkTheme),
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -4628,6 +4491,7 @@ fun CanvasScreen(
             title = stringResource(R.string.tool_profile),
             onDismiss = { showProfileDialog = false },
             confirmLabel = stringResource(R.string.save),
+            isDark = state.isDarkTheme,
             onConfirm = {
                 viewModel.setUserName(profileDraft)
                 showProfileDialog = false
@@ -4638,13 +4502,13 @@ fun CanvasScreen(
                     text = "Your name",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF1F2937)
+                    color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF1F2937)
                 )
                 OutlinedTextField(
                     value = profileDraft,
                     onValueChange = { profileDraft = it },
                     singleLine = true,
-                    colors = boardFieldColors(),
+                    colors = boardFieldColors(state.isDarkTheme),
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -4657,13 +4521,14 @@ fun CanvasScreen(
             title = stringResource(R.string.dialog_delete_title),
             onDismiss = { showDeleteDialog = false },
             confirmLabel = stringResource(R.string.delete),
+            isDark = state.isDarkTheme,
             onConfirm = {
                 viewModel.deleteNote { onNavigateBack() }
                 showDeleteDialog = false
             },
             confirmDestructive = true
         ) {
-            Text(stringResource(R.string.dialog_delete_msg), color = Color(0xFF6B7280), fontSize = 14.sp)
+            Text(stringResource(R.string.dialog_delete_msg), color = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF6B7280), fontSize = 14.sp)
         }
     }
 
@@ -4677,15 +4542,16 @@ fun CanvasScreen(
             title = stringResource(R.string.dialog_split_leave_title),
             onDismiss = { viewModel.dismissCloseSplitDialog() },
             confirmLabel = stringResource(R.string.dialog_keep_active),
+            isDark = state.isDarkTheme,
             onConfirm = { viewModel.closeSplit(activePaneIndex) }
         ) {
-            Text(stringResource(R.string.dialog_split_leave_msg), color = Color(0xFF6B7280), fontSize = 14.sp)
+            Text(stringResource(R.string.dialog_split_leave_msg), color = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF6B7280), fontSize = 14.sp)
             Spacer(Modifier.height(8.dp))
             Text(
                 "Active: Pane ${activePaneIndex + 1} ($activeStrokeCount stroke${if (activeStrokeCount == 1) "" else "s"})",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF2563EB)
+                color = if (state.isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB)
             )
             if (state.splitPanes.size == 2 || (totalStrokes > activeStrokeCount && state.splitPanes.size > 1)) {
                 Spacer(Modifier.height(10.dp))
@@ -4701,9 +4567,9 @@ fun CanvasScreen(
                             onClick = { viewModel.closeSplit(otherIndex) },
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFFF1F5F9))
+                                .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
                         ) {
-                            Text("Keep Pane ${otherIndex + 1} ($otherCount)", fontSize = 12.sp, color = Color(0xFF334155))
+                            Text("Keep Pane ${otherIndex + 1} ($otherCount)", fontSize = 12.sp, color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155))
                         }
                     }
                     if (totalStrokes > activeStrokeCount && state.splitPanes.size > 1) {
@@ -4711,9 +4577,9 @@ fun CanvasScreen(
                             onClick = { viewModel.closeSplit(-1) },
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFFF1F5F9))
+                                .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
                         ) {
-                            Text("Combine All ($totalStrokes)", fontSize = 12.sp, color = Color(0xFF334155))
+                            Text("Combine All ($totalStrokes)", fontSize = 12.sp, color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155))
                         }
                     }
                 }
@@ -4726,19 +4592,21 @@ fun CanvasScreen(
             title = stringResource(R.string.dialog_clear_title),
             onDismiss = { showClearDialog = false },
             confirmLabel = stringResource(R.string.dialog_clear_title),
+            isDark = state.isDarkTheme,
             onConfirm = {
                 viewModel.clearCanvas()
                 showClearDialog = false
             },
             confirmDestructive = true
         ) {
-            Text(stringResource(R.string.dialog_clear_msg), color = Color(0xFF6B7280), fontSize = 14.sp)
+            Text(stringResource(R.string.dialog_clear_msg), color = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF6B7280), fontSize = 14.sp)
         }
     }
 
     if (showExportDialog && exportedUri != null) {
         BoardModal(
             title = stringResource(R.string.dialog_exported_title),
+            isDark = state.isDarkTheme,
             onDismiss = {
                 showExportDialog = false
                 exportedUri = null
@@ -4756,7 +4624,7 @@ fun CanvasScreen(
             },
             cancelLabel = null
         ) {
-            Text(stringResource(R.string.dialog_exported_msg), color = Color(0xFF6B7280), fontSize = 14.sp)
+            Text(stringResource(R.string.dialog_exported_msg), color = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF6B7280), fontSize = 14.sp)
         }
     }
 
@@ -4770,6 +4638,7 @@ fun CanvasScreen(
             exportProgress = exportProgress,
             exportStatusMessage = exportStatusMessage,
             exportResult = exportResult,
+            isDark = state.isDarkTheme,
             onDismiss = {
                 showExportLessonDialog = false
                 exportResult = null
@@ -4809,13 +4678,15 @@ fun CanvasScreen(
             onSelectSticker = { kind, text ->
                 val center = canvasCenter()
                 viewModel.insertSticker(kind, center, text)
-            }
+            },
+            isDark = state.isDarkTheme
         )
     }
 
     if (showLanguageDialog) {
         LanguageSelectionDialog(
             currentLanguage = currentLanguage,
+            isDark = state.isDarkTheme,
             onLanguageSelected = { newLang ->
                 onLanguageChange(newLang)
                 panelSession?.setUiLocaleTag(newLang.code)
@@ -4824,6 +4695,7 @@ fun CanvasScreen(
             },
             onDismiss = { showLanguageDialog = false }
         )
+    }
     }
 }
 
@@ -4834,18 +4706,20 @@ private class ChromeBounds {
 }
 
 @Composable
-private fun boardFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = Color(0xFF1F2937),
-    unfocusedTextColor = Color(0xFF1F2937),
+private fun boardFieldColors(isDark: Boolean = LocalDarkTheme.current) = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827),
+    unfocusedTextColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827),
     focusedBorderColor = Color(0xFF6366F1),
-    unfocusedBorderColor = Color(0xFFE5E7EB),
-    focusedContainerColor = Color(0xFFF8FAFC),
-    unfocusedContainerColor = Color(0xFFF8FAFC),
-    cursorColor = Color(0xFF6366F1)
+    unfocusedBorderColor = if (isDark) Color(0xFF475569) else Color(0xFFE5E7EB),
+    focusedContainerColor = if (isDark) Color(0xFF0F172A) else Color(0xFFF8FAFC),
+    unfocusedContainerColor = if (isDark) Color(0xFF0F172A) else Color(0xFFF8FAFC),
+    cursorColor = Color(0xFF6366F1),
+    focusedPlaceholderColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280),
+    unfocusedPlaceholderColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
 )
 
 @Composable
-private fun BoardModalHeader(title: String, onDismiss: () -> Unit) {
+private fun BoardModalHeader(title: String, isDark: Boolean = LocalDarkTheme.current, onDismiss: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -4854,21 +4728,21 @@ private fun BoardModalHeader(title: String, onDismiss: () -> Unit) {
             title,
             fontWeight = FontWeight.SemiBold,
             fontSize = 18.sp,
-            color = Color(0xFF111827),
+            color = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827),
             modifier = Modifier.weight(1f)
         )
         Box(
             modifier = Modifier
                 .size(32.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFF3F4F6))
+                .background(if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6))
                 .clickable(onClick = onDismiss),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 Icons.Default.Close,
                 contentDescription = "Close",
-                tint = Color(0xFF6B7280),
+                tint = if (isDark) Color(0xFFCBD5E1) else Color(0xFF6B7280),
                 modifier = Modifier.size(16.dp)
             )
         }
@@ -4883,19 +4757,21 @@ private fun BoardModal(
     onConfirm: (() -> Unit)? = null,
     confirmDestructive: Boolean = false,
     cancelLabel: String? = "Cancel",
+    isDark: Boolean = LocalDarkTheme.current,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(20.dp),
-            color = Color.White,
+            color = if (isDark) Color(0xFF1E293B) else Color.White,
+            border = if (isDark) BorderStroke(1.dp, Color(0xFF334155)) else null,
             shadowElevation = 16.dp,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
-                BoardModalHeader(title, onDismiss)
+                BoardModalHeader(title, isDark = isDark, onDismiss = onDismiss)
                 Spacer(Modifier.height(14.dp))
                 content()
                 if (confirmLabel != null || cancelLabel != null) {
@@ -4907,7 +4783,11 @@ private fun BoardModal(
                     ) {
                         if (cancelLabel != null) {
                             TextButton(onClick = onDismiss) {
-                                Text(cancelLabel, color = Color(0xFF6B7280), fontWeight = FontWeight.Medium)
+                                Text(
+                                    cancelLabel,
+                                    color = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280),
+                                    fontWeight = FontWeight.Medium
+                                )
                             }
                             Spacer(Modifier.width(8.dp))
                         }

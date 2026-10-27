@@ -63,7 +63,13 @@ private val boxShapes = setOf(
     StrokeType.PRISM,
     StrokeType.CYLINDER,
     StrokeType.CONE,
-    StrokeType.SPHERE
+    StrokeType.SPHERE,
+    StrokeType.ROUND_RECT,
+    StrokeType.IMAGE,
+    StrokeType.VIDEO,
+    StrokeType.WEB_EMBED,
+    StrokeType.STICKY_NOTE,
+    StrokeType.FRAME
 )
 
 val lockedAspect = setOf(

@@ -41,13 +41,15 @@ import com.avitrisphare.whiteboard.core.localization.AppLanguage
 @Composable
 fun LanguageSelectionDialog(
     currentLanguage: AppLanguage,
+    isDark: Boolean = false,
     onLanguageSelected: (AppLanguage) -> Unit,
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(20.dp),
-            color = Color.White,
+            color = if (isDark) Color(0xFF1E293B) else Color.White,
+            border = if (isDark) BorderStroke(1.dp, Color(0xFF334155)) else null,
             shadowElevation = 18.dp,
             modifier = Modifier
                 .fillMaxWidth()
@@ -91,12 +93,12 @@ fun LanguageSelectionDialog(
                                 text = stringResource(R.string.select_language),
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF111827)
+                                color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF111827)
                             )
                             Text(
                                 text = stringResource(R.string.change_language),
                                 fontSize = 12.sp,
-                                color = Color(0xFF6B7280)
+                                color = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
                             )
                         }
                     }
@@ -105,14 +107,14 @@ fun LanguageSelectionDialog(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFF3F4F6))
+                            .background(if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6))
                             .clickable(onClick = onDismiss),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = stringResource(R.string.close),
-                            tint = Color(0xFF6B7280),
+                            tint = if (isDark) Color(0xFFCBD5E1) else Color(0xFF6B7280),
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -126,8 +128,12 @@ fun LanguageSelectionDialog(
                 ) {
                     AppLanguage.entries.forEach { lang ->
                         val isSelected = lang == currentLanguage
-                        val bg = if (isSelected) Color(0xFFEEF2FF) else Color(0xFFF9FAFB)
-                        val border = if (isSelected) Color(0xFF6366F1) else Color(0xFFE5E7EB)
+                        val bg = if (isSelected) {
+                            if (isDark) Color(0xFF312E81) else Color(0xFFEEF2FF)
+                        } else {
+                            if (isDark) Color(0xFF0F172A) else Color(0xFFF9FAFB)
+                        }
+                        val border = if (isSelected) Color(0xFF6366F1) else (if (isDark) Color(0xFF334155) else Color(0xFFE5E7EB))
 
                         Row(
                             modifier = Modifier
@@ -151,14 +157,14 @@ fun LanguageSelectionDialog(
                                     modifier = Modifier
                                         .size(36.dp)
                                         .clip(CircleShape)
-                                        .background(if (isSelected) Color(0xFF6366F1) else Color(0xFFE2E8F0)),
+                                        .background(if (isSelected) Color(0xFF6366F1) else (if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0))),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         text = lang.code.uppercase(),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isSelected) Color.White else Color(0xFF475569)
+                                        color = if (isSelected) Color.White else (if (isDark) Color(0xFF94A3B8) else Color(0xFF475569))
                                     )
                                 }
 
@@ -167,13 +173,13 @@ fun LanguageSelectionDialog(
                                         text = lang.nativeName,
                                         fontSize = 16.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = if (isSelected) Color(0xFF312E81) else Color(0xFF1F2937)
+                                        color = if (isSelected) (if (isDark) Color(0xFFA5B4FC) else Color(0xFF312E81)) else (if (isDark) Color(0xFFF1F5F9) else Color(0xFF1F2937))
                                     )
                                     if (lang != AppLanguage.ENGLISH) {
                                         Text(
                                             text = lang.displayName,
                                             fontSize = 12.sp,
-                                            color = Color(0xFF6B7280)
+                                            color = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
                                         )
                                     }
                                 }
@@ -182,7 +188,7 @@ fun LanguageSelectionDialog(
                             Icon(
                                 imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                                 contentDescription = null,
-                                tint = if (isSelected) Color(0xFF4F46E5) else Color(0xFF9CA3AF),
+                                tint = if (isSelected) (if (isDark) Color(0xFF818CF8) else Color(0xFF4F46E5)) else (if (isDark) Color(0xFF64748B) else Color(0xFF9CA3AF)),
                                 modifier = Modifier.size(22.dp)
                             )
                         }
