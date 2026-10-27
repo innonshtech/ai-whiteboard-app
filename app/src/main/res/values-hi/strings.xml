@@ -180,8 +180,19 @@
     <string name="delete_note_confirm">क्या आप वाकई \'%s\' को हटाना चाहते हैं?</string>
     <string name="sort_notes">नोट्स क्रमबद्ध करें</string>
     <string name="toggle_theme">थीम बदलें</string>
+    <string name="theme_title">थीम</string>
+    <string name="theme_dark">डार्क थीम</string>
+    <string name="theme_light">लाइट थीम</string>
+    <string name="theme_black_board">ब्लैक बोर्ड</string>
     <string name="toast_color_swapped">रंग बदला गया</string>
     <string name="toast_saved">सहेज लिया गया</string>
+    <string name="customize_toolbar_title">टूलबार कस्टमाइज़ करें</string>
+    <string name="customize_toolbar_edit_mode">क्रम बदलने के लिए खींचें • छिपाने के लिए ✕ दबाएं</string>
+    <string name="customize_toolbar_reset">रीसेट</string>
+    <string name="customize_toolbar_done">पूर्ण</string>
+    <string name="customize_toolbar_tools_on_bar">टूलबार में उपलब्ध टूल्स</string>
+    <string name="customize_toolbar_available_tools">अन्य टूल्स (जोड़ने के लिए टैप करें)</string>
+    <string name="customize_toolbar_hint">टूलबार पर सीधे क्रम बदलने के लिए किसी भी टूल को दबाकर रखें।</string>
 
     <!-- Geometry Panel -->
     <string name="geo_title">ज्यामिति</string>
@@ -274,4 +285,13 @@
     <string name="pen_swap">बदलें</string>
     <string name="pen_palette_primary">पैलेट: प्राथमिक (सक्रिय) रंग सेट करता है</string>
     <string name="pen_palette_secondary">पैलेट: द्वितीयक रंग सेट करता है</string>
+    <string name="tool_more">अधिक</string>
+    <string name="more_tools_title">अधिक टूल्स</string>
+    <string name="more_tools_empty">कोई टूल छिपा नहीं है। किसी भी टूल को यहाँ ले जाने के लिए दबाकर ऊपर खींचें।</string>
+    <string name="more_tools_hint">टूल को \'अधिक\' में ले जाने के लिए ऊपर खींचें</string>
+    <string name="toast_moved_to_more">%s को \'अधिक\' में भेजा गया</string>
+    <string name="toast_restored_to_toolbar">%s को टूलबार में वापस जोड़ा गया</string>
+    <string name="release_to_move_more">\'अधिक\' में भेजने के लिए छोड़ें</string>
+    <string name="action_add">जोड़ें</string>
+    <string name="tool_color_swap">रंग बदलें</string>
 </resources>

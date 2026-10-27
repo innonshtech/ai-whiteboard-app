@@ -180,8 +180,19 @@
     <string name="delete_note_confirm">Are you sure you want to delete \'%s\'?</string>
     <string name="sort_notes">Sort notes</string>
     <string name="toggle_theme">Toggle theme</string>
+    <string name="theme_title">Theme</string>
+    <string name="theme_dark">Dark Theme</string>
+    <string name="theme_light">Light Theme</string>
+    <string name="theme_black_board">Black Board</string>
     <string name="toast_color_swapped">Color swapped</string>
     <string name="toast_saved">Saved</string>
+    <string name="customize_toolbar_title">Customize Toolbar</string>
+    <string name="customize_toolbar_edit_mode">Drag tools to reorder • Tap ✕ to hide</string>
+    <string name="customize_toolbar_reset">Reset</string>
+    <string name="customize_toolbar_done">Done</string>
+    <string name="customize_toolbar_tools_on_bar">Tools in Toolbar</string>
+    <string name="customize_toolbar_available_tools">Available Tools (Tap to Add)</string>
+    <string name="customize_toolbar_hint">Long-press any tool to drag and reorder directly on the toolbar.</string>
 
     <!-- Geometry Panel -->
     <string name="geo_title">Geometry</string>
@@ -274,4 +285,13 @@
     <string name="pen_swap">Swap</string>
     <string name="pen_palette_primary">Palette sets: Primary (Active) Color</string>
     <string name="pen_palette_secondary">Palette sets: Secondary Color</string>
+    <string name="tool_more">More</string>
+    <string name="more_tools_title">More Tools</string>
+    <string name="more_tools_empty">No tools in More. Long press and drag any tool up above the toolbar to move it here.</string>
+    <string name="more_tools_hint">Drag up above toolbar to move to More</string>
+    <string name="toast_moved_to_more">%s moved to More</string>
+    <string name="toast_restored_to_toolbar">%s added back to toolbar</string>
+    <string name="release_to_move_more">Release to move to More</string>
+    <string name="action_add">Add</string>
+    <string name="tool_color_swap">Color Swap</string>
 </resources>

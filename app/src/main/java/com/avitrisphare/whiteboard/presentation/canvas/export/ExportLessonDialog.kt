@@ -65,6 +65,7 @@ fun ExportLessonDialog(
     exportProgress: Float,
     exportStatusMessage: String,
     exportResult: ExportResult?,
+    isDark: Boolean = false,
     onDismiss: () -> Unit,
     onStartExport: (title: String, format: ExportFormat, destination: ExportDestination) -> Unit,
     onOpenFile: (ExportResult) -> Unit,
@@ -95,9 +96,9 @@ fun ExportLessonDialog(
                     onClick = {} // Consume click inside
                 ),
             shape = RoundedCornerShape(18.dp),
-            color = Color.White,
+            color = if (isDark) Color(0xFF1E293B) else Color.White,
             shadowElevation = 16.dp,
-            border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+            border = BorderStroke(1.dp, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0))
         ) {
             Column(
                 modifier = Modifier
@@ -117,21 +118,21 @@ fun ExportLessonDialog(
                                 "Export Whiteboard Lesson",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1E293B)
+                                color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1E293B)
                             )
                             Spacer(Modifier.width(8.dp))
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0xFFEFF6FF))
-                                    .border(1.dp, Color(0xFFBFDBFE), RoundedCornerShape(6.dp))
+                                    .background(if (isDark) Color(0xFF1E3A8A) else Color(0xFFEFF6FF))
+                                    .border(1.dp, if (isDark) Color(0xFF3B82F6) else Color(0xFFBFDBFE), RoundedCornerShape(6.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     "$pageCount Pages",
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF2563EB)
+                                    color = if (isDark) Color(0xFF93C5FD) else Color(0xFF2563EB)
                                 )
                             }
                         }
@@ -139,7 +140,7 @@ fun ExportLessonDialog(
                         Text(
                             "Save locally, backup to cloud, or export for GYOASH",
                             fontSize = 11.5.sp,
-                            color = Color(0xFF64748B)
+                            color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
                         )
                     }
 
@@ -148,14 +149,14 @@ fun ExportLessonDialog(
                             modifier = Modifier
                                 .size(28.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFF1F5F9))
+                                .background(if (isDark) Color(0xFF334155) else Color(0xFFF1F5F9))
                                 .clickable(onClick = onDismiss),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 Icons.Default.Close,
                                 contentDescription = "Close",
-                                tint = Color(0xFF4B5563),
+                                tint = if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563),
                                 modifier = Modifier.size(16.dp)
                             )
                         }

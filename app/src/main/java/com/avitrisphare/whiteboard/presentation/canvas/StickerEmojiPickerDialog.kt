@@ -102,7 +102,8 @@ private val CURATED_EDUCATIONAL_EMOJI = listOf(
 @Composable
 fun StickerEmojiPickerDialog(
     onDismiss: () -> Unit,
-    onSelectSticker: (kind: String, text: String) -> Unit
+    onSelectSticker: (kind: String, text: String) -> Unit,
+    isDark: Boolean = false
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -127,9 +128,9 @@ fun StickerEmojiPickerDialog(
                     onClick = {} // Consume clicks inside
                 ),
             shape = RoundedCornerShape(18.dp),
-            color = Color.White,
+            color = if (isDark) Color(0xFF1E293B) else Color.White,
             shadowElevation = 16.dp,
-            border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+            border = BorderStroke(1.dp, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0))
         ) {
             Column(
                 modifier = Modifier
@@ -152,7 +153,7 @@ fun StickerEmojiPickerDialog(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFF1F5F9)),
+                                .background(if (isDark) Color(0xFF334155) else Color(0xFFF1F5F9)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -166,13 +167,13 @@ fun StickerEmojiPickerDialog(
                         Column {
                             Text(
                                 text = "Classroom Stickers & Emoji",
-                                color = Color(0xFF1E293B),
+                                color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1E293B),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = "Curated feedback set (not a full system keyboard)",
-                                color = Color(0xFF64748B),
+                                color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
                                 fontSize = 11.sp
                             )
                         }
@@ -182,14 +183,14 @@ fun StickerEmojiPickerDialog(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFF1F5F9))
+                            .background(if (isDark) Color(0xFF334155) else Color(0xFFF1F5F9))
                             .clickable(onClick = onDismiss),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close",
-                            tint = Color(0xFF4B5563),
+                            tint = if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563),
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -200,8 +201,8 @@ fun StickerEmojiPickerDialog(
                 // Tabs: Stickers vs Emoji
                 TabRow(
                     selectedTabIndex = selectedTab,
-                    containerColor = Color(0xFFF1F5F9),
-                    contentColor = Color(0xFF1E293B),
+                    containerColor = if (isDark) Color(0xFF0F172A) else Color(0xFFF1F5F9),
+                    contentColor = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1E293B),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
@@ -213,7 +214,7 @@ fun StickerEmojiPickerDialog(
                             Text(
                                 text = "⭐ Teacher Stickers (4)",
                                 fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selectedTab == 0) Color(0xFFD97706) else Color(0xFF64748B),
+                                color = if (selectedTab == 0) Color(0xFFD97706) else if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
                                 fontSize = 12.5.sp
                             )
                         }
@@ -225,7 +226,7 @@ fun StickerEmojiPickerDialog(
                             Text(
                                 text = "😀 Classroom Emoji",
                                 fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selectedTab == 1) Color(0xFF2563EB) else Color(0xFF64748B),
+                                color = if (selectedTab == 1) (if (isDark) Color(0xFF38BDF8) else Color(0xFF2563EB)) else if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
                                 fontSize = 12.5.sp
                             )
                         }
@@ -248,6 +249,7 @@ fun StickerEmojiPickerDialog(
                             StickerCard(
                                 sticker = CORE_STICKERS[0],
                                 modifier = Modifier.weight(1f),
+                                isDark = isDark,
                                 onClick = {
                                     onSelectSticker(CORE_STICKERS[0].kind, CORE_STICKERS[0].symbol)
                                     onDismiss()
@@ -256,6 +258,7 @@ fun StickerEmojiPickerDialog(
                             StickerCard(
                                 sticker = CORE_STICKERS[1],
                                 modifier = Modifier.weight(1f),
+                                isDark = isDark,
                                 onClick = {
                                     onSelectSticker(CORE_STICKERS[1].kind, CORE_STICKERS[1].symbol)
                                     onDismiss()
@@ -269,6 +272,7 @@ fun StickerEmojiPickerDialog(
                             StickerCard(
                                 sticker = CORE_STICKERS[2],
                                 modifier = Modifier.weight(1f),
+                                isDark = isDark,
                                 onClick = {
                                     onSelectSticker(CORE_STICKERS[2].kind, CORE_STICKERS[2].symbol)
                                     onDismiss()
@@ -277,6 +281,7 @@ fun StickerEmojiPickerDialog(
                             StickerCard(
                                 sticker = CORE_STICKERS[3],
                                 modifier = Modifier.weight(1f),
+                                isDark = isDark,
                                 onClick = {
                                     onSelectSticker(CORE_STICKERS[3].kind, CORE_STICKERS[3].symbol)
                                     onDismiss()
@@ -300,8 +305,8 @@ fun StickerEmojiPickerDialog(
                                 modifier = Modifier
                                     .size(46.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFFF8FAFC))
-                                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(10.dp))
+                                    .background(if (isDark) Color(0xFF0F172A) else Color(0xFFF8FAFC))
+                                    .border(1.dp, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0), RoundedCornerShape(10.dp))
                                     .clickable {
                                         onSelectSticker("emoji", emoji)
                                         onDismiss()
@@ -325,12 +330,13 @@ fun StickerEmojiPickerDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFFF1F5F9))
+                        .background(if (isDark) Color(0xFF0F172A) else Color(0xFFF1F5F9))
+                        .border(1.dp, if (isDark) Color(0xFF334155) else Color.Transparent, RoundedCornerShape(8.dp))
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     Text(
                         text = "💡 Tap any sticker or emoji to place it on the active board. Drag to move, or select to delete.",
-                        color = Color(0xFF64748B),
+                        color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
                         fontSize = 11.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
@@ -345,13 +351,18 @@ fun StickerEmojiPickerDialog(
 private fun StickerCard(
     sticker: FeedbackStickerItem,
     modifier: Modifier = Modifier,
+    isDark: Boolean = false,
     onClick: () -> Unit
 ) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFFF8FAFC))
-            .border(1.2.dp, sticker.accentColor.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+            .background(if (isDark) Color(0xFF0F172A) else Color(0xFFF8FAFC))
+            .border(
+                1.2.dp,
+                if (isDark) sticker.accentColor.copy(alpha = 0.6f) else sticker.accentColor.copy(alpha = 0.45f),
+                RoundedCornerShape(14.dp)
+            )
             .clickable(onClick = onClick)
             .padding(10.dp)
     ) {
@@ -363,7 +374,7 @@ private fun StickerCard(
                 modifier = Modifier
                     .size(42.dp)
                     .clip(CircleShape)
-                    .background(sticker.badgeBg),
+                    .background(if (isDark) sticker.badgeBg.copy(alpha = 0.25f) else sticker.badgeBg),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -376,13 +387,13 @@ private fun StickerCard(
             Column {
                 Text(
                     text = sticker.title,
-                    color = Color(0xFF1E293B),
+                    color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1E293B),
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = sticker.subtitle,
-                    color = Color(0xFF64748B),
+                    color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
                     fontSize = 10.5.sp
                 )
             }

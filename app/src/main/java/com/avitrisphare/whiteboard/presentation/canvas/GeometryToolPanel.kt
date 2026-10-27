@@ -226,6 +226,13 @@ fun GeometryToolPanel(
         }
     }
 
+    val isDark = state.isDarkTheme
+    val titleColor = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1F2937)
+    val inkColor = if (isDark) Color(0xFFE2E8F0) else Ink
+    val mutedColor = if (isDark) Color(0xFF94A3B8) else Muted
+    val chipBg = if (isDark) Color(0xFF334155) else Chip
+    val blueSoft = if (isDark) Color(0xFF1E3A8A) else BlueSoft
+
     Column(
         modifier = modifier
             .width(428.dp)
@@ -237,16 +244,16 @@ fun GeometryToolPanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(stringResource(R.string.geo_title), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
+            Text(stringResource(R.string.geo_title), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = titleColor)
             Box(
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
-                    .background(Chip)
+                    .background(chipBg)
                     .clickable(onClick = onClose),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.dialog_close), tint = Color(0xFF4B5563), modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.dialog_close), tint = if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563), modifier = Modifier.size(16.dp))
             }
         }
 
@@ -262,7 +269,7 @@ fun GeometryToolPanel(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (on) Blue else Chip)
+                        .background(if (on) Blue else chipBg)
                         .clickable { category = cat }
                         .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
@@ -271,7 +278,7 @@ fun GeometryToolPanel(
                         localizedGeoCategory(cat),
                         fontSize = 12.sp,
                         fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
-                        color = if (on) Color.White else Ink
+                        color = if (on) Color.White else (if (isDark) Color(0xFFCBD5E1) else Ink)
                     )
                 }
             }
@@ -283,7 +290,7 @@ fun GeometryToolPanel(
             Text(
                 stringResource(R.string.geo_instructions),
                 fontSize = 12.sp,
-                color = Muted
+                color = mutedColor
             )
             Spacer(Modifier.height(10.dp))
             Row(
@@ -297,6 +304,7 @@ fun GeometryToolPanel(
                         spec = spec,
                         selected = spec.kind == selectedKind,
                         placed = placed.any { it.kind == spec.kind },
+                        isDark = isDark,
                         onTap = { placeOrMove(spec.kind, Offset.Zero, false) },
                         onDrag = { onMathDrag(spec.kind, it) },
                         onDragEnd = { root -> placeOrMove(spec.kind, root, true) }
@@ -305,7 +313,7 @@ fun GeometryToolPanel(
             }
 
             Spacer(Modifier.height(12.dp))
-            Text(localizedInstrumentHint(selected.kind), fontSize = 12.sp, color = Muted)
+            Text(localizedInstrumentHint(selected.kind), fontSize = 12.sp, color = mutedColor)
             Spacer(Modifier.height(8.dp))
 
             val span = spanOf(selectedKind)
@@ -314,6 +322,7 @@ fun GeometryToolPanel(
                 label = localizedSizeLabel(selectedKind, span, pxPerCm),
                 value = span.coerceIn(range.start, range.endInclusive),
                 valueRange = range,
+                isDark = isDark,
                 onValueChange = { stageAndApply(selectedKind, MathToolAdjust(span = it)) }
             )
 
@@ -322,9 +331,10 @@ fun GeometryToolPanel(
                 label = stringResource(R.string.geo_rotation, rotation.roundToInt()),
                 value = rotation.coerceIn(0f, 359f),
                 valueRange = 0f..359f,
+                isDark = isDark,
                 onValueChange = { stageAndApply(selectedKind, MathToolAdjust(rotationDeg = it)) }
             )
-            ChipRow(ROTATION_PRESETS.map { "${it.roundToInt()}°" to it }, rotation) {
+            ChipRow(ROTATION_PRESETS.map { "${it.roundToInt()}°" to it }, rotation, isDark = isDark) {
                 stageAndApply(selectedKind, MathToolAdjust(rotationDeg = it))
             }
 
@@ -336,9 +346,10 @@ fun GeometryToolPanel(
                     label = stringResource(R.string.geo_arm_other, pointer.roundToInt(), other.roundToInt()),
                     value = pointer,
                     valueRange = 0f..180f,
+                    isDark = isDark,
                     onValueChange = { stageAndApply(MathToolKind.PROTRACTOR, MathToolAdjust(pointerAngleDeg = it)) }
                 )
-                ChipRow(ANGLE_PRESETS.map { "${it.roundToInt()}°" to it }, pointer) {
+                ChipRow(ANGLE_PRESETS.map { "${it.roundToInt()}°" to it }, pointer, isDark = isDark) {
                     stageAndApply(MathToolKind.PROTRACTOR, MathToolAdjust(pointerAngleDeg = it))
                 }
             }
@@ -348,8 +359,8 @@ fun GeometryToolPanel(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (onBoard) BlueSoft else Chip)
-                    .border(1.dp, if (onBoard) Blue else Color(0xFFD1D5DB), RoundedCornerShape(8.dp))
+                    .background(if (onBoard) blueSoft else chipBg)
+                    .border(1.dp, if (onBoard) Blue else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB)), RoundedCornerShape(8.dp))
                     .clickable { placeOrMove(selectedKind, Offset.Zero, false) }
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
@@ -357,14 +368,14 @@ fun GeometryToolPanel(
                     if (onBoard) stringResource(R.string.geo_remove_board) else stringResource(R.string.geo_place_board),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (onBoard) Blue else Ink
+                    color = if (onBoard) (if (isDark) Color(0xFF93C5FD) else Blue) else inkColor
                 )
             }
         } else {
             Text(
                 stringResource(R.string.geo_aids_description),
                 fontSize = 12.sp,
-                color = Muted
+                color = mutedColor
             )
             Spacer(Modifier.height(10.dp))
             Row(
@@ -376,32 +387,37 @@ fun GeometryToolPanel(
                 AidCard(
                     name = stringResource(R.string.geo_aid_graph),
                     selected = state.canvasBackground == CanvasBackground.GRAPH,
+                    isDark = isDark,
                     onClick = { viewModel.toggleGraphPaper() }
                 ) { tint -> GraphPaperIcon(tint) }
                 AidCard(
                     name = stringResource(R.string.geo_aid_line),
                     selected = state.currentTool == WhiteboardTool.LINE,
+                    isDark = isDark,
                     onClick = { viewModel.setTool(WhiteboardTool.LINE) }
                 ) { tint -> LineIcon(tint) }
                 AidCard(
                     name = stringResource(R.string.geo_aid_arrow),
                     selected = state.currentTool == WhiteboardTool.ARROW,
+                    isDark = isDark,
                     onClick = { viewModel.setTool(WhiteboardTool.ARROW) }
                 ) { tint -> ArrowIcon(tint) }
                 AidCard(
                     name = stringResource(R.string.geo_aid_frame),
                     selected = state.currentTool == WhiteboardTool.FRAME,
+                    isDark = isDark,
                     onClick = { viewModel.setTool(WhiteboardTool.FRAME) }
                 ) { tint -> FrameIcon(tint) }
                 AidCard(
                     name = stringResource(R.string.magic_pen),
                     selected = state.isDrawToShapeEnabled,
+                    isDark = isDark,
                     onClick = { viewModel.toggleDrawToShape() }
                 ) { tint -> MagicPenIcon(tint) }
             }
             if (state.smartWriteEnabled) {
                 Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.smart_write_tip), fontSize = 11.sp, color = Muted)
+                Text(stringResource(R.string.smart_write_tip), fontSize = 11.sp, color = mutedColor)
             }
         }
 
@@ -410,10 +426,11 @@ fun GeometryToolPanel(
             label = stringResource(R.string.stroke_px, state.strokeWidth),
             value = state.strokeWidth.coerceIn(1f, 50f),
             valueRange = 1f..50f,
+            isDark = isDark,
             onValueChange = { viewModel.setStrokeWidth(it) }
         )
         Spacer(Modifier.height(4.dp))
-        Text(stringResource(R.string.ink_colour), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Ink)
+        Text(stringResource(R.string.ink_colour), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = inkColor)
         Spacer(Modifier.height(6.dp))
         InkSwatches(selected = state.selectedColor, onPick = { viewModel.setColor(it) })
     }
@@ -425,11 +442,19 @@ private fun InstrumentCard(
     spec: GeoInstrument,
     selected: Boolean,
     placed: Boolean,
+    isDark: Boolean = false,
     onTap: () -> Unit,
     onDrag: (Offset) -> Unit,
     onDragEnd: (Offset) -> Unit
 ) {
     var origin by remember { mutableStateOf(Offset.Zero) }
+    val cardBg = if (selected) {
+        if (isDark) Color(0xFF1E3A8A) else BlueSoft
+    } else {
+        if (isDark) Color(0xFF0F172A) else Color(0xFFF9FAFB)
+    }
+    val cardBorder = if (selected) Blue else (if (isDark) Color(0xFF334155) else Line)
+
     Box(
         modifier = Modifier
             .size(width = 76.dp, height = 78.dp)
@@ -458,8 +483,8 @@ private fun InstrumentCard(
                 }
             }
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) BlueSoft else Color(0xFFF9FAFB))
-            .border(if (selected) 2.dp else 1.dp, if (selected) Blue else Line, RoundedCornerShape(12.dp))
+            .background(cardBg)
+            .border(if (selected) 2.dp else 1.dp, cardBorder, RoundedCornerShape(12.dp))
             .padding(horizontal = 4.dp, vertical = 6.dp)
     ) {
         if (placed) {
@@ -478,13 +503,13 @@ private fun InstrumentCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            InstrumentIcon(spec.kind, if (selected) Blue else Ink)
+            InstrumentIcon(spec.kind, if (selected) Blue else (if (isDark) Color(0xFFCBD5E1) else Ink))
             Spacer(Modifier.height(4.dp))
             Text(
                 localizedInstrumentName(spec.kind),
                 fontSize = 10.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected) Color(0xFF1D4ED8) else Color(0xFF4B5563),
+                color = if (selected) (if (isDark) Color(0xFF93C5FD) else Color(0xFF1D4ED8)) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563)),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center
@@ -497,27 +522,35 @@ private fun InstrumentCard(
 private fun AidCard(
     name: String,
     selected: Boolean,
+    isDark: Boolean = false,
     onClick: () -> Unit,
     icon: @Composable (Color) -> Unit
 ) {
+    val cardBg = if (selected) {
+        if (isDark) Color(0xFF1E3A8A) else BlueSoft
+    } else {
+        if (isDark) Color(0xFF0F172A) else Color(0xFFF9FAFB)
+    }
+    val cardBorder = if (selected) Blue else (if (isDark) Color(0xFF334155) else Line)
+
     Column(
         modifier = Modifier
             .size(width = 76.dp, height = 78.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) BlueSoft else Color(0xFFF9FAFB))
-            .border(if (selected) 2.dp else 1.dp, if (selected) Blue else Line, RoundedCornerShape(12.dp))
+            .background(cardBg)
+            .border(if (selected) 2.dp else 1.dp, cardBorder, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        icon(if (selected) Blue else Ink)
+        icon(if (selected) Blue else (if (isDark) Color(0xFFCBD5E1) else Ink))
         Spacer(Modifier.height(4.dp))
         Text(
             name,
             fontSize = 10.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) Color(0xFF1D4ED8) else Color(0xFF4B5563),
+            color = if (selected) (if (isDark) Color(0xFF93C5FD) else Color(0xFF1D4ED8)) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563)),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
@@ -530,6 +563,7 @@ private fun MeasureSlider(
     label: String,
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
+    isDark: Boolean = false,
     onValueChange: (Float) -> Unit
 ) {
     Row(
@@ -540,7 +574,7 @@ private fun MeasureSlider(
             label,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            color = Ink,
+            color = if (isDark) Color(0xFFE2E8F0) else Ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.width(168.dp)
@@ -550,7 +584,11 @@ private fun MeasureSlider(
             onValueChange = onValueChange,
             valueRange = valueRange,
             modifier = Modifier.weight(1f),
-            colors = SliderDefaults.colors(thumbColor = Blue, activeTrackColor = Blue)
+            colors = SliderDefaults.colors(
+                thumbColor = Blue,
+                activeTrackColor = Blue,
+                inactiveTrackColor = if (isDark) Color(0xFF334155) else Color(0xFFE5E7EB)
+            )
         )
     }
 }
@@ -559,6 +597,7 @@ private fun MeasureSlider(
 private fun ChipRow(
     chips: List<Pair<String, Float>>,
     current: Float,
+    isDark: Boolean = false,
     onPick: (Float) -> Unit
 ) {
     Row(
@@ -569,11 +608,18 @@ private fun ChipRow(
     ) {
         chips.forEach { (label, degrees) ->
             val on = abs(current - degrees) < 0.6f
+            val bg = if (on) {
+                if (isDark) Color(0xFF1E3A8A) else BlueSoft
+            } else {
+                if (isDark) Color(0xFF334155) else Chip
+            }
+            val border = if (on) Blue else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB))
+
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (on) BlueSoft else Chip)
-                    .border(1.dp, if (on) Blue else Color(0xFFD1D5DB), RoundedCornerShape(8.dp))
+                    .background(bg)
+                    .border(1.dp, border, RoundedCornerShape(8.dp))
                     .clickable { onPick(degrees) }
                     .padding(horizontal = 8.dp, vertical = 5.dp)
             ) {
@@ -581,7 +627,7 @@ private fun ChipRow(
                     label,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (on) Blue else Color(0xFF4B5563)
+                    color = if (on) (if (isDark) Color(0xFF93C5FD) else Blue) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563))
                 )
             }
         }
