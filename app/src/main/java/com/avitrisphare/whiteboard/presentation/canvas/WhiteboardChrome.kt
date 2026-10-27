@@ -156,6 +156,9 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.drawscope.Stroke as ThumbStroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.avitrisphare.whiteboard.R
@@ -333,6 +336,7 @@ fun AvitriSphareWhiteboardChrome(
     onTogglePeriodicTable: () -> Unit = {},
     onPickCustomBackground: () -> Unit = {},
     onOpenStickerEmoji: () -> Unit = {},
+    onSelectSticker: (String, String) -> Unit = { _, _ -> },
     onEditNodeText: (String, String) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
@@ -344,6 +348,8 @@ fun AvitriSphareWhiteboardChrome(
     var renamePageTitle by remember { mutableStateOf("") }
     var selectionColorTarget by remember { mutableStateOf("border") }
 
+    val toolIconBounds = remember { mutableStateMapOf<String, Rect>() }
+    var chromeRootBounds by remember { mutableStateOf<Rect?>(null) }
     var topBarBounds by remember { mutableStateOf<Rect?>(null) }
     var leftBarBounds by remember { mutableStateOf<Rect?>(null) }
     var centerBarBounds by remember { mutableStateOf<Rect?>(null) }
@@ -382,6 +388,7 @@ fun AvitriSphareWhiteboardChrome(
             .fillMaxSize()
             .navigationBarsPadding()
             .padding(horizontal = 14.dp, vertical = 12.dp)
+            .onGloballyPositioned { chromeRootBounds = it.boundsInRoot() }
     ) {
         if (panel != null) {
             Box(
@@ -1162,6 +1169,7 @@ fun AvitriSphareWhiteboardChrome(
                             panel == "ink" -> ActiveDockTool.PEN
                             panel == "shapes" -> ActiveDockTool.SHAPES
                             panel == "flowchart" -> ActiveDockTool.FLOWCHART
+                            panel == "stickers" -> ActiveDockTool.STICKERS
                             panel == "eraser" -> ActiveDockTool.ERASER
                             panel == "geometry" -> ActiveDockTool.GEOMETRY
                             panel == "utilities" || panel == "background" -> ActiveDockTool.TOOLS
@@ -1240,6 +1248,7 @@ fun AvitriSphareWhiteboardChrome(
                         PenSplitDockItem(
                             label = localizedToolLabel(state.inkTool),
                             active = activeDockTool == ActiveDockTool.PEN,
+                            modifier = Modifier.onGloballyPositioned { toolIconBounds["ink"] = it.boundsInRoot() },
                             onPenClick = {
                                 viewModel.setTool(state.inkTool)
                                 panel = null
@@ -1253,7 +1262,8 @@ fun AvitriSphareWhiteboardChrome(
                             icon = Icons.Default.Hub,
                             label = stringResource(R.string.tool_flowchart),
                             active = activeDockTool == ActiveDockTool.FLOWCHART,
-                            tint = Color(0xFF2563EB)
+                            tint = Color(0xFF2563EB),
+                            modifier = Modifier.onGloballyPositioned { toolIconBounds["flowchart"] = it.boundsInRoot() }
                         ) {
                             toggle("flowchart")
                         }
@@ -1261,29 +1271,28 @@ fun AvitriSphareWhiteboardChrome(
                             icon = Icons.Default.Star,
                             label = stringResource(R.string.tool_stickers),
                             active = activeDockTool == ActiveDockTool.STICKERS,
-                            tint = Color(0xFFF59E0B)
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.onGloballyPositioned { toolIconBounds["stickers"] = it.boundsInRoot() }
                         ) {
-                            panel = null
-                            onOpenStickerEmoji()
+                            viewModel.clearSelection()
+                            toggle("stickers")
                         }
                         DockItem(
                             icon = Icons.Default.Category,
                             label = stringResource(R.string.tool_shapes),
                             active = activeDockTool == ActiveDockTool.SHAPES,
-                            tint = Color(0xFF8B5CF6)
+                            tint = Color(0xFF8B5CF6),
+                            modifier = Modifier.onGloballyPositioned { toolIconBounds["shapes"] = it.boundsInRoot() }
                         ) {
-                            if (panel == "shapes") {
-                                panel = null
-                            } else {
-                                panel = "shapes"
-                                viewModel.setTool(WhiteboardTool.SHAPE)
-                            }
+                            viewModel.setTool(WhiteboardTool.SHAPE)
+                            toggle("shapes")
                         }
                         DockItem(
                             icon = Icons.Default.AutoFixNormal,
                             label = stringResource(R.string.tool_eraser),
                             active = activeDockTool == ActiveDockTool.ERASER,
-                            tint = Color(0xFFEC4899)
+                            tint = Color(0xFFEC4899),
+                            modifier = Modifier.onGloballyPositioned { toolIconBounds["eraser"] = it.boundsInRoot() }
                         ) {
                             viewModel.setTool(WhiteboardTool.ERASER)
                             toggle("eraser")
@@ -1301,13 +1310,15 @@ fun AvitriSphareWhiteboardChrome(
                             icon = Icons.Default.ChangeHistory,
                             label = stringResource(R.string.tool_geometry),
                             active = activeDockTool == ActiveDockTool.GEOMETRY,
-                            tint = Color(0xFF10B981)
+                            tint = Color(0xFF10B981),
+                            modifier = Modifier.onGloballyPositioned { toolIconBounds["geometry"] = it.boundsInRoot() }
                         ) { toggle("geometry") }
                         DockItem(
                             icon = Icons.Default.Widgets,
                             label = stringResource(R.string.tool_tools),
                             active = activeDockTool == ActiveDockTool.TOOLS,
-                            tint = Color(0xFF8B5CF6)
+                            tint = Color(0xFF8B5CF6),
+                            modifier = Modifier.onGloballyPositioned { toolIconBounds["utilities"] = it.boundsInRoot() }
                         ) { toggle("utilities") }
                         DockItem(
                             icon = Icons.Default.Undo,
@@ -1503,20 +1514,68 @@ fun AvitriSphareWhiteboardChrome(
             }
         }
 
-        val panelOffset = when (panel) {
-            "profile" -> leftBarOffset
-            else -> centerBarOffset
+        val density = LocalDensity.current
+        val expectedPopoverWidthPx = remember(panel) {
+            val dpWidth = when (panel) {
+                "eraser" -> 280.dp
+                "flowchart" -> 310.dp
+                "stickers" -> 340.dp
+                "shapes" -> 340.dp
+                "geometry" -> 340.dp
+                "ink" -> 364.dp
+                "utilities" -> 440.dp
+                "more" -> 320.dp
+                "profile" -> 300.dp
+                "background" -> 340.dp
+                "color" -> 260.dp
+                else -> 320.dp
+            }
+            with(density) { dpWidth.toPx() }
         }
+        var popoverMeasuredWidthPx by remember(panel) { mutableFloatStateOf(0f) }
+        val activePopoverWidthPx = if (popoverMeasuredWidthPx > 0f) popoverMeasuredWidthPx else expectedPopoverWidthPx
 
-        if (panel != null && panel != "shapes") {
+        if (panel != null) {
+            val iconBounds = toolIconBounds[panel]
+            val chromeBounds = chromeRootBounds
+            val localX = if (iconBounds != null && chromeBounds != null) {
+                val iconCenterXInChrome = iconBounds.center.x - chromeBounds.left
+                val idealLeft = iconCenterXInChrome - (activePopoverWidthPx / 2f)
+                val minX = with(density) { 6.dp.toPx() }
+                val maxX = (chromeBounds.width - activePopoverWidthPx - minX).coerceAtLeast(minX)
+                idealLeft.coerceIn(minX, maxX)
+            } else {
+                0f
+            }
+
+            val dragOffsetX = when (panel) {
+                "shapes" -> shapesWindowOffset.x
+                "profile" -> leftBarOffset.x
+                else -> centerBarOffset.x
+            }
+            val dragOffsetY = when (panel) {
+                "shapes" -> shapesWindowOffset.y + centerBarOffset.y
+                "profile" -> leftBarOffset.y
+                else -> centerBarOffset.y
+            }
+
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 96.dp)
-                    .offset { IntOffset(panelOffset.x.roundToInt(), panelOffset.y.roundToInt()) }
+                    .align(if (iconBounds != null) Alignment.BottomStart else Alignment.BottomCenter)
+                    .padding(bottom = 86.dp)
+                    .offset {
+                        if (iconBounds != null) {
+                            IntOffset((localX + dragOffsetX).roundToInt(), dragOffsetY.roundToInt())
+                        } else {
+                            IntOffset(dragOffsetX.roundToInt(), dragOffsetY.roundToInt())
+                        }
+                    }
+                    .onGloballyPositioned {
+                        popoverMeasuredWidthPx = it.size.width.toFloat()
+                    }
             ) {
                 when (panel) {
-                    "profile" -> DockPopover(title = "Profile", onClose = { panel = null }) {
+                    "profile" -> DockPopover(title = "Profile", maxWidth = 300.dp, onClose = { panel = null }) {
                         OutlinedTextField(
                             value = state.userName,
                             onValueChange = { viewModel.setUserName(it) },
@@ -1534,7 +1593,7 @@ fun AvitriSphareWhiteboardChrome(
                             onRename()
                         }
                     }
-                    "flowchart" -> DockPopover(title = "Flowchart & Nodes", onClose = { panel = null }) {
+                    "flowchart" -> DockPopover(title = "Flowchart & Nodes", maxWidth = 310.dp, onClose = { panel = null }) {
                         PopoverRow(Icons.Default.Dashboard, "3-Node Connected Flowchart") {
                             viewModel.createThreeNodeFlowchart(Offset(320f, 360f))
                             panel = null
@@ -1552,7 +1611,35 @@ fun AvitriSphareWhiteboardChrome(
                             panel = null
                         }
                     }
-                    "geometry" -> DockPopover(maxWidth = 460.dp, scrollable = false) {
+                    "stickers" -> DockPopover(maxWidth = 340.dp, scrollable = false) {
+                        StickerEmojiPanelContent(
+                            onSelectSticker = { kind, text ->
+                                onSelectSticker(kind, text)
+                                panel = null
+                            },
+                            onClose = { panel = null }
+                        )
+                    }
+                    "shapes" -> Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color.White,
+                        shadowElevation = 14.dp,
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier.widthIn(min = 200.dp, max = 340.dp)
+                    ) {
+                        ShapeToolPanel(
+                            state = state,
+                            viewModel = viewModel,
+                            onClose = { panel = null },
+                            onDrag = { dragAmount ->
+                                shapesWindowOffset = Offset(
+                                    (shapesWindowOffset.x + dragAmount.x).coerceIn(-1800f, 1800f),
+                                    (shapesWindowOffset.y + dragAmount.y).coerceIn(-1800f, 60f)
+                                )
+                            }
+                        )
+                    }
+                    "geometry" -> DockPopover(maxWidth = 340.dp, scrollable = false) {
                         GeometryToolPanel(
                             state = state,
                             viewModel = viewModel,
@@ -1679,7 +1766,7 @@ fun AvitriSphareWhiteboardChrome(
                         PopoverRow(Icons.Default.ChevronLeft, stringResource(R.string.popover_zoom_out)) { onZoomOut() }
                         PopoverRow(Icons.Default.CropFree, stringResource(R.string.popover_fit)) { panel = null; onFit() }
                     }
-                    "utilities" -> DockPopover(maxWidth = 580.dp) {
+                    "utilities" -> DockPopover(maxWidth = 440.dp) {
                         val utilityTools = setOf(
                             WhiteboardTool.SPOTLIGHT,
                             WhiteboardTool.SHADE,
@@ -1832,7 +1919,7 @@ fun AvitriSphareWhiteboardChrome(
                             )
                         }
                     }
-                    "eraser" -> DockPopover(onClose = { panel = null }) {
+                    "eraser" -> DockPopover(maxWidth = 280.dp, scrollable = false) {
                         EraserToolPanel(
                             state = state,
                             viewModel = viewModel,
@@ -1843,7 +1930,7 @@ fun AvitriSphareWhiteboardChrome(
                             onClose = { panel = null }
                         )
                     }
-                    "ink" -> DockPopover(onClose = { panel = null }) {
+                    "ink" -> DockPopover(maxWidth = 560.dp, scrollable = false) {
                         InkToolPanel(state = state, viewModel = viewModel, onClose = { panel = null })
                     }
                     "color" -> DockPopover(title = "Stroke & Width", onClose = { panel = null }) {
@@ -2028,35 +2115,6 @@ fun AvitriSphareWhiteboardChrome(
                 }
             }
         }
-
-        if (panel == "shapes") {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 96.dp)
-                    .offset { IntOffset((shapesWindowOffset.x + centerBarOffset.x).roundToInt(), (shapesWindowOffset.y + centerBarOffset.y).roundToInt()) }
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color.White,
-                    shadowElevation = 14.dp,
-                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                    modifier = Modifier.widthIn(min = 200.dp, max = 460.dp)
-                ) {
-                    ShapeToolPanel(
-                        state = state,
-                        viewModel = viewModel,
-                        onClose = { panel = null },
-                        onDrag = { dragAmount ->
-                            shapesWindowOffset = Offset(
-                                (shapesWindowOffset.x + dragAmount.x).coerceIn(-1800f, 1800f),
-                                (shapesWindowOffset.y + dragAmount.y).coerceIn(-1800f, 60f)
-                            )
-                        }
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -2095,10 +2153,11 @@ private fun DockItem(
     enabled: Boolean = true,
     tint: Color = Color(0xFF2563EB),
     swatch: Int? = null,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -2146,6 +2205,7 @@ private fun DockItem(
 private fun PenSplitDockItem(
     label: String,
     active: Boolean,
+    modifier: Modifier = Modifier,
     onPenClick: () -> Unit,
     onDropdownClick: () -> Unit
 ) {
@@ -2155,7 +2215,7 @@ private fun PenSplitDockItem(
     val inactiveTextColor = DockLabel
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .height(48.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(if (active) activeColor else Color.Transparent),
@@ -2225,7 +2285,7 @@ private fun DockPopover(
     title: String? = null,
     onClose: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    maxWidth: androidx.compose.ui.unit.Dp = 380.dp,
+    maxWidth: androidx.compose.ui.unit.Dp = 340.dp,
     scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -2240,8 +2300,8 @@ private fun DockPopover(
     ) {
         Column(
             modifier = Modifier
-                .padding(horizontal = 14.dp, vertical = 12.dp)
-                .heightIn(max = 440.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .heightIn(max = 380.dp)
         ) {
             if (title != null) {
                 Row(
@@ -2314,7 +2374,7 @@ private fun ToolCategoryTabs(
 ) {
     Row(
         modifier = Modifier
-            .width(536.dp)
+            .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xFFF3F4F6))
             .padding(4.dp)
@@ -2346,7 +2406,7 @@ private fun ToolCategoryTabs(
 private fun ToolIconGrid(tiles: List<ToolTile>) {
     val columns = 5
     Column(
-        modifier = Modifier.width(536.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         tiles.chunked(columns).forEach { row ->

@@ -1,8 +1,15 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,10 +32,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.BorderColor
+import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Draw
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Highlight
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Slider
@@ -37,7 +49,6 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -201,13 +212,8 @@ fun InkToolPanel(
 ) {
     var showSmartWrite by remember { mutableStateOf(false) }
     var editingSecondary by remember { mutableStateOf(false) }
+    var showColorWheel by remember { mutableStateOf(false) }
     val currentColor = if (editingSecondary) state.secondaryColor else state.selectedColor
-    var hex by remember(currentColor) {
-        mutableStateOf(String.format("%06X", currentColor and 0xFFFFFF))
-    }
-    var red by remember(currentColor) { mutableIntStateOf((currentColor shr 16) and 0xFF) }
-    var green by remember(currentColor) { mutableIntStateOf((currentColor shr 8) and 0xFF) }
-    var blue by remember(currentColor) { mutableIntStateOf(currentColor and 0xFF) }
 
     fun applyColor(c: Int) {
         if (editingSecondary) {
@@ -217,311 +223,503 @@ fun InkToolPanel(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .width(380.dp)
-            .heightIn(max = 460.dp)
-            .verticalScroll(rememberScrollState())
+    Row(
+        verticalAlignment = Alignment.Top,
+        modifier = Modifier.animateContentSize()
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .clip(CircleShape)
-                        .background(Color(state.selectedColor))
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "${state.inkTool.label} · ${state.strokeWidth.toInt()}px",
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF1F2937)
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFFF3F4F6))
-                    .clickable(onClick = onClose),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = Color(0xFF4B5563),
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            listOf(
-                WhiteboardTool.PEN,
-                WhiteboardTool.MATH_PEN,
-                WhiteboardTool.PENCIL,
-                WhiteboardTool.MARKER,
-                WhiteboardTool.HIGHLIGHTER,
-                WhiteboardTool.BRUSH
-            ).forEach { tool ->
-                val selected = state.inkTool == tool
-                val label = if (tool == WhiteboardTool.MATH_PEN) "Math fx" else tool.label
-                Text(
-                    text = label,
-                    color = if (selected) Color.White else Color(0xFF1F2937),
-                    fontSize = 11.sp,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (selected) Color(0xFF6366F1) else Color(0xFFF3F4F6))
-                        .clickable { viewModel.setTool(tool) }
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                )
-            }
-        }
-        if (state.inkTool == WhiteboardTool.MATH_PEN) {
-            Spacer(Modifier.height(6.dp))
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFFEEF2FF))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Math Pen active · Write equations (e.g. a² + b² = ) to auto-convert into formatted math.",
-                    fontSize = 11.sp,
-                    color = Color(0xFF4338CA),
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        val language = smartWriteLanguage(state.smartWriteLanguageTag)
-        Text(
-            text = if (state.smartWriteEnabled) {
-                "Smart Write · ${language.label} · ${state.smartWriteIntervalMs / 1000f}s"
-            } else {
-                "Smart Write"
-            },
-            color = if (state.smartWriteEnabled) Color.White else Color(0xFF1F2937),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
+        Column(
             modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (state.smartWriteEnabled) Color(0xFF2563EB) else Color(0xFFF3F4F6))
-                .clickable { showSmartWrite = true }
-                .padding(horizontal = 10.dp, vertical = 8.dp)
-        )
-        Text(
-            "Writes handwriting into editable text after you pause.",
-            fontSize = 11.sp,
-            color = Color(0xFF6B7280),
-            modifier = Modifier.padding(top = 4.dp)
-        )
-        if (showSmartWrite) {
-            SmartWriteLanguageDialog(
-                state = state,
-                onLanguage = { viewModel.setSmartWriteLanguage(it) },
-                onInterval = { viewModel.setSmartWriteInterval(it) },
-                onEnabled = { viewModel.setSmartWriteEnabled(it) },
-                onDismiss = { showSmartWrite = false }
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (state.isDrawToShapeEnabled) Color(0xFF6366F1) else Color(0xFFF3F4F6))
-                .clickable { viewModel.toggleDrawToShape() }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .width(340.dp)
+                .heightIn(max = 360.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.AutoFixHigh,
-                    contentDescription = "Magic pen",
-                    tint = if (state.isDrawToShapeEnabled) Color.White else Color(0xFF1F2937),
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Magic pen",
-                    color = if (state.isDrawToShapeEnabled) Color.White else Color(0xFF1F2937),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            Text(
-                text = if (state.isDrawToShapeEnabled) "ON" else "OFF",
-                color = if (state.isDrawToShapeEnabled) Color.White.copy(alpha = 0.9f) else Color(0xFF6B7280),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Text(
-            if (state.smartWriteEnabled) "Turn off Smart Write to use Magic pen." else "Recognizes rough circles, rectangles, lines, and shapes.",
-            fontSize = 11.sp,
-            color = Color(0xFF6B7280),
-            modifier = Modifier.padding(top = 4.dp)
-        )
-        Spacer(Modifier.height(8.dp))
-        Text("Size", fontSize = 12.sp, color = Color(0xFF6B7280))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "−",
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { viewModel.nudgeStrokeWidth(-2f) }
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                fontWeight = FontWeight.Bold
-            )
-            Slider(
-                value = state.strokeWidth.coerceIn(1f, 50f),
-                onValueChange = { viewModel.setStrokeWidth(it) },
-                valueRange = 1f..50f,
-                modifier = Modifier.weight(1f),
-                colors = SliderDefaults.colors(
-                    thumbColor = Color(0xFF6366F1),
-                    activeTrackColor = Color(0xFF6366F1)
-                )
-            )
-            Text(
-                "+",
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { viewModel.nudgeStrokeWidth(2f) }
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(stringResource(R.string.pen_two_colour), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF374151))
-        Spacer(Modifier.height(4.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            // Primary Swatch
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (!editingSecondary) Color(0xFFEEF2FF) else Color(0xFFF9FAFB))
-                    .clickable { editingSecondary = false }
-                    .padding(horizontal = 8.dp, vertical = 5.dp)
-            ) {
-                Box(
-                    Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(Color(state.selectedColor))
-                        .then(
-                            if (!editingSecondary) Modifier.border(2.5.dp, Color(0xFF6366F1), CircleShape)
-                            else Modifier.border(1.dp, Color(0xFFD1D5DB), CircleShape)
-                        )
-                )
-                Text(stringResource(R.string.pen_primary_active), fontSize = 10.sp, fontWeight = if (!editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (!editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
-            }
-
-            // Swap Button
+            // Header
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFFEEF2FF))
-                    .clickable { viewModel.swapPenColors() }
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(Icons.Default.SwapHoriz, contentDescription = stringResource(R.string.pen_swap), tint = Color(0xFF4F46E5), modifier = Modifier.size(16.dp))
-                Text(stringResource(R.string.pen_swap), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4F46E5))
-            }
-
-            // Secondary Swatch
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (editingSecondary) Color(0xFFEEF2FF) else Color(0xFFF9FAFB))
-                    .clickable { editingSecondary = true }
-                    .padding(horizontal = 8.dp, vertical = 5.dp)
-            ) {
-                Box(
-                    Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(Color(state.secondaryColor))
-                        .then(
-                            if (editingSecondary) Modifier.border(2.5.dp, Color(0xFF6366F1), CircleShape)
-                            else Modifier.border(1.dp, Color(0xFFD1D5DB), CircleShape)
-                        )
-                )
-                Text(stringResource(R.string.pen_secondary), fontSize = 10.sp, fontWeight = if (editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            if (editingSecondary) stringResource(R.string.pen_palette_secondary) else stringResource(R.string.pen_palette_primary),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            color = Color(0xFF4F46E5)
-        )
-        Spacer(Modifier.height(4.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            INK_PRESETS.forEach { color ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(Color(currentColor))
+                            .border(1.dp, Color(0xFFD1D5DB), CircleShape)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "${state.inkTool.label} · ${state.strokeWidth.toInt()}px",
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF1F2937),
+                        fontSize = 14.sp
+                    )
+                }
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(28.dp)
                         .clip(CircleShape)
-                        .background(Color(color))
-                        .clickable { applyColor(color) }
-                )
+                        .background(Color(0xFFF3F4F6))
+                        .clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color(0xFF4B5563),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
-        }
-        Spacer(Modifier.height(10.dp))
-        HueWheel(onPick = { applyColor(it) })
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = hex,
-            onValueChange = { value ->
-                val cleaned = value.removePrefix("#").take(6).filter { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
-                hex = cleaned
-                if (cleaned.length == 6) {
-                    cleaned.toIntOrNull(16)?.let { rgb ->
-                        applyColor(rgb or 0xFF000000.toInt())
+
+            Spacer(Modifier.height(10.dp))
+
+            // Tool Icons: 6 tools with equal size, equal spacing, and sleek icons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                listOf(
+                    WhiteboardTool.PEN,
+                    WhiteboardTool.MATH_PEN,
+                    WhiteboardTool.PENCIL,
+                    WhiteboardTool.MARKER,
+                    WhiteboardTool.HIGHLIGHTER,
+                    WhiteboardTool.BRUSH
+                ).forEach { tool ->
+                    val selected = state.inkTool == tool
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (selected) Color(0xFF4F46E5) else Color(0xFFF3F4F6))
+                            .clickable { viewModel.setTool(tool) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = when (tool) {
+                                WhiteboardTool.PEN -> Icons.Default.Draw
+                                WhiteboardTool.MATH_PEN -> Icons.Default.Calculate
+                                WhiteboardTool.PENCIL -> Icons.Default.Edit
+                                WhiteboardTool.MARKER -> Icons.Default.BorderColor
+                                WhiteboardTool.HIGHLIGHTER -> Icons.Default.Highlight
+                                WhiteboardTool.BRUSH -> Icons.Default.Brush
+                                else -> Icons.Default.Draw
+                            },
+                            contentDescription = tool.label,
+                            tint = if (selected) Color.White else Color(0xFF4B5563),
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
-            },
-            singleLine = true,
-            label = { Text(if (editingSecondary) "Secondary Hex #RRGGBB" else "Primary Hex #RRGGBB") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(6.dp))
-        Text("Ink quality (mm)", fontSize = 12.sp, color = Color(0xFF6B7280))
-        Slider(
-            value = state.inkSampleGapMm,
-            onValueChange = { viewModel.setInkSampleGapMm(it) },
-            valueRange = 0.15f..1.2f,
-            modifier = Modifier.fillMaxWidth()
-        )
-        RgbSlider("R", red, Color(0xFFEF4444)) {
-            red = it
-            viewModel.setColor(Color(it, green, blue).toArgb())
+            }
+
+            if (state.inkTool == WhiteboardTool.MATH_PEN) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFEEF2FF))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Math Pen active · Write equations (e.g. a² + b² = ) to auto-convert into formatted math.",
+                        fontSize = 11.sp,
+                        color = Color(0xFF4338CA),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Smart Write Banner
+            val language = smartWriteLanguage(state.smartWriteLanguageTag)
+            Text(
+                text = if (state.smartWriteEnabled) {
+                    "Smart Write · ${language.label} · ${state.smartWriteIntervalMs / 1000f}s"
+                } else {
+                    "Smart Write"
+                },
+                color = if (state.smartWriteEnabled) Color.White else Color(0xFF1F2937),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (state.smartWriteEnabled) Color(0xFF2563EB) else Color(0xFFF3F4F6))
+                    .clickable { showSmartWrite = true }
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            )
+            Text(
+                "Writes handwriting into editable text after you pause.",
+                fontSize = 11.sp,
+                color = Color(0xFF6B7280),
+                modifier = Modifier.padding(top = 4.dp)
+            )
+
+            if (showSmartWrite) {
+                SmartWriteLanguageDialog(
+                    state = state,
+                    onLanguage = { viewModel.setSmartWriteLanguage(it) },
+                    onInterval = { viewModel.setSmartWriteInterval(it) },
+                    onEnabled = { viewModel.setSmartWriteEnabled(it) },
+                    onDismiss = { showSmartWrite = false }
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Magic Pen toggle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (state.isDrawToShapeEnabled) Color(0xFF6366F1) else Color(0xFFF3F4F6))
+                    .clickable { viewModel.toggleDrawToShape() }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.AutoFixHigh,
+                        contentDescription = "Magic pen",
+                        tint = if (state.isDrawToShapeEnabled) Color.White else Color(0xFF1F2937),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Magic pen",
+                        color = if (state.isDrawToShapeEnabled) Color.White else Color(0xFF1F2937),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Text(
+                    text = if (state.isDrawToShapeEnabled) "ON" else "OFF",
+                    color = if (state.isDrawToShapeEnabled) Color.White.copy(alpha = 0.9f) else Color(0xFF6B7280),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(
+                if (state.smartWriteEnabled) "Turn off Smart Write to use Magic pen." else "Recognizes rough circles, rectangles, lines, and shapes.",
+                fontSize = 11.sp,
+                color = Color(0xFF6B7280),
+                modifier = Modifier.padding(top = 4.dp)
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            // Stroke Size Slider
+            Text("Size", fontSize = 12.sp, color = Color(0xFF6B7280))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "−",
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { viewModel.nudgeStrokeWidth(-2f) }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    fontWeight = FontWeight.Bold
+                )
+                Slider(
+                    value = state.strokeWidth.coerceIn(1f, 50f),
+                    onValueChange = { viewModel.setStrokeWidth(it) },
+                    valueRange = 1f..50f,
+                    modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFF6366F1),
+                        activeTrackColor = Color(0xFF6366F1)
+                    )
+                )
+                Text(
+                    "+",
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { viewModel.nudgeStrokeWidth(2f) }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            // Two-colour pen (One-tap swap)
+            Text(stringResource(R.string.pen_two_colour), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF374151))
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Primary Swatch
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (!editingSecondary) Color(0xFFEEF2FF) else Color(0xFFF9FAFB))
+                        .clickable { editingSecondary = false }
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(Color(state.selectedColor))
+                            .then(
+                                if (!editingSecondary) Modifier.border(2.5.dp, Color(0xFF6366F1), CircleShape)
+                                else Modifier.border(1.dp, Color(0xFFD1D5DB), CircleShape)
+                            )
+                    )
+                    Text(stringResource(R.string.pen_primary_active), fontSize = 10.sp, fontWeight = if (!editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (!editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
+                }
+
+                // Swap Button
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFFEEF2FF))
+                        .clickable { viewModel.swapPenColors() }
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(Icons.Default.SwapHoriz, contentDescription = stringResource(R.string.pen_swap), tint = Color(0xFF4F46E5), modifier = Modifier.size(16.dp))
+                    Text(stringResource(R.string.pen_swap), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4F46E5))
+                }
+
+                // Secondary Swatch
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (editingSecondary) Color(0xFFEEF2FF) else Color(0xFFF9FAFB))
+                        .clickable { editingSecondary = true }
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(Color(state.secondaryColor))
+                            .then(
+                                if (editingSecondary) Modifier.border(2.5.dp, Color(0xFF6366F1), CircleShape)
+                                else Modifier.border(1.dp, Color(0xFFD1D5DB), CircleShape)
+                            )
+                    )
+                    Text(stringResource(R.string.pen_secondary), fontSize = 10.sp, fontWeight = if (editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Palette Header
+            Text(
+                if (editingSecondary) stringResource(R.string.pen_palette_secondary) else stringResource(R.string.pen_palette_primary),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF4F46E5)
+            )
+
+            Spacer(Modifier.height(6.dp))
+
+            // Aligned Color Rounds Grid + Multicolor Ball at the end
+            val presets = remember { INK_PRESETS.take(23) }
+            val rainbowBrush = remember {
+                Brush.sweepGradient(
+                    listOf(
+                        Color.Red,
+                        Color.Yellow,
+                        Color.Green,
+                        Color.Cyan,
+                        Color.Blue,
+                        Color.Magenta,
+                        Color.Red
+                    )
+                )
+            }
+            val ballSize = 28.dp
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Row 1 (8 items: 0..7)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    presets.subList(0, 8).forEach { color ->
+                        ColorRoundBall(
+                            color = color,
+                            isSelected = currentColor == color,
+                            size = ballSize,
+                            onSelect = { applyColor(color) }
+                        )
+                    }
+                }
+                // Row 2 (8 items: 8..15)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    presets.subList(8, 16).forEach { color ->
+                        ColorRoundBall(
+                            color = color,
+                            isSelected = currentColor == color,
+                            size = ballSize,
+                            onSelect = { applyColor(color) }
+                        )
+                    }
+                }
+                // Row 3 (7 items: 16..22 + Multicolor Ball at last position = 8 items)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    presets.subList(16, 23).forEach { color ->
+                        ColorRoundBall(
+                            color = color,
+                            isSelected = currentColor == color,
+                            size = ballSize,
+                            onSelect = { applyColor(color) }
+                        )
+                    }
+                    // Multicolor Ball (same consistent size: 28.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(ballSize)
+                            .clip(CircleShape)
+                            .background(rainbowBrush)
+                            .border(
+                                width = if (showColorWheel) 2.5.dp else 1.dp,
+                                color = if (showColorWheel) Color(0xFF4F46E5) else Color(0xFFD1D5DB),
+                                shape = CircleShape
+                            )
+                            .clickable { showColorWheel = !showColorWheel },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (showColorWheel) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White)
+                            )
+                        }
+                    }
+                }
+            }
         }
-        RgbSlider("G", green, Color(0xFF22C55E)) {
-            green = it
-            viewModel.setColor(Color(red, it, blue).toArgb())
+
+        // Side Big Multicolor Ball (HueWheel)
+        AnimatedVisibility(
+            visible = showColorWheel,
+            enter = fadeIn() + expandHorizontally(),
+            exit = fadeOut() + shrinkHorizontally()
+        ) {
+            Row(verticalAlignment = Alignment.Top) {
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .width(1.dp)
+                        .height(290.dp)
+                        .background(Color(0xFFE5E7EB))
+                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.width(170.dp).padding(top = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Color Wheel",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF374151)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFF3F4F6))
+                                .clickable { showColorWheel = false },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close wheel",
+                                tint = Color(0xFF6B7280),
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    HueWheel(
+                        modifier = Modifier.size(150.dp),
+                        onPick = { applyColor(it) }
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .background(Color(currentColor))
+                                .border(1.5.dp, Color(0xFFD1D5DB), CircleShape)
+                        )
+                        Text(
+                            text = String.format("#%06X", currentColor and 0xFFFFFF),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF374151)
+                        )
+                    }
+                }
+            }
         }
-        RgbSlider("B", blue, Color(0xFF3B82F6)) {
-            blue = it
-            viewModel.setColor(Color(red, green, it).toArgb())
+    }
+}
+
+@Composable
+private fun ColorRoundBall(
+    color: Int,
+    isSelected: Boolean,
+    size: androidx.compose.ui.unit.Dp,
+    onSelect: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(Color(color))
+            .border(
+                width = if (isSelected) 2.5.dp else 1.dp,
+                color = if (isSelected) Color(0xFF4F46E5) else Color(0xFFD1D5DB),
+                shape = CircleShape
+            )
+            .clickable(onClick = onSelect),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isSelected) {
+            val r = (color shr 16) and 0xFF
+            val g = (color shr 8) and 0xFF
+            val b = color and 0xFF
+            val isLight = (0.299 * r + 0.587 * g + 0.114 * b) > 160
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(if (isLight) Color(0xFF1F2937) else Color.White)
+            )
         }
     }
 }
@@ -683,28 +881,15 @@ fun EraserToolPanel(
 }
 
 @Composable
-private fun RgbSlider(label: String, value: Int, color: Color, onChange: (Int) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, modifier = Modifier.width(16.dp), fontSize = 12.sp, color = color)
-        Slider(
-            value = value.toFloat(),
-            onValueChange = { onChange(it.toInt()) },
-            valueRange = 0f..255f,
-            modifier = Modifier.weight(1f),
-            colors = SliderDefaults.colors(thumbColor = color, activeTrackColor = color)
-        )
-        Text(value.toString(), modifier = Modifier.width(28.dp), fontSize = 11.sp)
-    }
-}
-
-@Composable
-private fun HueWheel(onPick: (Int) -> Unit) {
+private fun HueWheel(
+    modifier: Modifier = Modifier,
+    onPick: (Int) -> Unit
+) {
     val hueColors = listOf(
         Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red
     )
     Box(
-        modifier = Modifier
-            .size(150.dp)
+        modifier = modifier
             .pointerInput(Unit) {
                 val cx = size.width / 2f
                 val cy = size.height / 2f
@@ -715,6 +900,22 @@ private fun HueWheel(onPick: (Int) -> Unit) {
                     val distance = sqrt(dx * dx + dy * dy)
                     val radius = min(cx, cy)
                     if (distance > radius) return@detectTapGestures
+                    val angle = (Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())) + 360.0) % 360.0
+                    val saturation = (distance / radius).coerceIn(0f, 1f)
+                    onPick(Color.hsv(angle.toFloat(), saturation, 1f).toArgb())
+                }
+            }
+            .pointerInput(Unit) {
+                val cx = size.width / 2f
+                val cy = size.height / 2f
+                detectDragGestures { change, _ ->
+                    change.consume()
+                    val offset = change.position
+                    if (cx <= 0f || cy <= 0f) return@detectDragGestures
+                    val dx = offset.x - cx
+                    val dy = offset.y - cy
+                    val distance = sqrt(dx * dx + dy * dy)
+                    val radius = min(cx, cy)
                     val angle = (Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())) + 360.0) % 360.0
                     val saturation = (distance / radius).coerceIn(0f, 1f)
                     onPick(Color.hsv(angle.toFloat(), saturation, 1f).toArgb())
