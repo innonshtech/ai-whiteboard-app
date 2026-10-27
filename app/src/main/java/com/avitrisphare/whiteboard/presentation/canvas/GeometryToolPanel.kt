@@ -228,8 +228,8 @@ fun GeometryToolPanel(
 
     Column(
         modifier = modifier
-            .width(428.dp)
-            .heightIn(max = 520.dp)
+            .width(330.dp)
+            .heightIn(max = 380.dp)
             .verticalScroll(rememberScrollState())
     ) {
         Row(
@@ -237,39 +237,39 @@ fun GeometryToolPanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(stringResource(R.string.geo_title), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
+            Text(stringResource(R.string.geo_title), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(24.dp)
                     .clip(CircleShape)
                     .background(Chip)
                     .clickable(onClick = onClose),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.dialog_close), tint = Color(0xFF4B5563), modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.dialog_close), tint = Color(0xFF4B5563), modifier = Modifier.size(14.dp))
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             GeometryCategory.entries.forEach { cat ->
                 val on = cat == category
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(if (on) Blue else Chip)
                         .clickable { category = cat }
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         localizedGeoCategory(cat),
-                        fontSize = 12.sp,
+                        fontSize = 11.5.sp,
                         fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
                         color = if (on) Color.White else Ink
                     )
@@ -277,20 +277,14 @@ fun GeometryToolPanel(
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
 
         if (category == GeometryCategory.INSTRUMENTS) {
-            Text(
-                stringResource(R.string.geo_instructions),
-                fontSize = 12.sp,
-                color = Muted
-            )
-            Spacer(Modifier.height(10.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 INSTRUMENTS.forEach { spec ->
                     InstrumentCard(
@@ -304,8 +298,6 @@ fun GeometryToolPanel(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-            Text(localizedInstrumentHint(selected.kind), fontSize = 12.sp, color = Muted)
             Spacer(Modifier.height(8.dp))
 
             val span = spanOf(selectedKind)
@@ -347,31 +339,25 @@ fun GeometryToolPanel(
             val onBoard = live != null
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(6.dp))
                     .background(if (onBoard) BlueSoft else Chip)
-                    .border(1.dp, if (onBoard) Blue else Color(0xFFD1D5DB), RoundedCornerShape(8.dp))
+                    .border(1.dp, if (onBoard) Blue else Color(0xFFD1D5DB), RoundedCornerShape(6.dp))
                     .clickable { placeOrMove(selectedKind, Offset.Zero, false) }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
                 Text(
                     if (onBoard) stringResource(R.string.geo_remove_board) else stringResource(R.string.geo_place_board),
-                    fontSize = 12.sp,
+                    fontSize = 11.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = if (onBoard) Blue else Ink
                 )
             }
         } else {
-            Text(
-                stringResource(R.string.geo_aids_description),
-                fontSize = 12.sp,
-                color = Muted
-            )
-            Spacer(Modifier.height(10.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 AidCard(
                     name = stringResource(R.string.geo_aid_graph),
@@ -432,7 +418,7 @@ private fun InstrumentCard(
     var origin by remember { mutableStateOf(Offset.Zero) }
     Box(
         modifier = Modifier
-            .size(width = 76.dp, height = 78.dp)
+            .size(width = 54.dp, height = 58.dp)
             .onGloballyPositioned { origin = it.positionInRoot() }
             .pointerInput(spec.kind, placed) {
                 awaitEachGesture {
@@ -457,16 +443,16 @@ private fun InstrumentCard(
                     }
                 }
             }
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(if (selected) BlueSoft else Color(0xFFF9FAFB))
-            .border(if (selected) 2.dp else 1.dp, if (selected) Blue else Line, RoundedCornerShape(12.dp))
-            .padding(horizontal = 4.dp, vertical = 6.dp)
+            .border(if (selected) 2.dp else 1.dp, if (selected) Blue else Line, RoundedCornerShape(10.dp))
+            .padding(horizontal = 2.dp, vertical = 4.dp)
     ) {
         if (placed) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .size(7.dp)
+                    .size(6.dp)
                     .clip(CircleShape)
                     .background(Blue)
             )
@@ -479,10 +465,10 @@ private fun InstrumentCard(
             verticalArrangement = Arrangement.Center
         ) {
             InstrumentIcon(spec.kind, if (selected) Blue else Ink)
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
             Text(
                 localizedInstrumentName(spec.kind),
-                fontSize = 10.sp,
+                fontSize = 9.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 color = if (selected) Color(0xFF1D4ED8) else Color(0xFF4B5563),
                 maxLines = 1,
@@ -502,20 +488,20 @@ private fun AidCard(
 ) {
     Column(
         modifier = Modifier
-            .size(width = 76.dp, height = 78.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .size(width = 54.dp, height = 58.dp)
+            .clip(RoundedCornerShape(10.dp))
             .background(if (selected) BlueSoft else Color(0xFFF9FAFB))
-            .border(if (selected) 2.dp else 1.dp, if (selected) Blue else Line, RoundedCornerShape(12.dp))
+            .border(if (selected) 2.dp else 1.dp, if (selected) Blue else Line, RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .padding(horizontal = 2.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         icon(if (selected) Blue else Ink)
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             name,
-            fontSize = 10.sp,
+            fontSize = 9.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = if (selected) Color(0xFF1D4ED8) else Color(0xFF4B5563),
             maxLines = 1,
@@ -538,12 +524,12 @@ private fun MeasureSlider(
     ) {
         Text(
             label,
-            fontSize = 12.sp,
+            fontSize = 11.5.sp,
             fontWeight = FontWeight.Medium,
             color = Ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(168.dp)
+            modifier = Modifier.width(96.dp)
         )
         Slider(
             value = value,

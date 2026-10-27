@@ -100,12 +100,221 @@ private val CURATED_EDUCATIONAL_EMOJI = listOf(
 )
 
 @Composable
+fun StickerEmojiPanelContent(
+    onSelectSticker: (kind: String, text: String) -> Unit,
+    onClose: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    var selectedTab by remember { mutableIntStateOf(0) }
+
+    Column(
+        modifier = modifier
+            .width(330.dp)
+            .heightIn(max = 380.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 2.dp, vertical = 2.dp)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFEF3C7)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (selectedTab == 0) Icons.Default.Star else Icons.Default.EmojiEmotions,
+                        contentDescription = null,
+                        tint = if (selectedTab == 0) Color(0xFFF59E0B) else Color(0xFF0284C7),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Text(
+                    text = "Stickers & Emoji",
+                    color = Color(0xFF1E293B),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            if (onClose != null) {
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFF1F5F9))
+                        .clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color(0xFF4B5563),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Tabs: Stickers vs Emoji
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = Color(0xFFF1F5F9),
+            contentColor = Color(0xFF1E293B),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(34.dp)
+                .clip(RoundedCornerShape(8.dp))
+        ) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                text = {
+                    Text(
+                        text = "⭐ Stickers",
+                        fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selectedTab == 0) Color(0xFFD97706) else Color(0xFF64748B),
+                        fontSize = 11.5.sp
+                    )
+                }
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                text = {
+                    Text(
+                        text = "😀 Emoji",
+                        fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selectedTab == 1) Color(0xFF2563EB) else Color(0xFF64748B),
+                        fontSize = 11.5.sp
+                    )
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Body content based on tab
+        if (selectedTab == 0) {
+            // Four Core Stickers Grid
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    CompactStickerCard(
+                        sticker = CORE_STICKERS[0],
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            onSelectSticker(CORE_STICKERS[0].kind, CORE_STICKERS[0].symbol)
+                            onClose?.invoke()
+                        }
+                    )
+                    CompactStickerCard(
+                        sticker = CORE_STICKERS[1],
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            onSelectSticker(CORE_STICKERS[1].kind, CORE_STICKERS[1].symbol)
+                            onClose?.invoke()
+                        }
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    CompactStickerCard(
+                        sticker = CORE_STICKERS[2],
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            onSelectSticker(CORE_STICKERS[2].kind, CORE_STICKERS[2].symbol)
+                            onClose?.invoke()
+                        }
+                    )
+                    CompactStickerCard(
+                        sticker = CORE_STICKERS[3],
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            onSelectSticker(CORE_STICKERS[3].kind, CORE_STICKERS[3].symbol)
+                            onClose?.invoke()
+                        }
+                    )
+                }
+            }
+        } else {
+            // Curated Emoji Grid
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(6),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(2.dp)
+            ) {
+                items(CURATED_EDUCATIONAL_EMOJI) { emoji ->
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFF8FAFC))
+                            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
+                            .clickable {
+                                onSelectSticker("emoji", emoji)
+                                onClose?.invoke()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = emoji,
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Educational tip footer
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color(0xFFF1F5F9))
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = "💡 Tap sticker or emoji to place on board",
+                color = Color(0xFF64748B),
+                fontSize = 10.5.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
 fun StickerEmojiPickerDialog(
     onDismiss: () -> Unit,
     onSelectSticker: (kind: String, text: String) -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -119,256 +328,53 @@ fun StickerEmojiPickerDialog(
     ) {
         Surface(
             modifier = Modifier
-                .padding(top = 56.dp, bottom = 76.dp)
-                .widthIn(min = 320.dp, max = 440.dp)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = {} // Consume clicks inside
+                    onClick = {}
                 ),
             shape = RoundedCornerShape(18.dp),
             color = Color.White,
             shadowElevation = 16.dp,
             border = BorderStroke(1.dp, Color(0xFFE2E8F0))
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 16.dp)
-                    .heightIn(max = 480.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFF1F5F9)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (selectedTab == 0) Icons.Default.Star else Icons.Default.EmojiEmotions,
-                                contentDescription = null,
-                                tint = if (selectedTab == 0) Color(0xFFF59E0B) else Color(0xFF0284C7),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "Classroom Stickers & Emoji",
-                                color = Color(0xFF1E293B),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Curated feedback set (not a full system keyboard)",
-                                color = Color(0xFF64748B),
-                                fontSize = 11.sp
-                            )
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFF1F5F9))
-                            .clickable(onClick = onDismiss),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = Color(0xFF4B5563),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Tabs: Stickers vs Emoji
-                TabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = Color(0xFFF1F5F9),
-                    contentColor = Color(0xFF1E293B),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                ) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        text = {
-                            Text(
-                                text = "⭐ Teacher Stickers (4)",
-                                fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selectedTab == 0) Color(0xFFD97706) else Color(0xFF64748B),
-                                fontSize = 12.5.sp
-                            )
-                        }
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        text = {
-                            Text(
-                                text = "😀 Classroom Emoji",
-                                fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selectedTab == 1) Color(0xFF2563EB) else Color(0xFF64748B),
-                                fontSize = 12.5.sp
-                            )
-                        }
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Body content based on tab
-                if (selectedTab == 0) {
-                    // Four Core Stickers Grid
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            StickerCard(
-                                sticker = CORE_STICKERS[0],
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    onSelectSticker(CORE_STICKERS[0].kind, CORE_STICKERS[0].symbol)
-                                    onDismiss()
-                                }
-                            )
-                            StickerCard(
-                                sticker = CORE_STICKERS[1],
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    onSelectSticker(CORE_STICKERS[1].kind, CORE_STICKERS[1].symbol)
-                                    onDismiss()
-                                }
-                            )
-                        }
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            StickerCard(
-                                sticker = CORE_STICKERS[2],
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    onSelectSticker(CORE_STICKERS[2].kind, CORE_STICKERS[2].symbol)
-                                    onDismiss()
-                                }
-                            )
-                            StickerCard(
-                                sticker = CORE_STICKERS[3],
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    onSelectSticker(CORE_STICKERS[3].kind, CORE_STICKERS[3].symbol)
-                                    onDismiss()
-                                }
-                            )
-                        }
-                    }
-                } else {
-                    // Curated Emoji Grid
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(6),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(2.dp)
-                    ) {
-                        items(CURATED_EDUCATIONAL_EMOJI) { emoji ->
-                            Box(
-                                modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFFF8FAFC))
-                                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        onSelectSticker("emoji", emoji)
-                                        onDismiss()
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = emoji,
-                                    fontSize = 22.sp,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Educational tip footer
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFFF1F5F9))
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        text = "💡 Tap any sticker or emoji to place it on the active board. Drag to move, or select to delete.",
-                        color = Color(0xFF64748B),
-                        fontSize = 11.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
+            StickerEmojiPanelContent(
+                onSelectSticker = onSelectSticker,
+                onClose = onDismiss,
+                modifier = Modifier.padding(14.dp)
+            )
         }
     }
 }
 
 @Composable
-private fun StickerCard(
+private fun CompactStickerCard(
     sticker: FeedbackStickerItem,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(Color(0xFFF8FAFC))
-            .border(1.2.dp, sticker.accentColor.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+            .border(1.dp, sticker.accentColor.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
-            .padding(10.dp)
+            .padding(horizontal = 8.dp, vertical = 7.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(30.dp)
                     .clip(CircleShape)
                     .background(sticker.badgeBg),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = sticker.symbol,
-                    fontSize = 24.sp,
+                    fontSize = 17.sp,
                     color = sticker.accentColor,
                     fontWeight = FontWeight.Bold
                 )
@@ -377,13 +383,14 @@ private fun StickerCard(
                 Text(
                     text = sticker.title,
                     color = Color(0xFF1E293B),
-                    fontSize = 13.5.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = sticker.subtitle,
                     color = Color(0xFF64748B),
-                    fontSize = 10.5.sp
+                    fontSize = 9.5.sp,
+                    maxLines = 1
                 )
             }
         }

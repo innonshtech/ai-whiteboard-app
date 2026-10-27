@@ -140,8 +140,8 @@ fun ShapeToolPanel(
 
     Column(
         modifier = modifier
-            .width(440.dp)
-            .heightIn(max = 520.dp)
+            .width(330.dp)
+            .heightIn(max = 380.dp)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 4.dp, vertical = 2.dp)
     ) {
@@ -161,7 +161,7 @@ fun ShapeToolPanel(
                         }
                     } else Modifier
                 )
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 8.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -173,7 +173,7 @@ fun ShapeToolPanel(
                     imageVector = Icons.Default.DragHandle,
                     contentDescription = "Move Shapes Window",
                     tint = Color(0xFF64748B),
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
                 Text(
                     text = stringResource(R.string.shapes_title),
@@ -184,25 +184,25 @@ fun ShapeToolPanel(
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (onDrag != null) {
                     Text(
                         text = stringResource(R.string.drag_to_move),
-                        fontSize = 11.sp,
+                        fontSize = 10.5.sp,
                         color = Color(0xFF94A3B8)
                     )
                     Box(
                         modifier = Modifier
-                            .width(32.dp)
-                            .height(4.dp)
+                            .width(28.dp)
+                            .height(3.dp)
                             .clip(RoundedCornerShape(2.dp))
                             .background(Color(0xFFCBD5E1))
                     )
                 }
                 Box(
                     modifier = Modifier
-                        .size(26.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
                         .background(Color(0xFFE2E8F0))
                         .clickable(onClick = onClose),
@@ -223,61 +223,61 @@ fun ShapeToolPanel(
         // --- Sub-category Pills (2D Shapes, Lines & Rays, 3D Solids) ---
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-                ShapeCategory.values().forEach { cat ->
-                    val isCatSelected = cat == selectedCategory
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isCatSelected) Color(0xFF2563EB) else Color(0xFFF3F4F6))
-                            .clickable { selectedCategory = cat }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = localizedShapeCategory(cat),
-                            fontSize = 12.sp,
-                            fontWeight = if (isCatSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isCatSelected) Color.White else Color(0xFF374151),
-                            maxLines = 1
-                        )
-                    }
+            ShapeCategory.values().forEach { cat ->
+                val isCatSelected = cat == selectedCategory
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isCatSelected) Color(0xFF2563EB) else Color(0xFFF3F4F6))
+                        .clickable { selectedCategory = cat }
+                        .padding(vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = localizedShapeCategory(cat),
+                        fontSize = 11.5.sp,
+                        fontWeight = if (isCatSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isCatSelected) Color.White else Color(0xFF374151),
+                        maxLines = 1
+                    )
                 }
             }
+        }
 
-            Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
 
-            // --- Horizontal Shape Cards Grid ---
-            val shapesInCat = remember(selectedCategory) {
-                ALL_SHAPES.filter { it.category == selectedCategory }
-            }
+        // --- Horizontal Shape Cards Grid ---
+        val shapesInCat = remember(selectedCategory) {
+            ALL_SHAPES.filter { it.category == selectedCategory }
+        }
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             shapesInCat.forEach { spec ->
                 val isSelected = spec.strokeType == state.activeShapeType
                 Column(
                     modifier = Modifier
-                        .size(width = 68.dp, height = 74.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .size(width = 54.dp, height = 58.dp)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(if (isSelected) Color(0xFFEFF6FF) else Color(0xFFF9FAFB))
                         .border(
                             width = if (isSelected) 2.dp else 1.dp,
                             color = if (isSelected) Color(0xFF2563EB) else Color(0xFFE5E7EB),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(10.dp)
                         )
                         .clickable {
                             viewModel.setShapeType(spec.strokeType)
                         }
-                        .padding(horizontal = 4.dp, vertical = 6.dp),
+                        .padding(horizontal = 2.dp, vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
@@ -285,10 +285,10 @@ fun ShapeToolPanel(
                         spec = spec,
                         tint = if (isSelected) Color(0xFF2563EB) else Color(0xFF374151)
                     )
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(2.dp))
                     Text(
                         text = localizedShapeName(spec.strokeType),
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (isSelected) Color(0xFF1D4ED8) else Color(0xFF4B5563),
                         maxLines = 1,
@@ -299,25 +299,25 @@ fun ShapeToolPanel(
             }
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(10.dp))
 
         // --- Sliders: Stroke Width & Opacity ---
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = stringResource(R.string.stroke_px, state.strokeWidth),
-                fontSize = 12.sp,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF374151)
+                color = Color(0xFF374151),
+                modifier = Modifier.width(84.dp)
             )
             Slider(
                 value = state.strokeWidth,
                 onValueChange = { viewModel.setStrokeWidth(it) },
                 valueRange = 1f..50f,
-                modifier = Modifier.width(280.dp),
+                modifier = Modifier.weight(1f),
                 colors = SliderDefaults.colors(
                     thumbColor = Color(0xFF2563EB),
                     activeTrackColor = Color(0xFF2563EB)
@@ -327,20 +327,20 @@ fun ShapeToolPanel(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = stringResource(R.string.shape_opacity, (state.shapeOpacity * 100).roundToInt()),
-                fontSize = 12.sp,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF374151)
+                color = Color(0xFF374151),
+                modifier = Modifier.width(84.dp)
             )
             Slider(
                 value = state.shapeOpacity,
                 onValueChange = { viewModel.setShapeOpacity(it) },
                 valueRange = 0.05f..1f,
-                modifier = Modifier.width(280.dp),
+                modifier = Modifier.weight(1f),
                 colors = SliderDefaults.colors(
                     thumbColor = Color(0xFF2563EB),
                     activeTrackColor = Color(0xFF2563EB)
@@ -351,53 +351,45 @@ fun ShapeToolPanel(
         // --- Radius slider & Dimensions Toggle ---
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.shape_radius, state.shapeCornerRadius.toInt()),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (activeSpec.supportsRadius) Color(0xFF374151) else Color(0xFF9CA3AF)
+            Text(
+                text = stringResource(R.string.shape_radius, state.shapeCornerRadius.toInt()),
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (activeSpec.supportsRadius) Color(0xFF374151) else Color(0xFF9CA3AF),
+                modifier = Modifier.width(84.dp)
+            )
+            Slider(
+                value = state.shapeCornerRadius,
+                onValueChange = { viewModel.setShapeCornerRadius(it) },
+                valueRange = 0f..80f,
+                enabled = activeSpec.supportsRadius,
+                modifier = Modifier.weight(1f),
+                colors = SliderDefaults.colors(
+                    thumbColor = Color(0xFF2563EB),
+                    activeTrackColor = Color(0xFF2563EB)
                 )
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (state.showShapeDimensions) Color(0xFFEFF6FF) else Color(0xFFF3F4F6))
+                    .border(
+                        1.dp,
+                        if (state.showShapeDimensions) Color(0xFF2563EB) else Color(0xFFD1D5DB),
+                        RoundedCornerShape(6.dp)
+                    )
+                    .clickable { viewModel.toggleShapeDimensions() }
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
             ) {
-                Slider(
-                    value = state.shapeCornerRadius,
-                    onValueChange = { viewModel.setShapeCornerRadius(it) },
-                    valueRange = 0f..80f,
-                    enabled = activeSpec.supportsRadius,
-                    modifier = Modifier.width(180.dp),
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color(0xFF2563EB),
-                        activeTrackColor = Color(0xFF2563EB)
-                    )
+                Text(
+                    text = if (state.showShapeDimensions) stringResource(R.string.shape_dims_active) else stringResource(R.string.shape_dims),
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (state.showShapeDimensions) Color(0xFF2563EB) else Color(0xFF4B5563)
                 )
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (state.showShapeDimensions) Color(0xFFEFF6FF) else Color(0xFFF3F4F6))
-                        .border(
-                            1.dp,
-                            if (state.showShapeDimensions) Color(0xFF2563EB) else Color(0xFFD1D5DB),
-                            RoundedCornerShape(8.dp)
-                        )
-                        .clickable { viewModel.toggleShapeDimensions() }
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = if (state.showShapeDimensions) stringResource(R.string.shape_dims_active) else stringResource(R.string.shape_dims),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (state.showShapeDimensions) Color(0xFF2563EB) else Color(0xFF4B5563)
-                    )
-                }
             }
         }
 

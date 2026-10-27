@@ -3169,6 +3169,11 @@ fun CanvasScreen(
                 selectionToolbarDismissed = true
                 showStickerEmojiDialog = true
             },
+            onSelectSticker = { kind, text ->
+                viewModel.clearSelection()
+                val center = canvasCenter()
+                viewModel.insertSticker(kind, center, text)
+            },
             onEditNodeText = { strokeId, currentText ->
                 editingNodeStrokeId = strokeId
                 editingNodeText = currentText
