@@ -232,4 +232,39 @@ class TouchGesturesTest {
             assertEquals("Accepted coordinates must match identically", mainAccepted, splitAccepted)
         }
     }
+
+    @Test
+    fun `isPenNibContact correctly distinguishes stylus, pen nib and finger`() {
+        val xdpi = 77.0f // 86-inch 4K IFP screen dpi
+
+        // 1. Hardware stylus should always be pen nib regardless of contact size
+        assertTrue(isPenNibContact(isEraser = false, isStylus = true, majorPx = 25f, minorPx = 20f, xdpi = xdpi))
+        assertTrue(isPenNibContact(isEraser = false, isStylus = true, majorPx = 0f, minorPx = 0f, xdpi = xdpi))
+
+        // 2. Eraser should never be pen nib
+        org.junit.Assert.assertFalse(isPenNibContact(isEraser = true, isStylus = true, majorPx = 20f, minorPx = 20f, xdpi = xdpi))
+        org.junit.Assert.assertFalse(isPenNibContact(isEraser = true, isStylus = false, majorPx = 10f, minorPx = 10f, xdpi = xdpi))
+
+        // 3. Unreported / 0-size contact (point contact from passive pen) is a pen nib
+        assertTrue(isPenNibContact(isEraser = false, isStylus = false, majorPx = 0f, minorPx = 0f, xdpi = xdpi))
+
+        // 4. Whiteboard passive pen nib (e.g. 6mm-8mm shadow -> 18px-24px at 77 dpi) is a pen nib
+        // 20px / 77 * 25.4 = 6.6mm
+        assertTrue(isPenNibContact(isEraser = false, isStylus = false, majorPx = 20f, minorPx = 18f, xdpi = xdpi))
+        // 24px / 77 * 25.4 = 7.9mm
+        assertTrue(isPenNibContact(isEraser = false, isStylus = false, majorPx = 24f, minorPx = 22f, xdpi = xdpi))
+
+        // 5. Tilted pen nib (elongated major axis e.g. 32px ~ 10.5mm, but narrow minor axis e.g. 15px ~ 4.9mm) is a pen nib
+        assertTrue(isPenNibContact(isEraser = false, isStylus = false, majorPx = 32f, minorPx = 15f, xdpi = xdpi))
+
+        // 6. Finger touch (broad contact e.g. 40px major ~ 13.2mm, 35px minor ~ 11.5mm) is NOT a pen nib
+        org.junit.Assert.assertFalse(isPenNibContact(isEraser = false, isStylus = false, majorPx = 40f, minorPx = 35f, xdpi = xdpi))
+
+        // 7. IFP Normalized IR touch scale (from live board telemetry):
+        // Pen nib is ~1.37 -> MUST be pen nib (Primary)
+        assertTrue(isPenNibContact(isEraser = false, isStylus = false, majorPx = 1.373291f, minorPx = 1.373291f, xdpi = xdpi))
+        // Back of pen / Finger is ~3.20 -> MUST NOT be pen nib (Secondary)
+        org.junit.Assert.assertFalse(isPenNibContact(isEraser = false, isStylus = false, majorPx = 3.2043457f, minorPx = 3.2043457f, xdpi = xdpi))
+    }
 }
+

@@ -662,18 +662,11 @@ fun DrawScope.renderStroke(
                     isAntiAlias = true
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 }
-                val isMeasurement = stroke.strokeWidth == 18f && !stroke.text.contains("\n")
-                if (isMeasurement) {
-                    paint.textAlign = Paint.Align.CENTER
-                    val textY = origin.y - (paint.descent() + paint.ascent()) / 2f
-                    drawText(stroke.text, origin.x, textY, paint)
-                } else {
-                    val lines = stroke.text.split("\n")
-                    var curY = origin.y + 20f
-                    for (line in lines) {
-                        drawText(line, origin.x, curY, paint)
-                        curY += 26f
-                    }
+                val lines = stroke.text.split("\n")
+                var curY = origin.y + 20f
+                for (line in lines) {
+                    drawText(line, origin.x, curY, paint)
+                    curY += 26f
                 }
             }
         }
@@ -1350,6 +1343,7 @@ fun CanvasScreen(
                 .pointerInput(
                     state.currentTool,
                     state.selectedColor,
+                    state.secondaryColor,
                     state.strokeWidth,
                     state.eraserMode,
                     state.eraserSize,
@@ -1433,11 +1427,42 @@ fun CanvasScreen(
                             WhiteboardTool.CONE,
                             WhiteboardTool.PYRAMID
                         )
+                        val rawToolType = touchContacts.toolType(down.position)
+                        val isEraserType = rawToolType == MotionEvent.TOOL_TYPE_ERASER || down.type == PointerType.Eraser
+                        val isStylusType = rawToolType == MotionEvent.TOOL_TYPE_STYLUS || down.type == PointerType.Stylus
+                        val majorPx = touchContacts.majorPx(down.position)
+                        val minorPx = touchContacts.minorPx(down.position)
+                        val isPenNib = isPenNibContact(
+                            isEraser = isEraserType,
+                            isStylus = isStylusType || stylusDraw,
+                            majorPx = majorPx,
+                            minorPx = minorPx,
+                            xdpi = xdpi
+                        )
+
+                        val contactSizePx = if (majorPx > 0f) {
+                            if (minorPx > 0f) (majorPx + minorPx) / 2f else majorPx
+                        } else {
+                            0f
+                        }
+                        val secondaryStrokeWidth = if (contactSizePx > 0f) {
+                            if (contactSizePx <= 5.0f) {
+                                (contactSizePx * 5f).coerceIn(14f, 32f)
+                            } else {
+                                contactSizePx.coerceIn(12f, 44f)
+                            }
+                        } else {
+                            if (isEraserType) 16f else 20f
+                        }
+
+                        val activeInkColor = if (isPenNib) state.selectedColor else state.secondaryColor
+                        val activeInkWidth = if (isPenNib) state.strokeWidth else secondaryStrokeWidth
+                        android.util.Log.i("AvitriTouch", "DECISION down.id=${down.id.value} pos=${down.position} tool=$rawToolType stylusDraw=$stylusDraw majorPx=$majorPx minorPx=$minorPx xdpi=$xdpi -> isPenNib=$isPenNib (color=${if (isPenNib) "PRIMARY" else "SECONDARY"}, width=$activeInkWidth)")
+
                         val activeTool = if (isPalmEraser) {
                             WhiteboardTool.ERASER
                         } else if (stylusDraw) {
-                            val toolType = touchContacts.toolType(down.id)
-                            if (toolType == MotionEvent.TOOL_TYPE_ERASER || down.type == PointerType.Eraser) {
+                            if (isEraserType && latestState.currentTool == WhiteboardTool.ERASER) {
                                 WhiteboardTool.ERASER
                             } else if (isShapeActive) {
                                 state.currentTool
@@ -1475,8 +1500,8 @@ fun CanvasScreen(
                             Stroke(
                                 points = inkPoints,
                                 pointPressures = inkPressures,
-                                colorValue = state.selectedColor,
-                                strokeWidth = state.strokeWidth,
+                                colorValue = activeInkColor,
+                                strokeWidth = activeInkWidth,
                                 isHighlighter = activeTool == WhiteboardTool.HIGHLIGHTER,
                                 strokeType = activeTool.toStrokeType()
                             )
@@ -1494,15 +1519,25 @@ fun CanvasScreen(
                                 val safeScale = canvasScale.coerceAtLeast(0.001f)
                                 Offset(last.x + dx / safeScale, last.y + dy / safeScale)
                             }
-                            liveInk.stroke = if (stylusDraw) {
-                                template.copy(
-                                    strokeWidth = stylusPressureWidth(
-                                        state.strokeWidth,
-                                        inkPressures.lastOrNull() ?: 1f
+                            liveInk.stroke = if (isPenNib) {
+                                if (stylusDraw) {
+                                    template.copy(
+                                        strokeWidth = stylusPressureWidth(
+                                            activeInkWidth,
+                                            inkPressures.lastOrNull() ?: 1f
+                                        )
                                     )
-                                )
+                                } else {
+                                    template
+                                }
                             } else {
-                                template
+                                val curMajor = touchContacts.majorPx(down.position)
+                                val curMinor = touchContacts.minorPx(down.position)
+                                val curContact = if (curMajor > 0f) (if (curMinor > 0f) (curMajor + curMinor) / 2f else curMajor) else 0f
+                                val liveWidth = if (curContact > 0f) {
+                                    if (curContact <= 5.0f) (curContact * 5f).coerceIn(14f, 32f) else curContact.coerceIn(12f, 44f)
+                                } else activeInkWidth
+                                template.copy(strokeWidth = liveWidth)
                             }
                             liveInkTick.intValue = liveInkTick.intValue + 1
                             boardStage?.setLiveInk(liveInk)
@@ -1626,7 +1661,7 @@ fun CanvasScreen(
                             mathGesture.drawDir = direction(straightedge.rotationDeg)
                             mathGesture.rulerEdgeSign = rulerEdgeForPoint(straightedge, down.position)
 
-                            val snappedStartScreen = snapToRulerEdge(straightedge, down.position, mathGesture.rulerEdgeSign, pxPerCm)
+                            val snappedStartScreen = snapToRulerEdge(straightedge, down.position, mathGesture.rulerEdgeSign)
                             val snappedStartWorld = CanvasTransform.screenToWorld(
                                 snappedStartScreen,
                                 canvasScale,
@@ -1760,9 +1795,9 @@ fun CanvasScreen(
                                 }
                                 val newStroke = Stroke(
                                     points = listOf(downWorld, downWorld),
-                                    colorValue = if (activeTool == WhiteboardTool.SHAPE) state.shapeBorderColor else state.selectedColor,
+                                    colorValue = if (activeTool == WhiteboardTool.SHAPE) state.shapeBorderColor else activeInkColor,
                                     fillColor = if (activeTool == WhiteboardTool.SHAPE) state.shapeFillColor else state.fillColor,
-                                    strokeWidth = state.strokeWidth,
+                                    strokeWidth = if (activeTool == WhiteboardTool.SHAPE) state.strokeWidth else activeInkWidth,
                                     strokeType = sType,
                                     opacity = if (activeTool == WhiteboardTool.SHAPE) state.shapeOpacity else 1f,
                                     cornerRadius = if (activeTool == WhiteboardTool.SHAPE) state.shapeCornerRadius else 0f,
@@ -1835,7 +1870,7 @@ fun CanvasScreen(
                                     val rotation = event.calculateRotation()
                                     val zoom = event.calculateZoom()
                                     val newSpan = if (zoom != 1f && (pinchedTool.kind == MathToolKind.RULER || pinchedTool.kind == MathToolKind.COMPASS)) {
-                                        clampMathSpan(pinchedTool.kind, pinchedTool.span * zoom)
+                                        (pinchedTool.span * zoom).coerceIn(180f, 3600f)
                                     } else pinchedTool.span
                                     val updated = translateAndRotate(
                                         pinchedTool.copy(span = newSpan),
@@ -1845,8 +1880,7 @@ fun CanvasScreen(
                                     replaceMathTool(updated)
                                     if (updated.kind == MathToolKind.RULER) {
                                         val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
-                                        val markedSpan = (updated.span - 2 * RULER_INSET).coerceAtLeast(0f)
-                                        mathReadout = "${formatCentimetres(markedSpan, pxPerCm)} • $deg°" to centroid + Offset(0f, -42f)
+                                        mathReadout = "${formatCentimetres(updated.span, pxPerCm)} • $deg°" to centroid + Offset(0f, -42f)
                                     } else {
                                         mathReadout = null
                                     }
@@ -1950,8 +1984,7 @@ fun CanvasScreen(
                                                     replaceMathTool(updated)
                                                     val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
                                                     val text = if (tool.kind == MathToolKind.RULER) {
-                                                        val markedSpan = (updated.span - 2 * RULER_INSET).coerceAtLeast(0f)
-                                                        "${formatCentimetres(markedSpan, pxPerCm)} • $deg°"
+                                                        "${formatCentimetres(updated.span, pxPerCm)} • $deg°"
                                                     } else {
                                                         "$deg°"
                                                     }
@@ -2005,7 +2038,7 @@ fun CanvasScreen(
                                         val ruler = mathTools.find { it.id == mathGesture.toolId }
                                         if (ruler != null && shapePoints.isNotEmpty()) {
                                             val snappedStartWorld = shapePoints.first()
-                                            val snappedCurrentScreen = snapToRulerEdge(ruler, change.position, mathGesture.rulerEdgeSign, pxPerCm)
+                                            val snappedCurrentScreen = snapToRulerEdge(ruler, change.position, mathGesture.rulerEdgeSign)
                                             val snappedCurrentWorld = CanvasTransform.screenToWorld(
                                                 snappedCurrentScreen,
                                                 canvasScale,
@@ -2601,18 +2634,28 @@ fun CanvasScreen(
                                     viewModel.setTool(WhiteboardTool.SELECT)
                                 }
                             } else if (writingNow && inkPoints.isNotEmpty()) {
-                                val finishedWidth = if (stylusDraw) {
-                                    stylusPressureWidth(
-                                        state.strokeWidth,
-                                        inkPressures.average().toFloat()
-                                    )
+                                val finishedWidth = if (isPenNib) {
+                                    if (stylusDraw) {
+                                        stylusPressureWidth(
+                                            activeInkWidth,
+                                            inkPressures.average().toFloat()
+                                        )
+                                    } else {
+                                        activeInkWidth
+                                    }
                                 } else {
-                                    state.strokeWidth
+                                    val curMajor = touchContacts.majorPx(down.position)
+                                    val curMinor = touchContacts.minorPx(down.position)
+                                    val curContact = if (curMajor > 0f) (if (curMinor > 0f) (curMajor + curMinor) / 2f else curMajor) else 0f
+                                    if (curContact > 0f) {
+                                        if (curContact <= 5.0f) (curContact * 5f).coerceIn(14f, 32f) else curContact.coerceIn(12f, 44f)
+                                    } else activeInkWidth
                                 }
                                 val finished = inkTemplate!!.copy(
                                     points = ArrayList(inkPoints),
                                     pointPressures = ArrayList(inkPressures),
-                                    strokeWidth = finishedWidth
+                                    strokeWidth = finishedWidth,
+                                    colorValue = activeInkColor
                                 )
                                 liveInk.stroke = null
                                 liveInkTick.intValue = liveInkTick.intValue + 1

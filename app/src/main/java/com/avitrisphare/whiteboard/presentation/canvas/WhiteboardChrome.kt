@@ -36,7 +36,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoFixHigh
@@ -1062,14 +1061,6 @@ fun AvitriSphareWhiteboardChrome(
                             viewModel.setTool(state.inkTool)
                             toggle("ink")
                         }
-                        TwoColorPenQuickSwap(
-                            primaryColor = state.selectedColor,
-                            secondaryColor = state.secondaryColor,
-                            onSwap = {
-                                viewModel.swapPenColors()
-                                Toast.makeText(context, "Color swapped", Toast.LENGTH_SHORT).show()
-                            }
-                        )
                         DockItem(
                             icon = Icons.Default.Hub,
                             label = "Flowchart",
@@ -1734,65 +1725,6 @@ private fun DockItem(
             fontSize = 9.sp,
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1
-        )
-    }
-}
-
-@Composable
-private fun TwoColorPenQuickSwap(
-    primaryColor: Int,
-    secondaryColor: Int,
-    onSwap: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onSwap)
-            .padding(horizontal = 4.dp, vertical = 2.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .height(30.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(Color(0xFF232938))
-                .padding(horizontal = 4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                // Active Swatch (larger, with white border)
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(Color(primaryColor))
-                        .border(1.5.dp, Color.White, CircleShape)
-                )
-                // Swap Arrow Icon
-                Icon(
-                    imageVector = Icons.Default.SwapHoriz,
-                    contentDescription = "Swap colors",
-                    tint = Color(0xFFA5B4FC),
-                    modifier = Modifier.size(13.dp)
-                )
-                // Standby Swatch
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .clip(CircleShape)
-                        .background(Color(secondaryColor))
-                        .border(1.dp, Color(0x66FFFFFF), CircleShape)
-                )
-            }
-        }
-        Text(
-            text = "Swap",
-            color = Color(0xFFA5B4FC),
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Medium
         )
     }
 }
