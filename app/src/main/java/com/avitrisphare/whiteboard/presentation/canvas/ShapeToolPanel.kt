@@ -128,7 +128,7 @@ fun ShapeToolPanel(
 ) {
     var selectedCategory by remember { mutableStateOf(ShapeCategory.SHAPES_2D) }
     var showColorPicker by remember { mutableStateOf(false) }
-
+    val activeSpec = ALL_SHAPES.firstOrNull { it.strokeType == state.activeShapeType } ?: ALL_SHAPES.first()
 
     val currentModeColor = if (state.shapeStyleMode == ShapeStyleMode.BORDER) {
         state.shapeBorderColor

@@ -60,6 +60,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowForward
@@ -1645,7 +1646,6 @@ fun AvitriSphareWhiteboardChrome(
                         ) {
                             toggle("more_tools")
                         }
-                        }
                     }
                 }
 
@@ -2608,6 +2608,7 @@ fun AvitriSphareWhiteboardChrome(
         }
     }
 }
+}
 
 data class ToolDisplayInfo(
     val id: String,
@@ -2830,6 +2831,65 @@ private fun PenSplitDockItem(
                 modifier = Modifier.size(20.dp)
             )
         }
+    }
+}
+
+@Composable
+private fun TwoColorPenQuickSwap(
+    primaryColor: Int,
+    secondaryColor: Int,
+    onSwap: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onSwap)
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .height(30.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(Color(0xFF232938))
+                .padding(horizontal = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                // Active Swatch (larger, with white border)
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(Color(primaryColor))
+                        .border(1.5.dp, Color.White, CircleShape)
+                )
+                // Swap Arrow Icon
+                Icon(
+                    imageVector = Icons.Default.SwapHoriz,
+                    contentDescription = "Swap colors",
+                    tint = Color(0xFFA5B4FC),
+                    modifier = Modifier.size(13.dp)
+                )
+                // Standby Swatch
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(Color(secondaryColor))
+                        .border(1.dp, Color(0x66FFFFFF), CircleShape)
+                )
+            }
+        }
+        Text(
+            text = "Swap",
+            color = Color(0xFFA5B4FC),
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 
