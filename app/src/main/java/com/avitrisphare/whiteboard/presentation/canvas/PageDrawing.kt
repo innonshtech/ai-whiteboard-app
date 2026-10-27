@@ -5,10 +5,13 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke as DrawStroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import com.avitrisphare.whiteboard.domain.model.CanvasBackground
 import com.avitrisphare.whiteboard.domain.model.Stroke
+import com.avitrisphare.whiteboard.domain.model.StrokeType
 import com.avitrisphare.whiteboard.domain.model.isPlacedMedia
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -82,19 +85,19 @@ fun DrawScope.drawVectorInk(
                 renderStroke(context, stroke, scale, false)
             }
         }
-        if (selectedStrokes.isNotEmpty()) drawSelectionBox(selectedStrokes)
+        if (selectedStrokes.isNotEmpty()) drawSelectionBox(selectedStrokes, scale)
         for (stroke in selectedStrokes) {
-            renderStroke(context, stroke, scale, isEditableShape(stroke.strokeType))
+            renderStroke(context, stroke, scale, false)
         }
         for (stroke in strokes) {
             if (stroke.isPlacedMedia() && stroke.id in selectedIds) {
-                renderStroke(context, stroke, scale, true)
+                renderStroke(context, stroke, scale, false)
             }
         }
     }
 }
 
-private fun DrawScope.drawSelectionBox(strokes: List<Stroke>) {
+private fun DrawScope.drawSelectionBox(strokes: List<Stroke>, scale: Float) {
     var left = Float.POSITIVE_INFINITY
     var top = Float.POSITIVE_INFINITY
     var right = Float.NEGATIVE_INFINITY
@@ -106,13 +109,65 @@ private fun DrawScope.drawSelectionBox(strokes: List<Stroke>) {
         right = maxOf(right, bounds.right)
         bottom = maxOf(bottom, bounds.bottom)
     }
-    val pad = 16f
+
+    val pad = 6f
+    val boxLeft = left - pad
+    val boxTop = top - pad
+    val boxRight = right + pad
+    val boxBottom = bottom + pad
+    val boxWidth = boxRight - boxLeft
+    val boxHeight = boxBottom - boxTop
+
+    // 1. Semi-transparent wash inside selection matching user reference photo
     drawRoundRect(
-        color = Color(0x738A8870),
-        topLeft = Offset(left - pad, top - pad),
-        size = Size(right - left + pad * 2f, bottom - top + pad * 2f),
-        cornerRadius = CornerRadius(12f, 12f)
+        color = Color(0x338A8870),
+        topLeft = Offset(boxLeft, boxTop),
+        size = Size(boxWidth, boxHeight),
+        cornerRadius = CornerRadius(4f, 4f)
     )
+
+    // 2. Faint small dashed blue border line around selection (matching photo)
+    val strokeW = (1.5f / scale.coerceAtLeast(0.3f)).coerceIn(1.2f, 2.5f)
+    val dashLen = (8f / scale.coerceAtLeast(0.3f)).coerceIn(6f, 12f)
+    val gapLen = (5f / scale.coerceAtLeast(0.3f)).coerceIn(4f, 8f)
+    val handleR = (5f / scale.coerceAtLeast(0.3f)).coerceIn(4f, 8f)
+
+    val isAllLocked = strokes.isNotEmpty() && strokes.all { it.stickerKind.contains(":locked") }
+    val selColor = if (isAllLocked) Color(0xFFD97706) else Color(0xFF2563EB)
+
+    drawRoundRect(
+        color = selColor,
+        topLeft = Offset(boxLeft, boxTop),
+        size = Size(boxWidth, boxHeight),
+        cornerRadius = CornerRadius(4f, 4f),
+        style = DrawStroke(
+            width = strokeW,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(dashLen, gapLen), 0f)
+        )
+    )
+
+    // 3. Small circular corner handles as shown in user photo
+    if (!isAllLocked) {
+        val cornerPoints = listOf(
+            Offset(boxLeft, boxTop),
+            Offset(boxRight, boxTop),
+            Offset(boxRight, boxBottom),
+            Offset(boxLeft, boxBottom)
+        )
+        for (cp in cornerPoints) {
+            drawCircle(
+                color = Color.White,
+                radius = handleR,
+                center = cp
+            )
+            drawCircle(
+                color = selColor,
+                radius = handleR,
+                center = cp,
+                style = DrawStroke(width = strokeW)
+            )
+        }
+    }
 }
 
 fun DrawScope.inPageSpace(

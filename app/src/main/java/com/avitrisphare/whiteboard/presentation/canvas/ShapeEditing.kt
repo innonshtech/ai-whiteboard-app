@@ -208,3 +208,61 @@ fun regularStarPath(first: Offset, second: Offset): Path {
     path.close()
     return path
 }
+
+fun isContainerShape(type: StrokeType): Boolean {
+    return type == StrokeType.RECTANGLE ||
+        type == StrokeType.ROUND_RECT ||
+        type == StrokeType.ROUNDED_RECTANGLE ||
+        type == StrokeType.SQUARE ||
+        type == StrokeType.CIRCLE ||
+        type == StrokeType.ELLIPSE ||
+        type == StrokeType.DIAMOND ||
+        type == StrokeType.STICKY_NOTE
+}
+
+fun isMindMapNode(stroke: Stroke): Boolean {
+    return stroke.stickerKind.startsWith("mindmap:") ||
+        stroke.stickerKind.startsWith("flow:")
+}
+
+fun hitSelectionBoundsHandle(strokes: List<Stroke>, point: Offset, slop: Float): Pair<ShapeHandle, androidx.compose.ui.geometry.Rect>? {
+    if (strokes.isEmpty()) return null
+    var left = Float.POSITIVE_INFINITY
+    var top = Float.POSITIVE_INFINITY
+    var right = Float.NEGATIVE_INFINITY
+    var bottom = Float.NEGATIVE_INFINITY
+    for (stroke in strokes) {
+        val b = strokeSelectionBounds(stroke)
+        left = minOf(left, b.left)
+        top = minOf(top, b.top)
+        right = maxOf(right, b.right)
+        bottom = maxOf(bottom, b.bottom)
+    }
+    if (left >= right || top >= bottom) return null
+    val pad = 12f
+    val boxLeft = left - pad
+    val boxTop = top - pad
+    val boxRight = right + pad
+    val boxBottom = bottom + pad
+    val origBounds = androidx.compose.ui.geometry.Rect(boxLeft, boxTop, boxRight, boxBottom)
+
+    val slopSq = slop * slop
+    fun near(t: Offset) = hypot(point.x - t.x, point.y - t.y).let { it * it <= slopSq }
+
+    val midX = boxLeft + (boxRight - boxLeft) / 2f
+    val midY = boxTop + (boxBottom - boxTop) / 2f
+
+    // 1. Corners (Primary handles)
+    if (near(Offset(boxLeft, boxTop))) return ShapeHandle.TOP_LEFT to origBounds
+    if (near(Offset(boxRight, boxTop))) return ShapeHandle.TOP_RIGHT to origBounds
+    if (near(Offset(boxRight, boxBottom))) return ShapeHandle.BOTTOM_RIGHT to origBounds
+    if (near(Offset(boxLeft, boxBottom))) return ShapeHandle.BOTTOM_LEFT to origBounds
+
+    // 2. Mid-edges
+    if (near(Offset(midX, boxTop))) return ShapeHandle.TOP_LEFT to origBounds
+    if (near(Offset(midX, boxBottom))) return ShapeHandle.BOTTOM_RIGHT to origBounds
+    if (near(Offset(boxLeft, midY))) return ShapeHandle.TOP_LEFT to origBounds
+    if (near(Offset(boxRight, midY))) return ShapeHandle.BOTTOM_RIGHT to origBounds
+
+    return null
+}

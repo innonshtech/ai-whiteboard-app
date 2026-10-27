@@ -332,6 +332,7 @@ fun AvitriSphareWhiteboardChrome(
     isPeriodicTableVisible: Boolean = false,
     onTogglePeriodicTable: () -> Unit = {},
     onOpenStickerEmoji: () -> Unit = {},
+    onOpenMindmapTemplates: () -> Unit = {},
     onEditNodeText: (String, String) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
@@ -502,6 +503,10 @@ fun AvitriSphareWhiteboardChrome(
                 val selectedStrokes = remember(state.strokes, state.selectedStrokeIds) {
                     state.strokes.filter { it.id in state.selectedStrokeIds }
                 }
+                val isDiagram = remember(selectedStrokes) {
+                    selectedStrokes.any { isMindMapNode(it) || it.strokeType == StrokeType.CONNECTOR }
+                }
+                if (!isDiagram) {
                 val hasFillableShape = remember(selectedStrokes) {
                     selectedStrokes.any { isFillableShape(it.strokeType) }
                 }
@@ -872,6 +877,7 @@ fun AvitriSphareWhiteboardChrome(
                     }
                 }
             }
+            }
             Spacer(Modifier.height(8.dp))
 
             AnimatedVisibility(
@@ -1214,11 +1220,12 @@ fun AvitriSphareWhiteboardChrome(
                         )
                         DockItem(
                             icon = Icons.Default.Hub,
-                            label = stringResource(R.string.tool_flowchart),
-                            active = activeDockTool == ActiveDockTool.FLOWCHART,
+                            label = "Mind Map",
+                            active = false,
                             tint = Color(0xFF2563EB)
                         ) {
-                            toggle("flowchart")
+                            panel = null
+                            onOpenMindmapTemplates()
                         }
                         DockItem(
                             icon = Icons.Default.Star,
@@ -1495,24 +1502,6 @@ fun AvitriSphareWhiteboardChrome(
                         PopoverRow(Icons.Default.Edit, "Rename board") {
                             panel = null
                             onRename()
-                        }
-                    }
-                    "flowchart" -> DockPopover(title = "Flowchart & Nodes", onClose = { panel = null }) {
-                        PopoverRow(Icons.Default.Dashboard, "3-Node Connected Flowchart") {
-                            viewModel.createThreeNodeFlowchart(Offset(320f, 360f))
-                            panel = null
-                        }
-                        PopoverRow(Icons.Default.CropSquare, "Process Node (Rectangle)") {
-                            viewModel.addFlowchartNode("process", Offset(420f, 360f))
-                            panel = null
-                        }
-                        PopoverRow(Icons.Default.Diamond, "Decision Node (Diamond)") {
-                            viewModel.addFlowchartNode("decision", Offset(420f, 360f))
-                            panel = null
-                        }
-                        PopoverRow(Icons.Default.RadioButtonUnchecked, "Terminator Node (Start/End)") {
-                            viewModel.addFlowchartNode("terminator", Offset(420f, 360f))
-                            panel = null
                         }
                     }
                     "geometry" -> DockPopover(maxWidth = 460.dp, scrollable = false) {
