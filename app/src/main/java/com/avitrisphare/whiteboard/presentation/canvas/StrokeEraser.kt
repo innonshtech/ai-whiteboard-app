@@ -1,6 +1,7 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import com.avitrisphare.whiteboard.domain.model.Stroke
 import com.avitrisphare.whiteboard.domain.model.StrokeType
 import java.util.UUID
@@ -49,6 +50,12 @@ object StrokeEraser {
         return if (changed) out else strokes
     }
 
+    private fun isMindMapElement(stroke: Stroke): Boolean {
+        return stroke.stickerKind.startsWith("mindmap:") ||
+            stroke.stickerKind.startsWith("flow:") ||
+            stroke.strokeType == StrokeType.CONNECTOR
+    }
+
     fun applySelection(
         strokes: List<Stroke>,
         selectedIds: Set<String>,
@@ -57,15 +64,24 @@ object StrokeEraser {
         mode: EraserMode,
         restrictToSelection: Boolean
     ): Pair<List<Stroke>, Set<String>> {
-        if (!restrictToSelection) {
+        val selectedNodes = strokes.filter { it.id in selectedIds && isMindMapElement(it) }
+
+        if (!restrictToSelection && selectedNodes.isEmpty()) {
             val erased = apply(strokes, center, radius, mode)
             return erased to selectedIds
         }
         if (selectedIds.isEmpty()) {
             return strokes to selectedIds
         }
-        val pool = strokes.filter { it.id in selectedIds }
-        val kept = strokes.filter { it.id !in selectedIds }
+        val pool = if (selectedNodes.isNotEmpty()) {
+            strokes.filter { stroke ->
+                (stroke.id in selectedIds && !isMindMapElement(stroke)) ||
+                    (stroke.strokeType in inkTypes && selectedNodes.any { node -> node.bounds.contains(stroke.bounds.center) })
+            }
+        } else {
+            strokes.filter { it.id in selectedIds }
+        }
+        val kept = strokes.filter { it !in pool }
         if (pool.isEmpty()) {
             return strokes to selectedIds
         }
@@ -86,6 +102,22 @@ object StrokeEraser {
         mode: EraserMode
     ): List<Stroke> {
         if (stroke.points.isEmpty()) return listOf(stroke)
+        // Never erase mind map boxes, borders, or connectors
+        if (isMindMapElement(stroke)) {
+            if (stroke.text.isNotEmpty()) {
+                val reach = radius + strokeInkHalfWidth(stroke)
+                val b = stroke.bounds
+                val textW = (b.width - 24f).coerceAtLeast(40f)
+                val textH = 40f
+                val textRect = Rect(b.center.x - textW / 2f, b.center.y - textH / 2f, b.center.x + textW / 2f, b.center.y + textH / 2f)
+                val touchesText = center.x >= textRect.left - reach && center.x <= textRect.right + reach &&
+                    center.y >= textRect.top - reach && center.y <= textRect.bottom + reach
+                if (touchesText) {
+                    return listOf(stroke.copy(text = ""))
+                }
+            }
+            return listOf(stroke)
+        }
         val reach = radius + strokeInkHalfWidth(stroke)
         if (!boundsMayHit(stroke, center, reach)) return listOf(stroke)
 

@@ -1057,13 +1057,15 @@ fun straightStroke(start: Offset, end: Offset, color: Int, width: Float): Stroke
     )
 }
 
-fun measurementLabel(text: String, at: Offset, color: Int): Stroke {
+fun measurementLabel(text: String, at: Offset, color: Int, angleDeg: Float = 0f): Stroke {
     val safeColor = if (color != 0) color else 0xFF1E293B.toInt()
+    val kind = if (angleDeg == 0f) "measurement" else "measurement:${angleDeg.roundToInt()}"
     return Stroke(
         points = listOf(at),
         colorValue = safeColor,
-        strokeWidth = 18f,
+        strokeWidth = 30f,
         strokeType = StrokeType.TEXT,
+        stickerKind = kind,
         text = text
     )
 }
@@ -1094,25 +1096,26 @@ private fun DrawScope.drawRulerTool(
     segmentLabel: String?
 ) {
     rotate(degrees = tool.rotationDeg, pivot = tool.center) {
+        val s = (tool.span / defaultMathSpan(tool.kind)).coerceIn(0.85f, 3.5f)
         val length = tool.span
         val thickness = RULER_THICKNESS
         val left = tool.center.x - length / 2f
         val top = tool.center.y - thickness / 2f
-        val body = if (isDark) Color(0xF21E293B) else Color(0xF4FFFFFF)
-        val border = if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1)
-        val tick = if (isDark) 0xFFCBD5E1.toInt() else 0xFF1E293B.toInt()
+        val body = if (isDark) Color(0x18FFFFFF) else Color(0x12000000)
+        val border = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
+        val tick = if (isDark) 0xFFF8FAFC.toInt() else 0xFF0F172A.toInt()
         val tickSubtle = if (isDark) 0xFF94A3B8.toInt() else 0xFF64748B.toInt()
-        val handle = Color(0xFF6366F1)
+        val handle = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
 
-        // Glassmorphic body & crisp border
+        // Transparent acrylic body & crisp black/white border
         drawRoundRect(body, Offset(left, top), Size(length, thickness), CornerRadius(12f, 12f))
         drawRoundRect(border, Offset(left, top), Size(length, thickness), CornerRadius(12f, 12f), style = DrawStroke(1.5f))
 
-        // Center grip pill indicator (shows drag-to-move zone)
+        // Center grip indicator
         val gripY = tool.center.y
         for (gx in listOf(-12f, 0f, 12f)) {
             drawRoundRect(
-                color = if (isDark) Color(0xFF475569) else Color(0xFFE2E8F0),
+                color = if (isDark) Color(0x33FFFFFF) else Color(0x28000000),
                 topLeft = Offset(tool.center.x + gx - 2f, gripY - 14f),
                 size = Size(4f, 28f),
                 cornerRadius = CornerRadius(2f, 2f)
@@ -1144,9 +1147,11 @@ private fun DrawScope.drawRulerTool(
 
             if (isCm) {
                 val cmVal = index / 10
-                drawLabel("$cmVal", Offset(x, top + thickness / 2f + 4.5f), tick, 11.5f)
+                val cmFontSize = (14f * s).coerceIn(12.5f, 32f)
+                drawLabel("$cmVal", Offset(x, top + thickness / 2f + 5f), tick, cmFontSize, isBold = true)
                 if (cmVal == 0) {
-                    drawLabel("cm", Offset(x + 13f, top + thickness / 2f + 4.5f), tickSubtle, 9f)
+                    val unitFontSize = (11f * s).coerceIn(9.5f, 24f)
+                    drawLabel("cm", Offset(x + 14f * s.coerceIn(1f, 1.8f), top + thickness / 2f + 5f), tickSubtle, unitFontSize, isBold = true)
                 }
             }
         }
@@ -1155,23 +1160,21 @@ private fun DrawScope.drawRulerTool(
         val capacityCm = totalMm / 10f
         val capacityText = String.format(Locale.US, "%.1f cm", capacityCm)
         val rulerTitle = "Ruler  •  $capacityText"
-        drawLabel(rulerTitle, Offset(tool.center.x, top - 18f), tick, 13f)
+        drawLabel(rulerTitle, Offset(tool.center.x, top - 22f * s.coerceIn(1f, 1.5f)), tick, (15f * s).coerceIn(13f, 32f), isBold = true)
 
         if (segmentLabel != null) {
-            drawLabel(segmentLabel, Offset(tool.center.x, top + thickness + 22f), 0xFF4F46E5.toInt(), 14f)
+            drawLabel(segmentLabel, Offset(tool.center.x, top + thickness + 24f * s.coerceIn(1f, 1.5f)), tick, (14f * s).coerceIn(12f, 30f), isBold = true)
         }
 
         // Close button (×) at top-right inside ruler
         val closeCenter = Offset(left + length - 24f, top + 22f)
         drawStandardCloseButton(closeCenter, 12f, isDark)
 
-        // Rotation & extension handles at both ends with compact radius 16f
-        // so the "0" mark and label at left + 24f are 100% visible and unobstructed!
+        // Rotation & extension handles at both ends
         listOf(Offset(left, tool.center.y), Offset(left + length, tool.center.y)).forEach { handleCenter ->
-            drawCircle(Color.White, 16f, handleCenter)
-            drawCircle(handle, 16f, handleCenter, style = DrawStroke(2.2f))
+            drawCircle(if (isDark) Color(0xEE1E293B) else Color.White, 16f, handleCenter)
+            drawCircle(handle, 16f, handleCenter, style = DrawStroke(1.8f))
             drawCircle(handle, 3.5f, handleCenter)
-            // Horizontal extension arrow indicator
             drawLine(handle, handleCenter - Offset(6f, 0f), handleCenter + Offset(6f, 0f), 1.6f)
         }
     }
@@ -1180,15 +1183,15 @@ private fun DrawScope.drawRulerTool(
 private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxPerCm: Float) {
     val pencil = compassPencil(tool)
     val hinge = compassHinge(tool)
-    val borderColor = if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)
-    val legColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF475569)
-    val jointColor = if (isDark) Color(0xFF0369A1) else Color(0xFF38BDF8)
+    val borderColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
+    val legColor = if (isDark) Color(0xFFE2E8F0) else Color(0xFF334155)
+    val jointColor = if (isDark) Color(0xEE1E293B) else Color(0xFAFFFFFF)
     val scaleFactor = tool.toolScale.coerceIn(0.7f, 2.2f)
     val btnR = 24f * scaleFactor
 
     // 0. Soft dashed guide circle around needle point
     drawCircle(
-        color = Color(0x330284C7),
+        color = if (isDark) Color(0x28FFFFFF) else Color(0x20000000),
         radius = tool.span,
         center = tool.center,
         style = DrawStroke(1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f)))
@@ -1199,10 +1202,10 @@ private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxP
     // Left leg (Needle leg)
     drawLine(legColor, hinge, tool.center, strokeWidth = legW, cap = StrokeCap.Round)
     // Needle point at bottom-left
-    drawLine(Color(0xFF0F172A), tool.center - (hinge - tool.center) * 0.08f, tool.center, strokeWidth = 3.5f * scaleFactor, cap = StrokeCap.Round)
-    drawCircle(Color(0xFF0F172A), 4.5f * scaleFactor, tool.center)
+    drawLine(borderColor, tool.center - (hinge - tool.center) * 0.08f, tool.center, strokeWidth = 3.5f * scaleFactor, cap = StrokeCap.Round)
+    drawCircle(borderColor, 4.5f * scaleFactor, tool.center)
 
-    // Right leg (Realistic Pencil Leg)
+    // Right leg (Pencil Leg)
     val pencilDir = (pencil - hinge)
     val pencilLen = pencilDir.getDistance().coerceAtLeast(1f)
     val pNorm = pencilDir / pencilLen
@@ -1216,20 +1219,19 @@ private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxP
     val clampW = 14f * scaleFactor
     val clampH = 18f * scaleFactor
     drawRoundRect(
-        color = borderColor,
+        color = if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1),
         topLeft = clampPos - Offset(clampW / 2f, clampH / 2f),
         size = Size(clampW, clampH),
         cornerRadius = CornerRadius(3f * scaleFactor, 3f * scaleFactor)
     )
-    drawCircle(Color(0xFF1E293B), 2.5f * scaleFactor, clampPos)
+    drawCircle(borderColor, 2.5f * scaleFactor, clampPos)
 
-    // Realistic Pencil attached from clamp down to pencil tip
+    // Pencil attached from clamp down to pencil tip
     val pencilShaftTop = clampPos - pNorm * (6f * scaleFactor)
     val pencilWoodTop = pencil - pNorm * (30f * scaleFactor)
     val pencilLeadTop = pencil - pNorm * (12f * scaleFactor)
     val shaftWidth = 10f * scaleFactor
 
-    // Hexagonal yellow pencil body
     val pLeftTop = pencilShaftTop - pPerp * (shaftWidth / 2f)
     val pRightTop = pencilShaftTop + pPerp * (shaftWidth / 2f)
     val pLeftWood = pencilWoodTop - pPerp * (shaftWidth / 2f)
@@ -1242,9 +1244,8 @@ private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxP
         lineTo(pLeftWood.x, pLeftWood.y)
         close()
     }
-    drawPath(pencilBodyPath, Color(0xFFF59E0B)) // Authentic yellow pencil shaft
-    // Facet shade line along pencil body
-    drawLine(Color(0xFFD97706), pencilShaftTop, pencilWoodTop, strokeWidth = 2f * scaleFactor)
+    drawPath(pencilBodyPath, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0))
+    drawLine(if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1), pencilShaftTop, pencilWoodTop, strokeWidth = 2f * scaleFactor)
 
     // Silver metal ferrule band
     val ferruleTop = pencilShaftTop - pNorm * (8f * scaleFactor)
@@ -1255,16 +1256,16 @@ private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxP
         lineTo(pLeftTop.x, pLeftTop.y)
         close()
     }
-    drawPath(ferrulePath, Color(0xFF94A3B8))
+    drawPath(ferrulePath, if (isDark) Color(0xFF64748B) else Color(0xFF94A3B8))
 
-    // Sharpened wooden cone (cedar tone)
+    // Sharpened cone
     val woodConePath = Path().apply {
         moveTo(pLeftWood.x, pLeftWood.y)
         lineTo(pRightWood.x, pRightWood.y)
         lineTo(pencilLeadTop.x, pencilLeadTop.y)
         close()
     }
-    drawPath(woodConePath, Color(0xFFFDE68A))
+    drawPath(woodConePath, if (isDark) Color(0xFF64748B) else Color(0xFFD1D5DB))
 
     // Graphite lead tip
     val leadPath = Path().apply {
@@ -1275,7 +1276,7 @@ private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxP
         lineTo(pencil.x, pencil.y)
         close()
     }
-    drawPath(leadPath, Color(0xFF1E293B))
+    drawPath(leadPath, borderColor)
 
     // 2. Central Hinge Block & Top Grip Handle
     val jointSize = 34f * scaleFactor
@@ -1290,7 +1291,7 @@ private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxP
         topLeft = Offset(hinge.x - jointSize / 2f, hinge.y - jointSize / 2f),
         size = Size(jointSize, jointSize),
         cornerRadius = CornerRadius(6f * scaleFactor, 6f * scaleFactor),
-        style = DrawStroke(2f)
+        style = DrawStroke(1.8f)
     )
 
     // Top vertical grip handle
@@ -1300,49 +1301,54 @@ private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxP
     drawLine(legColor, handleBase, handleTop, strokeWidth = 10f * scaleFactor, cap = StrokeCap.Round)
     drawLine(borderColor, handleBase, handleTop, strokeWidth = 10f * scaleFactor, cap = StrokeCap.Round)
 
-    // 3. Distance Readout below the hinge (matching "7.07 cm" in the user photo)
-    val readoutAt = hinge - up * 26f
+    // 3. Distance Readout below the hinge
+    val s = (tool.span / defaultMathSpan(tool.kind)).coerceIn(0.85f, 3.5f)
+    val readoutAt = hinge - up * (28f * s.coerceIn(1f, 2f))
     val distCm = (tool.span / pxPerCm.coerceAtLeast(1f))
+    val rW = 82f * s.coerceIn(1f, 2.2f)
+    val rH = 28f * s.coerceIn(1f, 2.2f)
     drawRoundRect(
-        color = if (isDark) Color(0xD90F172A) else Color(0xE6FFFFFF),
-        topLeft = Offset(readoutAt.x - 36f, readoutAt.y - 12f),
-        size = Size(72f, 24f),
-        cornerRadius = CornerRadius(6f, 6f)
+        color = if (isDark) Color(0xEE1E293B) else Color(0xFAFFFFFF),
+        topLeft = Offset(readoutAt.x - rW / 2f, readoutAt.y - rH / 2f),
+        size = Size(rW, rH),
+        cornerRadius = CornerRadius(8f, 8f)
     )
     drawRoundRect(
         color = borderColor,
-        topLeft = Offset(readoutAt.x - 36f, readoutAt.y - 12f),
-        size = Size(72f, 24f),
-        cornerRadius = CornerRadius(6f, 6f),
-        style = DrawStroke(1.2f)
+        topLeft = Offset(readoutAt.x - rW / 2f, readoutAt.y - rH / 2f),
+        size = Size(rW, rH),
+        cornerRadius = CornerRadius(8f, 8f),
+        style = DrawStroke(1.4f)
     )
-    drawLabel(String.format(Locale.US, "%.2f cm", distCm), Offset(readoutAt.x, readoutAt.y + 4f), if (isDark) 0xFF38BDF8.toInt() else 0xFF0284C7.toInt(), 12f)
+    drawLabel(String.format(Locale.US, "%.2f cm", distCm), Offset(readoutAt.x, readoutAt.y + 4f * s.coerceIn(1f, 2f)), if (isDark) 0xFFF8FAFC.toInt() else 0xFF0F172A.toInt(), (13f * s).coerceIn(11f, 30f), isBold = true)
 
-    // 4. Action Buttons (matching the reference image):
+    // 4. Action Buttons
+    val iconColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
+
     // [⟳] Top rotate button floating outside above handle
     val topRotate = compassTopRotateBtn(tool)
-    drawLine(borderColor, handleTop, topRotate, strokeWidth = 2f)
-    drawButtonCircle(topRotate, btnR, borderColor)
-    drawRotateIcon(topRotate, btnR * 0.5f)
+    drawLine(borderColor, handleTop, topRotate, strokeWidth = 1.8f)
+    drawButtonCircle(topRotate, btnR, borderColor, isDark)
+    drawRotateIcon(topRotate, btnR * 0.5f, iconColor)
 
     // [⤡] Scale handle on left side of hinge
     val scaleBtn = compassScaleBtn(tool)
-    drawButtonCircle(scaleBtn, btnR, borderColor)
-    drawScaleIcon(scaleBtn, btnR * 0.5f)
+    drawButtonCircle(scaleBtn, btnR, borderColor, isDark)
+    drawScaleIcon(scaleBtn, btnR * 0.5f, iconColor)
 
-    // [X] Standard Close button (cross on white/black circle) on right side of hinge
+    // [X] Standard Close button
     val closeBtn = compassCloseBtn(tool)
     drawStandardCloseButton(closeBtn, btnR, isDark)
 
-    // [➔ ⬅] Spread adjustment handle on right leg
+    // Spread adjustment handle on right leg
     val spreadBtn = compassSpreadBtn(tool)
-    drawButtonCircle(spreadBtn, btnR, borderColor)
-    drawSpreadIcon(spreadBtn, btnR * 0.5f)
+    drawButtonCircle(spreadBtn, btnR, borderColor, isDark)
+    drawSpreadIcon(spreadBtn, btnR * 0.5f, iconColor)
 
-    // [🖊] Pencil tip handle at bottom-right
+    // Pencil tip handle at bottom-right
     val pencilBtn = pencil
-    drawButtonCircle(pencilBtn, btnR, borderColor)
-    drawPencilIcon(pencilBtn, btnR * 0.5f)
+    drawButtonCircle(pencilBtn, btnR, borderColor, isDark)
+    drawPencilIcon(pencilBtn, btnR * 0.5f, iconColor)
 }
 
 private fun DrawScope.drawSetSquareTool(tool: PlacedMathTool, isDark: Boolean, pxPerCm: Float) {
@@ -1352,15 +1358,12 @@ private fun DrawScope.drawSetSquareTool(tool: PlacedMathTool, isDark: Boolean, p
         val cx = tool.center.x
         val cy = tool.center.y
 
-        val bodyColor = if (isDark) Color(0x330284C7) else Color(0x2838BDF8)
-        val borderColor = if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)
-        val tickColorInt = if (isDark) 0xFF38BDF8.toInt() else 0xFF0284C7.toInt()
+        val bodyColor = if (isDark) Color(0x18FFFFFF) else Color(0x12000000)
+        val borderColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
+        val tickColorInt = if (isDark) 0xFFF8FAFC.toInt() else 0xFF0F172A.toInt()
         val tickCompose = Color(tickColorInt)
 
-        // 1. Standard 45°-90°-45° Right Triangle:
-        // Corner (90°): (-half, half)
-        // Base (45°): (half, half)
-        // Top (45°): (-half, -half)
+        // 1. Standard 45°-90°-45° Right Triangle
         val pCorner = Offset(cx - half, cy + half)
         val pBase = Offset(cx + half, cy + half)
         val pTop = Offset(cx - half, cy - half)
@@ -1372,25 +1375,27 @@ private fun DrawScope.drawSetSquareTool(tool: PlacedMathTool, isDark: Boolean, p
             close()
         }
         drawPath(triPath, bodyColor)
-        drawPath(triPath, borderColor, style = DrawStroke(2.5f))
+        drawPath(triPath, borderColor, style = DrawStroke(2f))
 
         // 2. 90° Right Angle Marker at corner
-        val sqSize = 22f
+        val s = (tool.span / defaultMathSpan(tool.kind)).coerceIn(0.85f, 3.5f)
+        val sqSize = 22f * s.coerceIn(1f, 2.2f)
         val rightAnglePath = Path().apply {
             moveTo(pCorner.x, pCorner.y - sqSize)
             lineTo(pCorner.x + sqSize, pCorner.y - sqSize)
             lineTo(pCorner.x + sqSize, pCorner.y)
         }
-        drawPath(rightAnglePath, borderColor, style = DrawStroke(1.5f))
-        drawCircle(borderColor, 2f, pCorner + Offset(sqSize / 2f, -sqSize / 2f))
-        drawLabel("90°", pCorner + Offset(sqSize + 12f, -sqSize + 2f), tickColorInt, 10f)
+        drawPath(rightAnglePath, borderColor, style = DrawStroke(1.4f))
+        drawCircle(borderColor, 2f * s.coerceIn(1f, 2f), pCorner + Offset(sqSize / 2f, -sqSize / 2f))
+        drawLabel("90°", pCorner + Offset(sqSize + 16f * s.coerceIn(1f, 1.8f), -sqSize + 2f), tickColorInt, (13.5f * s).coerceIn(11f, 32f), isBold = true)
 
         // 3. 45° Angle Markers at Base and Top
-        drawArc(borderColor, 180f, 45f, false, topLeft = Offset(pBase.x - 36f, pBase.y - 36f), size = Size(72f, 72f), style = DrawStroke(1.2f))
-        drawLabel("45°", pBase + Offset(-32f, -14f), tickColorInt, 9.5f)
+        val arcR = 36f * s.coerceIn(1f, 2f)
+        drawArc(borderColor, 180f, 45f, false, topLeft = Offset(pBase.x - arcR, pBase.y - arcR), size = Size(arcR * 2f, arcR * 2f), style = DrawStroke(1.2f))
+        drawLabel("45°", pBase + Offset(-32f * s.coerceIn(1f, 1.8f), -14f * s.coerceIn(1f, 1.8f)), tickColorInt, (13f * s).coerceIn(10.5f, 30f), isBold = true)
 
-        drawArc(borderColor, 45f, 45f, false, topLeft = Offset(pTop.x - 36f, pTop.y - 36f), size = Size(72f, 72f), style = DrawStroke(1.2f))
-        drawLabel("45°", pTop + Offset(16f, 32f), tickColorInt, 9.5f)
+        drawArc(borderColor, 45f, 45f, false, topLeft = Offset(pTop.x - arcR, pTop.y - arcR), size = Size(arcR * 2f, arcR * 2f), style = DrawStroke(1.2f))
+        drawLabel("45°", pTop + Offset(16f * s.coerceIn(1f, 1.8f), 32f * s.coerceIn(1f, 1.8f)), tickColorInt, (13f * s).coerceIn(10.5f, 30f), isBold = true)
 
         // 4. Centimeter markings along Base (pCorner -> pBase)
         val mm = (pxPerCm / 10f).coerceAtLeast(2.5f)
@@ -1403,7 +1408,7 @@ private fun DrawScope.drawSetSquareTool(tool: PlacedMathTool, isDark: Boolean, p
             val tH = if (isCm) 14f else if (is5) 9f else 5f
             drawLine(tickCompose, Offset(pCorner.x + dist, pCorner.y), Offset(pCorner.x + dist, pCorner.y - tH), if (isCm) 1.5f else 1f)
             if (isCm && mmIdx > 0 && dist < span - 16f) {
-                drawLabel("${mmIdx / 10}", Offset(pCorner.x + dist, pCorner.y - 20f), tickColorInt, 9f)
+                drawLabel("${mmIdx / 10}", Offset(pCorner.x + dist, pCorner.y - 20f * s.coerceIn(1f, 1.8f)), tickColorInt, (13f * s).coerceIn(10.5f, 30f), isBold = true)
             }
             mmIdx++
         }
@@ -1417,35 +1422,37 @@ private fun DrawScope.drawSetSquareTool(tool: PlacedMathTool, isDark: Boolean, p
             val tW = if (isCm) 14f else if (is5) 9f else 5f
             drawLine(tickCompose, Offset(pCorner.x, pCorner.y - dist), Offset(pCorner.x + tW, pCorner.y - dist), if (isCm) 1.5f else 1f)
             if (isCm && mmIdx > 0 && dist < span - 16f) {
-                drawLabel("${mmIdx / 10}", Offset(pCorner.x + 22f, pCorner.y - dist + 3f), tickColorInt, 9f)
+                drawLabel("${mmIdx / 10}", Offset(pCorner.x + 22f * s.coerceIn(1f, 1.8f), pCorner.y - dist + 3f), tickColorInt, (13f * s).coerceIn(10.5f, 30f), isBold = true)
             }
             mmIdx++
         }
 
-        // 6. Side Labels:
-        drawLabel(String.format(Locale.US, "Base: %.1f cm", legCm), Offset(cx, pCorner.y + 14f), tickColorInt, 11f)
-        drawLabel(String.format(Locale.US, "Height: %.1f cm", legCm), Offset(pCorner.x - 24f, cy), tickColorInt, 11f)
+        // 6. Side Labels
+        val sideFontSize = (13.5f * s).coerceIn(11f, 32f)
+        drawLabel(String.format(Locale.US, "Base: %.1f cm", legCm), Offset(cx, pCorner.y + 16f * s.coerceIn(1f, 1.8f)), tickColorInt, sideFontSize, isBold = true)
+        drawLabel(String.format(Locale.US, "Height: %.1f cm", legCm), Offset(pCorner.x - 26f * s.coerceIn(1f, 1.8f), cy), tickColorInt, sideFontSize, isBold = true)
         val hypCm = legCm * 1.4142f
-        drawLabel(String.format(Locale.US, "Hyp: %.1f cm", hypCm), Offset(cx + 18f, cy - 14f), tickColorInt, 11f)
+        drawLabel(String.format(Locale.US, "Hyp: %.1f cm", hypCm), Offset(cx + 20f * s.coerceIn(1f, 1.8f), cy - 14f * s.coerceIn(1f, 1.8f)), tickColorInt, sideFontSize, isBold = true)
 
-        // 7. Middle Controls:
+        // 7. Middle Controls
         val btnR = 21f
+        val iconColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
 
-        // Middle Scale Handle [⤡] (centered in body)
+        // Middle Scale Handle [⤡]
         val scalePos = Offset(cx - half * 0.30f, cy + half * 0.30f)
-        drawButtonCircle(scalePos, btnR, borderColor)
-        drawScaleIcon(scalePos, btnR * 0.5f)
-        drawLabel("RESIZE", scalePos + Offset(0f, btnR + 10f), tickColorInt, 8.5f)
+        drawButtonCircle(scalePos, btnR, borderColor, isDark)
+        drawScaleIcon(scalePos, btnR * 0.5f, iconColor)
+        drawLabel("RESIZE", scalePos + Offset(0f, btnR + 10f), tickColorInt, 8f)
 
-        // Close [X] Button (standard black/white cross button)
+        // Close [X] Button
         val closePos = Offset(cx - half * 0.55f, cy - half * 0.45f)
         drawStandardCloseButton(closePos, btnR, isDark)
 
         // Floating Rotate [⟳] Button outside the figure above top apex
         val rotPos = Offset(pTop.x, pTop.y - 28f)
-        drawLine(borderColor, pTop, rotPos, strokeWidth = 2f)
-        drawButtonCircle(rotPos, btnR, borderColor)
-        drawRotateIcon(rotPos, btnR * 0.5f)
+        drawLine(borderColor, pTop, rotPos, strokeWidth = 1.8f)
+        drawButtonCircle(rotPos, btnR, borderColor, isDark)
+        drawRotateIcon(rotPos, btnR * 0.5f, iconColor)
     }
 }
 
@@ -1457,11 +1464,11 @@ private fun DrawScope.drawProtractorTool(tool: PlacedMathTool, isDark: Boolean, 
         val cy = tool.center.y
         val shelfH = (span * 0.22f).coerceIn(48f, 68f)
 
-        val bodyColor = if (isDark) Color(0x330284C7) else Color(0x2838BDF8)
-        val borderColor = if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)
-        val tickColorInt = if (isDark) 0xFF38BDF8.toInt() else 0xFF0284C7.toInt()
+        val bodyColor = if (isDark) Color(0x18FFFFFF) else Color(0x12000000)
+        val borderColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
+        val tickColorInt = if (isDark) 0xFFF8FAFC.toInt() else 0xFF0F172A.toInt()
         val tickCompose = Color(tickColorInt)
-        val faintGuide = if (isDark) Color(0x3338BDF8) else Color(0x330284C7)
+        val faintGuide = if (isDark) Color(0x22FFFFFF) else Color(0x22000000)
 
         // 1. Semicircular Upper Body + Rectangular Shelf
         val bodyPath = Path().apply {
@@ -1479,25 +1486,28 @@ private fun DrawScope.drawProtractorTool(tool: PlacedMathTool, isDark: Boolean, 
             close()
         }
         drawPath(bodyPath, bodyColor)
-        drawPath(bodyPath, borderColor, style = DrawStroke(2f))
+        drawPath(bodyPath, borderColor, style = DrawStroke(1.8f))
 
-        // 2. Concentric Arcs
-        val midR = span - 34f
-        val inR = span * 0.46f
-        val hubR = span * 0.18f
+        // 2. Concentric Arcs - neatly spaced lanes scaling with protractor size
+        val s = (span / defaultMathSpan(MathToolKind.PROTRACTOR)).coerceIn(0.85f, 3.5f)
+        val outerLaneH = 28f * s.coerceIn(1f, 1.8f)
+        val innerLaneH = 28f * s.coerceIn(1f, 1.8f)
+        val midR = span - outerLaneH
+        val inR = span - outerLaneH - innerLaneH
+        val hubR = span * 0.20f
 
         drawArc(borderColor, 180f, 180f, false, topLeft = Offset(cx - span, cy - span), size = Size(span * 2f, span * 2f), style = DrawStroke(1.5f))
-        drawArc(borderColor, 180f, 180f, false, topLeft = Offset(cx - midR, cy - midR), size = Size(midR * 2f, midR * 2f), style = DrawStroke(1.2f))
-        drawArc(borderColor, 180f, 180f, false, topLeft = Offset(cx - inR, cy - inR), size = Size(inR * 2f, inR * 2f), style = DrawStroke(1.2f))
-        drawArc(borderColor, 180f, 180f, false, topLeft = Offset(cx - hubR, cy - hubR), size = Size(hubR * 2f, hubR * 2f), style = DrawStroke(1.2f))
+        drawArc(borderColor, 180f, 180f, false, topLeft = Offset(cx - midR, cy - midR), size = Size(midR * 2f, midR * 2f), style = DrawStroke(1.1f))
+        drawArc(borderColor, 180f, 180f, false, topLeft = Offset(cx - inR, cy - inR), size = Size(inR * 2f, inR * 2f), style = DrawStroke(1.1f))
+        drawArc(borderColor, 180f, 180f, false, topLeft = Offset(cx - hubR, cy - hubR), size = Size(hubR * 2f, hubR * 2f), style = DrawStroke(1.1f))
 
         // 3. Baseline ruler edge & Origin crosshair
-        drawLine(borderColor, Offset(cx - span, cy), Offset(cx + span, cy), strokeWidth = 2f)
-        drawLine(borderColor, Offset(cx, cy - 14f), Offset(cx, cy + 14f), strokeWidth = 1.5f)
+        drawLine(borderColor, Offset(cx - span, cy), Offset(cx + span, cy), strokeWidth = 1.8f)
+        drawLine(borderColor, Offset(cx, cy - 14f), Offset(cx, cy + 14f), strokeWidth = 1.4f)
         drawCircle(borderColor, 4.5f, Offset(cx, cy))
-        drawCircle(Color(0xFF0F172A), 2.5f, Offset(cx, cy))
+        drawCircle(if (isDark) Color(0xFF1E293B) else Color.White, 2.5f, Offset(cx, cy))
 
-        // 4. Degree ticks & Dual Numbers (0 to 180 CCW and 180 to 0 CW)
+        // 4. Degree ticks & Non-overlapping dual numbers
         for (deg in 0..180) {
             val is10 = deg % 10 == 0
             val is5 = deg % 5 == 0
@@ -1508,23 +1518,24 @@ private fun DrawScope.drawProtractorTool(tool: PlacedMathTool, isDark: Boolean, 
             val cosA = cos(rad)
             val sinA = sin(rad)
 
-            val tickLen = if (is10) 12f else if (is5) 8f else 5f
+            val tickLen = if (is10) (10f * s.coerceIn(1f, 1.6f)) else if (is5) (6f * s.coerceIn(1f, 1.6f)) else (4f * s.coerceIn(1f, 1.6f))
             val pStart = Offset(cx + (span - tickLen) * cosA, cy - (span - tickLen) * sinA)
             val pEnd = Offset(cx + span * cosA, cy - span * sinA)
             drawLine(tickCompose, pStart, pEnd, strokeWidth = if (is10) 1.5f else 1f)
 
             if (is10) {
-                val gStart = Offset(cx + inR * cosA, cy - inR * sinA)
-                val gEnd = Offset(cx + (span - 54f) * cosA, cy - (span - 54f) * sinA)
+                val gStart = Offset(cx + hubR * cosA, cy - hubR * sinA)
+                val gEnd = Offset(cx + (inR - 4f) * cosA, cy - (inR - 4f) * sinA)
                 drawLine(faintGuide, gStart, gEnd, strokeWidth = 1f)
 
-                // Outer scale (0° at right, 180° at left) - sits cleanly in outer lane
-                val rOuter = span - 22f
-                drawLabel("$deg", Offset(cx + rOuter * cosA, cy - rOuter * sinA + 3f), tickColorInt, 8.5f)
+                val degFontSize = (11f * s).coerceIn(10f, 20f)
+                // Outer scale (0° at right, 180° at left) - sits cleanly centered in outer lane [midR, span]
+                val rOuter = span - outerLaneH * 0.50f
+                drawLabel("$deg", Offset(cx + rOuter * cosA, cy - rOuter * sinA + 3f), tickColorInt, degFontSize, isBold = true)
 
-                // Inner scale (180° at right, 0° at left) - sits cleanly in inner lane across midR arc
-                val rInner = span - 46f
-                drawLabel("${180 - deg}", Offset(cx + rInner * cosA, cy - rInner * sinA + 3f), tickColorInt, 8.5f)
+                // Inner scale (180° at right, 0° at left) - sits cleanly centered in inner lane [inR, midR]
+                val rInner = span - outerLaneH - innerLaneH * 0.50f
+                drawLabel("${180 - deg}", Offset(cx + rInner * cosA, cy - rInner * sinA + 3f), tickColorInt, degFontSize, isBold = true)
             }
         }
 
@@ -1534,7 +1545,7 @@ private fun DrawScope.drawProtractorTool(tool: PlacedMathTool, isDark: Boolean, 
         val pDir = Offset(cos(pRad), -sin(pRad))
         val armTip = Offset(cx, cy) + pDir * span
 
-        // 5a. Soft translucent wedge from Right baseline (0° to pDeg)
+        // 5a. Translucent wedge from Right baseline (0° to pDeg)
         if (pDeg > 0.5f) {
             val wedgePath = Path().apply {
                 moveTo(cx, cy)
@@ -1542,10 +1553,10 @@ private fun DrawScope.drawProtractorTool(tool: PlacedMathTool, isDark: Boolean, 
                 arcTo(Rect(cx - span, cy - span, cx + span, cy + span), 0f, -pDeg, false)
                 close()
             }
-            drawPath(wedgePath, if (isDark) Color(0x3838BDF8) else Color(0x330284C7))
+            drawPath(wedgePath, if (isDark) Color(0x22FFFFFF) else Color(0x18000000))
         }
 
-        // 5b. Soft translucent wedge from Left baseline (180° to pDeg)
+        // 5b. Translucent wedge from Left baseline (180° to pDeg)
         if (pDeg < 179.5f) {
             val leftWedgePath = Path().apply {
                 moveTo(cx, cy)
@@ -1553,97 +1564,111 @@ private fun DrawScope.drawProtractorTool(tool: PlacedMathTool, isDark: Boolean, 
                 arcTo(Rect(cx - span, cy - span, cx + span, cy + span), 180f, 180f - pDeg, false)
                 close()
             }
-            drawPath(leftWedgePath, if (isDark) Color(0x28A855F7) else Color(0x247C3AED))
+            drawPath(leftWedgePath, if (isDark) Color(0x15FFFFFF) else Color(0x0E000000))
         }
 
-        // 5c. Bold arc rim from Right 0° up to pDeg (Right Arc)
+        // 5c. Arc rim from Right 0° up to pDeg
         if (pDeg > 0.5f) {
             drawArc(
-                color = Color(0xFF0284C7),
+                color = borderColor,
                 startAngle = 0f,
                 sweepAngle = -pDeg,
                 useCenter = false,
                 topLeft = Offset(cx - span, cy - span),
                 size = Size(span * 2f, span * 2f),
-                style = DrawStroke(4.5f)
+                style = DrawStroke(3.2f)
             )
         }
 
-        // 5c2. Bold arc rim from Left 180° down to pDeg (Left Arc)
+        // 5c2. Arc rim from Left 180° down to pDeg
         if (pDeg < 179.5f) {
             drawArc(
-                color = Color(0xFF7C3AED),
+                color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
                 startAngle = 180f,
                 sweepAngle = 180f - pDeg,
                 useCenter = false,
                 topLeft = Offset(cx - span, cy - span),
                 size = Size(span * 2f, span * 2f),
-                style = DrawStroke(4.5f)
+                style = DrawStroke(3.2f)
             )
         }
 
         // 5d. Pointer Line from origin to current angle arm tip
-        drawLine(Color(0xFF0284C7), Offset(cx, cy), armTip, strokeWidth = 3f)
+        drawLine(borderColor, Offset(cx, cy), armTip, strokeWidth = 2.4f)
 
-        // 5e. Handle Tabs (Left 180°, Right 0°, and Arm Tip)
-        val tabW = (32f * (span / 260f).coerceIn(0.85f, 1.4f)).coerceIn(28f, 44f)
-        val tabH = (46f * (span / 260f).coerceIn(0.85f, 1.4f)).coerceIn(38f, 60f)
-        val tabRadius = CornerRadius(7f, 7f)
-        val tabColor = Color(0xDD0284C7)
+        // 5e. Handle Tabs - placed slightly outside rim so degree markings remain completely visible
+        val tabW = (28f * (span / 260f).coerceIn(0.85f, 1.4f)).coerceIn(24f, 40f)
+        val tabH = (40f * (span / 260f).coerceIn(0.85f, 1.4f)).coerceIn(34f, 52f)
+        val tabRadius = CornerRadius(6f, 6f)
+        val tabColor = if (isDark) Color(0xEE334155) else Color(0xEE0F172A)
 
-        val rightTip = Offset(cx + span, cy)
+        val rightTip = Offset(cx + span + tabW * 0.35f, cy)
         drawRoundRect(tabColor, topLeft = rightTip - Offset(tabW / 2f, tabH / 2f), size = Size(tabW, tabH), cornerRadius = tabRadius)
-        val leftTip = Offset(cx - span, cy)
-        drawRoundRect(Color(0xDD7C3AED), topLeft = leftTip - Offset(tabW / 2f, tabH / 2f), size = Size(tabW, tabH), cornerRadius = tabRadius)
-        drawRoundRect(tabColor, topLeft = armTip - Offset(tabW / 2f, tabH / 2f), size = Size(tabW, tabH), cornerRadius = tabRadius)
+        val leftTip = Offset(cx - span - tabW * 0.35f, cy)
+        drawRoundRect(tabColor, topLeft = leftTip - Offset(tabW / 2f, tabH / 2f), size = Size(tabW, tabH), cornerRadius = tabRadius)
+        val armTabCenter = Offset(cx, cy) + pDir * (span + tabH * 0.35f)
+        drawRoundRect(tabColor, topLeft = armTabCenter - Offset(tabW / 2f, tabH / 2f), size = Size(tabW, tabH), cornerRadius = tabRadius)
 
-        // 5f. Dual Angle Readout Badge in center
-        val badgePos = Offset(cx, cy - span * 0.44f)
-        val pillW = 96f
-        val pillH = 42f
-        drawRoundRect(Color.White, topLeft = badgePos - Offset(pillW / 2f, pillH / 2f), size = Size(pillW, pillH), cornerRadius = CornerRadius(21f, 21f))
-        drawRoundRect(borderColor, topLeft = badgePos - Offset(pillW / 2f, pillH / 2f), size = Size(pillW, pillH), cornerRadius = CornerRadius(21f, 21f), style = DrawStroke(1.5f))
-        drawLabel(String.format(Locale.US, "R: %.1f°", pDeg), Offset(badgePos.x, badgePos.y - 7f), 0xFF0284C7.toInt(), 11.5f)
-        drawLabel(String.format(Locale.US, "L: %.1f°", 180f - pDeg), Offset(badgePos.x, badgePos.y + 7.5f), 0xFF7C3AED.toInt(), 11.5f)
+        // 5f. Dual Angle Readout Badge in center - clear non-overlapping lines
+        val badgePos = Offset(cx, cy - span * 0.38f)
+        val pillW = 96f * s.coerceIn(1f, 2.2f)
+        val pillH = 50f * s.coerceIn(1f, 2.2f)
+        drawRoundRect(
+            if (isDark) Color(0xEE1E293B) else Color(0xFAFFFFFF),
+            topLeft = badgePos - Offset(pillW / 2f, pillH / 2f),
+            size = Size(pillW, pillH),
+            cornerRadius = CornerRadius(pillH / 2f, pillH / 2f)
+        )
+        drawRoundRect(
+            borderColor,
+            topLeft = badgePos - Offset(pillW / 2f, pillH / 2f),
+            size = Size(pillW, pillH),
+            cornerRadius = CornerRadius(pillH / 2f, pillH / 2f),
+            style = DrawStroke(1.5f * s.coerceIn(1f, 2f))
+        )
+        val badgeFontSize = (13f * s).coerceIn(11f, 32f)
+        drawLabel(String.format(Locale.US, "R: %.1f°", pDeg), Offset(badgePos.x, badgePos.y - 10f * s.coerceIn(1f, 2f)), tickColorInt, badgeFontSize, isBold = true)
+        drawLabel(String.format(Locale.US, "L: %.1f°", 180f - pDeg), Offset(badgePos.x, badgePos.y + 10f * s.coerceIn(1f, 2f)), if (isDark) 0xFFCBD5E1.toInt() else 0xFF475569.toInt(), badgeFontSize, isBold = true)
 
-        // 6. Bottom Shelf Buttons (Uniform spacing for all 7 controls)
+        // 6. Bottom Shelf Buttons
         val btnY = cy + shelfH * 0.5f
-        val btnR = (shelfH * 0.36f).coerceIn(16f, 24f)
+        val btnR = (shelfH * 0.34f).coerceIn(16f, 22f)
+        val iconColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
 
         // Floating Outer Rotate Handle above top apex outside the arc
         val topRotatePos = Offset(cx, cy - span - 28f)
-        drawLine(borderColor, Offset(cx, cy - span), topRotatePos, strokeWidth = 2f)
-        drawButtonCircle(topRotatePos, btnR, borderColor)
-        drawRotateIcon(topRotatePos, btnR * 0.5f)
+        drawLine(borderColor, Offset(cx, cy - span), topRotatePos, strokeWidth = 1.8f)
+        drawButtonCircle(topRotatePos, btnR, borderColor, isDark)
+        drawRotateIcon(topRotatePos, btnR * 0.5f, iconColor)
 
-        // 1. [X] Standard Close (cross on white/black circle)
+        // 1. [X] Standard Close
         val closePos = Offset(cx - span * 0.75f, btnY)
         drawStandardCloseButton(closePos, btnR, isDark)
 
         // 2. Mode 1: Left Angle Button (L.ANG)
         val m1Pos = Offset(cx - span * 0.45f, btnY)
-        drawButtonCircle(m1Pos, btnR, borderColor)
-        drawAngleModeIcon(m1Pos, btnR, mode = 1)
+        drawButtonCircle(m1Pos, btnR, borderColor, isDark)
+        drawAngleModeIcon(m1Pos, btnR, mode = 1, isDark = isDark)
 
         // 3. Mode Arc Left: Left Arc Button (L.ARC)
         val mArcLeftPos = Offset(cx - span * 0.15f, btnY)
-        drawButtonCircle(mArcLeftPos, btnR, borderColor)
-        drawAngleModeIcon(mArcLeftPos, btnR, mode = 3)
+        drawButtonCircle(mArcLeftPos, btnR, borderColor, isDark)
+        drawAngleModeIcon(mArcLeftPos, btnR, mode = 3, isDark = isDark)
 
         // 4. Mode Arc Right: Right Arc Button (R.ARC)
         val mArcRightPos = Offset(cx + span * 0.15f, btnY)
-        drawButtonCircle(mArcRightPos, btnR, borderColor)
-        drawAngleModeIcon(mArcRightPos, btnR, mode = 0)
+        drawButtonCircle(mArcRightPos, btnR, borderColor, isDark)
+        drawAngleModeIcon(mArcRightPos, btnR, mode = 0, isDark = isDark)
 
         // 5. Mode 2: Right Angle Button (R.ANG)
         val m2Pos = Offset(cx + span * 0.45f, btnY)
-        drawButtonCircle(m2Pos, btnR, borderColor)
-        drawAngleModeIcon(m2Pos, btnR, mode = 2)
+        drawButtonCircle(m2Pos, btnR, borderColor, isDark)
+        drawAngleModeIcon(m2Pos, btnR, mode = 2, isDark = isDark)
 
         // 6. [⤡] Scale Handle
         val scalePos = Offset(cx + span * 0.75f, btnY)
-        drawButtonCircle(scalePos, btnR, borderColor)
-        drawScaleIcon(scalePos, btnR * 0.5f)
+        drawButtonCircle(scalePos, btnR, borderColor, isDark)
+        drawScaleIcon(scalePos, btnR * 0.5f, iconColor)
     }
 }
 
@@ -1660,9 +1685,9 @@ private fun DrawScope.drawTriangleTool(tool: PlacedMathTool, isDark: Boolean, px
         val vLeft = Offset(cx - side / 2f, cy + h * 0.3333f)
         val vRight = Offset(cx + side / 2f, cy + h * 0.3333f)
 
-        val bodyColor = if (isDark) Color(0x330284C7) else Color(0x2838BDF8)
-        val borderColor = if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)
-        val tickColorInt = if (isDark) 0xFF38BDF8.toInt() else 0xFF0284C7.toInt()
+        val bodyColor = if (isDark) Color(0x18FFFFFF) else Color(0x12000000)
+        val borderColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
+        val tickColorInt = if (isDark) 0xFFF8FAFC.toInt() else 0xFF0F172A.toInt()
         val tickCompose = Color(tickColorInt)
 
         // 1. Equilateral Triangle Body
@@ -1673,9 +1698,10 @@ private fun DrawScope.drawTriangleTool(tool: PlacedMathTool, isDark: Boolean, px
             close()
         }
         drawPath(triPath, bodyColor)
-        drawPath(triPath, borderColor, style = DrawStroke(2.5f))
+        drawPath(triPath, borderColor, style = DrawStroke(2f))
 
         // 2. Centimeter measurements and ruler markings along Base (vLeft -> vRight)
+        val s = (tool.span / defaultMathSpan(tool.kind)).coerceIn(0.85f, 3.5f)
         val sideCm = side / pxPerCm.coerceAtLeast(1f)
         val labelStr = String.format(Locale.US, "%.1f cm", sideCm)
 
@@ -1689,43 +1715,46 @@ private fun DrawScope.drawTriangleTool(tool: PlacedMathTool, isDark: Boolean, px
             val xPos = vLeft.x + dist
             drawLine(tickCompose, Offset(xPos, vLeft.y), Offset(xPos, vLeft.y - tH), if (isCm) 1.5f else 1f)
             if (isCm && mmIdx > 0 && dist < side - 16f) {
-                drawLabel("${mmIdx / 10}", Offset(xPos, vLeft.y - 20f), tickColorInt, 9f)
+                drawLabel("${mmIdx / 10}", Offset(xPos, vLeft.y - 20f * s.coerceIn(1f, 1.8f)), tickColorInt, (12f * s).coerceIn(9f, 28f), isBold = true)
             }
             mmIdx++
         }
 
         // Side Lengths in cm clearly shown for all 3 sides:
-        drawLabel("Length: $labelStr", Offset(cx, vLeft.y + 16f), tickColorInt, 12f, isBold = true)
+        val sideFontSize = (14f * s).coerceIn(11f, 32f)
+        drawLabel("Length: $labelStr", Offset(cx, vLeft.y + 18f * s.coerceIn(1f, 1.8f)), tickColorInt, sideFontSize, isBold = true)
 
         // Side B (Left slant: vTop -> vLeft)
         val midLeft = Offset((vTop.x + vLeft.x) / 2f, (vTop.y + vLeft.y) / 2f)
-        drawLabel("Side: $labelStr", midLeft - Offset(30f, 0f), tickColorInt, 11f)
+        drawLabel("Side: $labelStr", midLeft - Offset(32f * s.coerceIn(1f, 1.8f), 0f), tickColorInt, (13.5f * s).coerceIn(10.5f, 30f), isBold = true)
 
         // Side C (Right slant: vTop -> vRight)
         val midRight = Offset((vTop.x + vRight.x) / 2f, (vTop.y + vRight.y) / 2f)
-        drawLabel("Side: $labelStr", midRight + Offset(30f, 0f), tickColorInt, 11f)
+        drawLabel("Side: $labelStr", midRight + Offset(32f * s.coerceIn(1f, 1.8f), 0f), tickColorInt, (13.5f * s).coerceIn(10.5f, 30f), isBold = true)
 
         // Interior angle markers (60° at each vertex)
-        drawLabel("60°", vTop + Offset(0f, 28f), tickColorInt, 10f)
-        drawLabel("60°", vLeft + Offset(28f, -14f), tickColorInt, 10f)
-        drawLabel("60°", vRight + Offset(-28f, -14f), tickColorInt, 10f)
+        val angleFontSize = (13f * s).coerceIn(10f, 30f)
+        drawLabel("60°", vTop + Offset(0f, 30f * s.coerceIn(1f, 1.8f)), tickColorInt, angleFontSize, isBold = true)
+        drawLabel("60°", vLeft + Offset(30f * s.coerceIn(1f, 1.8f), -16f * s.coerceIn(1f, 1.8f)), tickColorInt, angleFontSize, isBold = true)
+        drawLabel("60°", vRight + Offset(-30f * s.coerceIn(1f, 1.8f), -16f * s.coerceIn(1f, 1.8f)), tickColorInt, angleFontSize, isBold = true)
 
         // 3. Middle Controls:
         val btnR = 21f
+        val iconColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
 
         // Middle Scale Handle [⤡] (centered in body)
         val scalePos = Offset(cx, cy + 20f)
-        drawButtonCircle(scalePos, btnR, borderColor)
-        drawScaleIcon(scalePos, btnR * 0.5f)
-        drawLabel("RESIZE", scalePos + Offset(0f, btnR + 10f), tickColorInt, 8.5f)
+        drawButtonCircle(scalePos, btnR, borderColor, isDark)
+        drawScaleIcon(scalePos, btnR * 0.5f, iconColor)
+        drawLabel("RESIZE", scalePos + Offset(0f, btnR + 10f), tickColorInt, 8f)
 
         // Floating Rotate [⟳] Button above top apex outside the figure
         val rotPos = Offset(vTop.x, vTop.y - 28f)
-        drawLine(borderColor, vTop, rotPos, strokeWidth = 2f)
-        drawButtonCircle(rotPos, btnR, borderColor)
-        drawRotateIcon(rotPos, btnR * 0.5f)
+        drawLine(borderColor, vTop, rotPos, strokeWidth = 1.8f)
+        drawButtonCircle(rotPos, btnR, borderColor, isDark)
+        drawRotateIcon(rotPos, btnR * 0.5f, iconColor)
 
-        // Close [X] Button (standard black/white cross button)
+        // Close [X] Button
         val closePos = Offset(cx, cy - h * 0.35f)
         drawStandardCloseButton(closePos, btnR, isDark)
     }
@@ -1740,47 +1769,51 @@ fun DrawScope.drawStandardCloseButton(center: Offset, radius: Float, isDark: Boo
     drawLine(Color(0xFFEF4444), center - Offset(-xRadius, xRadius), center + Offset(xRadius, -xRadius), strokeWidth = 1.8f, cap = StrokeCap.Round)
 }
 
-private fun DrawScope.drawAngleModeIcon(center: Offset, radius: Float, mode: Int) {
-    val iconColor = Color(0xFF1E293B)
+private fun DrawScope.drawAngleModeIcon(center: Offset, radius: Float, mode: Int, isDark: Boolean = false) {
+    val iconColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
+    val accentColor = if (isDark) Color(0xFFCBD5E1) else Color(0xFF475569)
+    val textInt = if (isDark) 0xFFF8FAFC.toInt() else 0xFF0F172A.toInt()
     val r = radius * 0.5f
+    val topCenter = center - Offset(0f, r * 0.32f)
+    val labelPos = center + Offset(0f, r * 0.70f)
     when (mode) {
         1 -> { // Left Angle Mode (L.ANG)
-            val baseStart = center + Offset(-r * 0.8f, r * 0.4f)
-            val baseEnd = center + Offset(r * 0.8f, r * 0.4f)
-            val armEnd = baseEnd + Offset(-r * 1.0f, -r * 0.95f)
-            drawLine(iconColor, baseStart, baseEnd, strokeWidth = 2.2f)
-            drawLine(iconColor, baseEnd, armEnd, strokeWidth = 2.2f)
-            drawArc(Color(0xFF7C3AED), 180f, 45f, false, topLeft = Offset(baseEnd.x - r * 0.5f, baseEnd.y - r * 0.5f), size = Size(r, r), style = DrawStroke(1.5f))
-            drawLabel("L.ANG", center - Offset(0f, r * 0.7f), 0xFF7C3AED.toInt(), 8.5f)
+            val baseStart = topCenter + Offset(-r * 0.7f, r * 0.35f)
+            val baseEnd = topCenter + Offset(r * 0.7f, r * 0.35f)
+            val armEnd = baseEnd + Offset(-r * 0.9f, -r * 0.85f)
+            drawLine(iconColor, baseStart, baseEnd, strokeWidth = 1.8f)
+            drawLine(iconColor, baseEnd, armEnd, strokeWidth = 1.8f)
+            drawArc(accentColor, 180f, 45f, false, topLeft = Offset(baseEnd.x - r * 0.45f, baseEnd.y - r * 0.45f), size = Size(r * 0.9f, r * 0.9f), style = DrawStroke(1.2f))
+            drawLabel("L.ANG", labelPos, textInt, 7.5f, isBold = true)
         }
         3 -> { // Left Arc Mode (L.ARC)
-            val rect = Rect(center.x - r * 0.85f, center.y - r * 0.85f, center.x + r * 0.85f, center.y + r * 0.85f)
-            drawArc(Color(0xFF7C3AED), 180f, 65f, false, topLeft = rect.topLeft, size = rect.size, style = DrawStroke(2.6f))
-            drawLabel("L.ARC", center + Offset(0f, r * 0.5f), 0xFF7C3AED.toInt(), 9f)
+            val rect = Rect(topCenter.x - r * 0.65f, topCenter.y - r * 0.65f, topCenter.x + r * 0.65f, topCenter.y + r * 0.65f)
+            drawArc(iconColor, 180f, 65f, false, topLeft = rect.topLeft, size = rect.size, style = DrawStroke(2f))
+            drawLabel("L.ARC", labelPos, textInt, 7.5f, isBold = true)
         }
         0 -> { // Right Arc Mode (R.ARC)
-            val rect = Rect(center.x - r * 0.85f, center.y - r * 0.85f, center.x + r * 0.85f, center.y + r * 0.85f)
-            drawArc(Color(0xFF0284C7), 295f, 65f, false, topLeft = rect.topLeft, size = rect.size, style = DrawStroke(2.6f))
-            drawLabel("R.ARC", center + Offset(0f, r * 0.5f), 0xFF0284C7.toInt(), 9f)
+            val rect = Rect(topCenter.x - r * 0.65f, topCenter.y - r * 0.65f, topCenter.x + r * 0.65f, topCenter.y + r * 0.65f)
+            drawArc(iconColor, 295f, 65f, false, topLeft = rect.topLeft, size = rect.size, style = DrawStroke(2f))
+            drawLabel("R.ARC", labelPos, textInt, 7.5f, isBold = true)
         }
         2 -> { // Right Angle Mode (R.ANG)
-            val baseStart = center + Offset(-r * 0.8f, r * 0.4f)
-            val baseEnd = center + Offset(r * 0.8f, r * 0.4f)
-            val armEnd = baseStart + Offset(r * 1.0f, -r * 0.95f)
-            drawLine(iconColor, baseStart, baseEnd, strokeWidth = 2.2f)
-            drawLine(iconColor, baseStart, armEnd, strokeWidth = 2.2f)
-            drawArc(Color(0xFF0284C7), 315f, 45f, false, topLeft = Offset(baseStart.x - r * 0.5f, baseStart.y - r * 0.5f), size = Size(r, r), style = DrawStroke(1.5f))
-            drawLabel("R.ANG", center - Offset(0f, r * 0.7f), 0xFF0284C7.toInt(), 8.5f)
+            val baseStart = topCenter + Offset(-r * 0.7f, r * 0.35f)
+            val baseEnd = topCenter + Offset(r * 0.7f, r * 0.35f)
+            val armEnd = baseStart + Offset(r * 0.9f, -r * 0.85f)
+            drawLine(iconColor, baseStart, baseEnd, strokeWidth = 1.8f)
+            drawLine(iconColor, baseStart, armEnd, strokeWidth = 1.8f)
+            drawArc(accentColor, 315f, 45f, false, topLeft = Offset(baseStart.x - r * 0.45f, baseStart.y - r * 0.45f), size = Size(r * 0.9f, r * 0.9f), style = DrawStroke(1.2f))
+            drawLabel("R.ANG", labelPos, textInt, 7.5f, isBold = true)
         }
     }
 }
 
-private fun DrawScope.drawButtonCircle(center: Offset, radius: Float, borderColor: Color) {
-    drawCircle(Color.White, radius, center)
-    drawCircle(borderColor, radius, center, style = DrawStroke(2f))
+private fun DrawScope.drawButtonCircle(center: Offset, radius: Float, borderColor: Color, isDark: Boolean = false) {
+    drawCircle(if (isDark) Color(0xEE1E293B) else Color.White, radius, center)
+    drawCircle(borderColor, radius, center, style = DrawStroke(1.8f))
 }
 
-private fun DrawScope.drawPencilIcon(center: Offset, size: Float, iconColor: Color = Color(0xFF1E293B)) {
+private fun DrawScope.drawPencilIcon(center: Offset, size: Float, iconColor: Color = Color(0xFF0F172A)) {
     val path = Path().apply {
         val p1 = center + Offset(-size * 0.7f, size * 0.7f)
         val p2 = center + Offset(-size * 0.35f, size * 0.8f)
@@ -1797,8 +1830,7 @@ private fun DrawScope.drawPencilIcon(center: Offset, size: Float, iconColor: Col
     drawPath(path, iconColor)
 }
 
-private fun DrawScope.drawRotateIcon(center: Offset, size: Float) {
-    val iconColor = Color(0xFF1E293B)
+private fun DrawScope.drawRotateIcon(center: Offset, size: Float, iconColor: Color = Color(0xFF0F172A)) {
     val rect = Rect(center.x - size, center.y - size, center.x + size, center.y + size)
     drawArc(
         color = iconColor,
@@ -1807,7 +1839,7 @@ private fun DrawScope.drawRotateIcon(center: Offset, size: Float) {
         useCenter = false,
         topLeft = rect.topLeft,
         size = rect.size,
-        style = DrawStroke(2.5f)
+        style = DrawStroke(2.2f)
     )
     val arrowRad = Math.toRadians((30.0 + 270.0)).toFloat()
     val tip = Offset(center.x + cos(arrowRad) * size, center.y + sin(arrowRad) * size)
@@ -1822,46 +1854,44 @@ private fun DrawScope.drawRotateIcon(center: Offset, size: Float) {
     drawPath(headPath, iconColor)
 }
 
-private fun DrawScope.drawScaleIcon(center: Offset, size: Float) {
-    val iconColor = Color(0xFF1E293B)
+private fun DrawScope.drawScaleIcon(center: Offset, size: Float, iconColor: Color = Color(0xFF0F172A)) {
     val p1 = center + Offset(-size * 0.7f, size * 0.7f)
     val p2 = center + Offset(size * 0.7f, -size * 0.7f)
-    drawLine(iconColor, p1, p2, strokeWidth = 2.5f)
+    drawLine(iconColor, p1, p2, strokeWidth = 2.2f)
     val a1 = p2 + Offset(-6f, 0f)
     val a2 = p2 + Offset(0f, 6f)
-    drawLine(iconColor, p2, a1, strokeWidth = 2.5f)
-    drawLine(iconColor, p2, a2, strokeWidth = 2.5f)
+    drawLine(iconColor, p2, a1, strokeWidth = 2.2f)
+    drawLine(iconColor, p2, a2, strokeWidth = 2.2f)
 
     val b1 = p1 + Offset(6f, 0f)
     val b2 = p1 + Offset(0f, -6f)
-    drawLine(iconColor, p1, b1, strokeWidth = 2.5f)
-    drawLine(iconColor, p1, b2, strokeWidth = 2.5f)
+    drawLine(iconColor, p1, b1, strokeWidth = 2.2f)
+    drawLine(iconColor, p1, b2, strokeWidth = 2.2f)
 }
 
-private fun DrawScope.drawSpreadIcon(center: Offset, size: Float) {
-    val iconColor = Color(0xFF1E293B)
+private fun DrawScope.drawSpreadIcon(center: Offset, size: Float, iconColor: Color = Color(0xFF0F172A)) {
     val d = size * 0.65f
     val leftStart = center - Offset(d, 0f)
     val leftEnd = center - Offset(2f, 0f)
-    drawLine(iconColor, leftStart, leftEnd, strokeWidth = 2.5f)
-    drawLine(iconColor, leftEnd, leftEnd + Offset(-5f, -4f), strokeWidth = 2.5f)
-    drawLine(iconColor, leftEnd, leftEnd + Offset(-5f, 4f), strokeWidth = 2.5f)
+    drawLine(iconColor, leftStart, leftEnd, strokeWidth = 2.2f)
+    drawLine(iconColor, leftEnd, leftEnd + Offset(-5f, -4f), strokeWidth = 2.2f)
+    drawLine(iconColor, leftEnd, leftEnd + Offset(-5f, 4f), strokeWidth = 2.2f)
 
     val rightStart = center + Offset(d, 0f)
     val rightEnd = center + Offset(2f, 0f)
-    drawLine(iconColor, rightStart, rightEnd, strokeWidth = 2.5f)
-    drawLine(iconColor, rightEnd, rightEnd + Offset(5f, -4f), strokeWidth = 2.5f)
-    drawLine(iconColor, rightEnd, rightEnd + Offset(5f, 4f), strokeWidth = 2.5f)
+    drawLine(iconColor, rightStart, rightEnd, strokeWidth = 2.2f)
+    drawLine(iconColor, rightEnd, rightEnd + Offset(5f, -4f), strokeWidth = 2.2f)
+    drawLine(iconColor, rightEnd, rightEnd + Offset(5f, 4f), strokeWidth = 2.2f)
 }
 
 private fun DrawScope.drawLabel(text: String, at: Offset, color: Int, textSize: Float, isBold: Boolean = true) {
-    val displayScale = 1.7f
+    val displayScale = 1.45f
     val paint = Paint().apply {
         this.color = color
         this.textSize = textSize * displayScale
         this.isAntiAlias = true
         this.isFakeBoldText = isBold
-        this.typeface = Typeface.DEFAULT_BOLD
+        this.typeface = if (isBold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         this.textAlign = Paint.Align.CENTER
     }
     drawContext.canvas.nativeCanvas.drawText(
@@ -1874,7 +1904,7 @@ private fun DrawScope.drawLabel(text: String, at: Offset, color: Int, textSize: 
 
 fun DrawScope.drawMathReadout(text: String, at: Offset) {
     val textPaint = Paint().apply {
-        textSize = 24f
+        textSize = 22f
         isAntiAlias = true
         isFakeBoldText = true
         typeface = Typeface.DEFAULT_BOLD
@@ -1892,11 +1922,11 @@ fun DrawScope.drawMathReadout(text: String, at: Offset) {
         cornerRadius = CornerRadius(19f, 19f)
     )
     drawRoundRect(
-        color = Color(0xFF6366F1),
+        color = Color(0xFFF8FAFC),
         topLeft = Offset(left, top),
         size = Size(pillW, pillH),
         cornerRadius = CornerRadius(19f, 19f),
         style = DrawStroke(1.6f)
     )
-    drawLabel(text, Offset(at.x, at.y + 7.5f), 0xFFFFFFFF.toInt(), 14f)
+    drawLabel(text, Offset(at.x, at.y + 5.5f), 0xFFFFFFFF.toInt(), 13.5f)
 }

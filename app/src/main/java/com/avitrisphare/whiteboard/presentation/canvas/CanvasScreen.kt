@@ -291,7 +291,8 @@ private fun DrawScope.drawCenteredNodeText(
     cy: Float,
     fillColor: Int,
     strokeW: Float,
-    maxWidth: Float = 140f
+    maxWidth: Float = 140f,
+    maxHeight: Float = 50f
 ) {
     if (text.isEmpty()) return
     drawContext.canvas.nativeCanvas.apply {
@@ -301,34 +302,135 @@ private fun DrawScope.drawCenteredNodeText(
         val isLight = fillColor == 0 || (0.299f * r + 0.587f * g + 0.114f * b) > 130f
         val resolvedColor = if (isLight) 0xFF0F172A.toInt() else 0xFFFFFFFF.toInt()
 
+        // Size directly scales up with the box dimensions: both height and width
+        val hTarget = (maxHeight * 0.44f).coerceAtLeast(16f)
+        val wTarget = if (text.isNotBlank()) ((maxWidth * 0.88f) / (text.length.coerceAtLeast(1) * 0.52f)).coerceAtLeast(14f) else hTarget
+        val baseSize = minOf(hTarget, wTarget * 1.5f).coerceIn(16f, 96f)
+
         val tPaint = Paint().apply {
             color = resolvedColor
-            textSize = (strokeW * 5.2f).coerceIn(16f, 26f)
+            textSize = baseSize
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
-        val words = text.split(" ")
-        val wrappedLines = mutableListOf<String>()
-        var currentLine = ""
-        for (word in words) {
-            val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
-            if (tPaint.measureText(testLine) <= maxWidth) {
-                currentLine = testLine
-            } else {
-                if (currentLine.isNotEmpty()) wrappedLines.add(currentLine)
-                currentLine = word
-            }
-        }
-        if (currentLine.isNotEmpty()) wrappedLines.add(currentLine)
-        val lines = if (wrappedLines.isEmpty()) text.split("\n") else wrappedLines
 
-        val lineH = tPaint.textSize * 1.25f
-        val startY = cy - ((lines.size - 1) * lineH) / 2f + tPaint.textSize * 0.35f
+        fun wrapTextForSize(size: Float): List<String> {
+            tPaint.textSize = size
+            val words = text.split(" ")
+            val wrappedLines = mutableListOf<String>()
+            var currentLine = ""
+            for (word in words) {
+                val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
+                if (tPaint.measureText(testLine) <= maxWidth) {
+                    currentLine = testLine
+                } else {
+                    if (currentLine.isNotEmpty()) wrappedLines.add(currentLine)
+                    currentLine = word
+                }
+            }
+            if (currentLine.isNotEmpty()) wrappedLines.add(currentLine)
+            return if (wrappedLines.isEmpty()) text.split("\n") else wrappedLines
+        }
+
+        var candidateSize = baseSize
+        var lines = wrapTextForSize(candidateSize)
+        var totalH = lines.size * candidateSize * 1.25f
+
+        val minAllowed = (maxHeight * 0.22f).coerceIn(14f, 40f)
+        while (candidateSize > minAllowed && (totalH > maxHeight || lines.any { tPaint.measureText(it) > maxWidth * 1.05f })) {
+            candidateSize -= 1.5f
+            lines = wrapTextForSize(candidateSize)
+            totalH = lines.size * candidateSize * 1.25f
+        }
+
+        tPaint.textSize = candidateSize
+        val lineH = candidateSize * 1.25f
+        val startY = cy - ((lines.size - 1) * lineH) / 2f + candidateSize * 0.35f
         lines.forEachIndexed { i, line ->
             drawText(line, cx, startY + i * lineH, tPaint)
         }
     }
+}
+
+private fun DrawScope.drawShapeFittedImage(
+    stroke: Stroke,
+    bounds: Rect,
+    bmp: android.graphics.Bitmap,
+    safeScale: Float
+) {
+    val pad = 4f / safeScale
+    val left = bounds.left + pad
+    val top = bounds.top + pad
+    val right = bounds.right - pad
+    val bottom = bounds.bottom - pad
+    val width = right - left
+    val height = bottom - top
+    if (width <= 0f || height <= 0f) return
+
+    val native = drawContext.canvas.nativeCanvas
+    native.save()
+
+    val clipPath = android.graphics.Path()
+    when (stroke.strokeType) {
+        StrokeType.CIRCLE, StrokeType.ELLIPSE -> {
+            clipPath.addOval(left, top, right, bottom, android.graphics.Path.Direction.CW)
+        }
+        StrokeType.SQUARE, StrokeType.RECTANGLE, StrokeType.ROUND_RECT -> {
+            val r = (if (stroke.cornerRadius > 0f) stroke.cornerRadius else if (stroke.strokeType == StrokeType.ROUND_RECT) 16f else 0f) / safeScale
+            clipPath.addRoundRect(left, top, right, bottom, r, r, android.graphics.Path.Direction.CW)
+        }
+        StrokeType.DIAMOND -> {
+            val midX = (left + right) / 2f
+            val midY = (top + bottom) / 2f
+            clipPath.moveTo(midX, top)
+            clipPath.lineTo(right, midY)
+            clipPath.lineTo(midX, bottom)
+            clipPath.lineTo(left, midY)
+            clipPath.close()
+        }
+        StrokeType.TRIANGLE -> {
+            val midX = (left + right) / 2f
+            clipPath.moveTo(midX, top)
+            clipPath.lineTo(right, bottom)
+            clipPath.lineTo(left, bottom)
+            clipPath.close()
+        }
+        StrokeType.HEXAGON -> {
+            val w = width
+            val h = height
+            clipPath.moveTo(left + w * 0.25f, top)
+            clipPath.lineTo(left + w * 0.75f, top)
+            clipPath.lineTo(right, top + h * 0.5f)
+            clipPath.lineTo(left + w * 0.75f, bottom)
+            clipPath.lineTo(left + w * 0.25f, bottom)
+            clipPath.lineTo(left, top + h * 0.5f)
+            clipPath.close()
+        }
+        else -> {
+            clipPath.addRect(left, top, right, bottom, android.graphics.Path.Direction.CW)
+        }
+    }
+    native.clipPath(clipPath)
+
+    val bmpRatio = bmp.width.toFloat() / bmp.height.toFloat().coerceAtLeast(1f)
+    val boxRatio = width / height.coerceAtLeast(1f)
+    val destRect = if (boxRatio > bmpRatio) {
+        val targetW = height * bmpRatio
+        val targetLeft = left + (width - targetW) / 2f
+        android.graphics.Rect(targetLeft.toInt(), top.toInt(), (targetLeft + targetW).toInt(), bottom.toInt())
+    } else {
+        val targetH = width / bmpRatio
+        val targetTop = top + (height - targetH) / 2f
+        android.graphics.Rect(left.toInt(), targetTop.toInt(), right.toInt(), (targetTop + targetH).toInt())
+    }
+
+    val paint = Paint().apply {
+        isAntiAlias = true
+        isFilterBitmap = true
+    }
+    native.drawBitmap(bmp, null, destRect, paint)
+    native.restore()
 }
 
 fun DrawScope.renderStroke(
@@ -354,20 +456,12 @@ fun DrawScope.renderStroke(
         if (stroke.imageUri.isNotBlank()) {
             val bmp = decodeMediaBitmap(context, stroke.imageUri)
             if (bmp != null) {
-                val b = shapeBoundingBox(pointsList)
-                val pad = 6f / safeScale
-                val destRect = android.graphics.Rect(
-                    (b.left + pad).toInt(),
-                    (b.top + pad).toInt(),
-                    (b.right - pad).toInt(),
-                    (b.bottom - pad).toInt()
-                )
-                drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
+                drawShapeFittedImage(stroke, shapeBoundingBox(pointsList), bmp, safeScale)
             }
         }
         if (stroke.text.isNotEmpty()) {
             val b = shapeBoundingBox(pointsList)
-            drawCenteredNodeText(stroke.text, b.left + b.width / 2f, b.top + b.height / 2f, stroke.fillColor, stroke.strokeWidth, b.width - 20f)
+            drawCenteredNodeText(stroke.text, b.left + b.width / 2f, b.top + b.height / 2f, stroke.fillColor, stroke.strokeWidth, b.width - 20f, b.height - 16f)
         }
         if (stroke.stickerKind.contains(":locked")) {
             val b = strokeSelectionBounds(stroke)
@@ -414,18 +508,11 @@ fun DrawScope.renderStroke(
                 if (stroke.imageUri.isNotBlank()) {
                     val bmp = decodeMediaBitmap(context, stroke.imageUri)
                     if (bmp != null) {
-                        val pad = 8f / safeScale
-                        val destRect = android.graphics.Rect(
-                            (left + pad).toInt(),
-                            (top + pad).toInt(),
-                            (left + width - pad).toInt(),
-                            (top + height - pad).toInt()
-                        )
-                        drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
+                        drawShapeFittedImage(stroke, Rect(left, top, left + width, top + height), bmp, safeScale)
                     }
                 }
                 if (stroke.text.isNotEmpty()) {
-                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.fillColor, stroke.strokeWidth, width - 20f)
+                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.fillColor, stroke.strokeWidth, width - 20f, height - 16f)
                 }
             }
         }
@@ -456,18 +543,11 @@ fun DrawScope.renderStroke(
                 if (stroke.imageUri.isNotBlank()) {
                     val bmp = decodeMediaBitmap(context, stroke.imageUri)
                     if (bmp != null) {
-                        val pad = 6f / safeScale
-                        val destRect = android.graphics.Rect(
-                            (left + pad).toInt(),
-                            (top + pad).toInt(),
-                            (left + width - pad).toInt(),
-                            (top + height - pad).toInt()
-                        )
-                        drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
+                        drawShapeFittedImage(stroke, Rect(left, top, left + width, top + height), bmp, safeScale)
                     }
                 }
                 if (stroke.text.isNotEmpty()) {
-                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.fillColor, stroke.strokeWidth, width - 20f)
+                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.fillColor, stroke.strokeWidth, width - 20f, height - 16f)
                 }
             }
         }
@@ -500,18 +580,11 @@ fun DrawScope.renderStroke(
                 if (stroke.imageUri.isNotBlank()) {
                     val bmp = decodeMediaBitmap(context, stroke.imageUri)
                     if (bmp != null) {
-                        val pad = 8f / safeScale
-                        val destRect = android.graphics.Rect(
-                            (left + pad).toInt(),
-                            (top + pad).toInt(),
-                            (right - pad).toInt(),
-                            (bottom - pad).toInt()
-                        )
-                        drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
+                        drawShapeFittedImage(stroke, Rect(left, top, right, bottom), bmp, safeScale)
                     }
                 }
                 if (stroke.text.isNotEmpty()) {
-                    drawCenteredNodeText(stroke.text, midX, midY, stroke.fillColor, stroke.strokeWidth, (right - left) * 0.7f)
+                    drawCenteredNodeText(stroke.text, midX, midY, stroke.fillColor, stroke.strokeWidth, (right - left) * 0.7f, (bottom - top) * 0.7f)
                 }
             }
         }
@@ -655,19 +728,12 @@ fun DrawScope.renderStroke(
                 if (stroke.imageUri.isNotBlank()) {
                     val bmp = decodeMediaBitmap(context, stroke.imageUri)
                     if (bmp != null) {
-                        val pad = 6f / safeScale
-                        val destRect = android.graphics.Rect(
-                            (left + pad).toInt(),
-                            (top + pad).toInt(),
-                            (left + width - pad).toInt(),
-                            (top + height - pad).toInt()
-                        )
-                        drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
+                        drawShapeFittedImage(stroke, Rect(left, top, left + width, top + height), bmp, safeScale)
                     }
                 }
 
                 if (stroke.text.isNotEmpty()) {
-                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.fillColor, stroke.strokeWidth, width - 20f)
+                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.fillColor, stroke.strokeWidth, width - 20f, height - 16f)
                 }
             }
         }
@@ -711,8 +777,16 @@ fun DrawScope.renderStroke(
                 val bmp = decodeMediaBitmap(context, stroke.imageUri)
                 if (bmp != null) {
                     val b = stroke.bounds
-                    val destRect = android.graphics.Rect(b.left.toInt(), b.top.toInt(), b.right.toInt(), b.bottom.toInt())
-                    drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
+                    val shapeType = stroke.stickerKind.let { kind ->
+                        runCatching { StrokeType.valueOf(kind) }.getOrNull()
+                    }
+                    if (shapeType != null) {
+                        val dummyParent = stroke.copy(strokeType = shapeType)
+                        drawShapeFittedImage(dummyParent, b, bmp, safeScale)
+                    } else {
+                        val destRect = android.graphics.Rect(b.left.toInt(), b.top.toInt(), b.right.toInt(), b.bottom.toInt())
+                        drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
+                    }
                 }
             }
         }
@@ -766,19 +840,40 @@ fun DrawScope.renderStroke(
             }
         }
         StrokeType.TEXT -> {
+            val isMeasurement = stroke.stickerKind.startsWith("measurement")
+            // Prevent duplicate text rendering if linked to a mind map node (node renders its own text)
+            if (stroke.linkToId.isNotEmpty() && !isMeasurement) return
             val origin = pointsList.first()
             drawContext.canvas.nativeCanvas.apply {
+                val angleDeg = if (isMeasurement) {
+                    stroke.stickerKind.removePrefix("measurement:").toFloatOrNull() ?: 0f
+                } else 0f
                 val paint = Paint().apply {
                     color = stroke.colorValue
-                    textSize = if (stroke.strokeWidth >= 12f) stroke.strokeWidth else 20f
+                    textSize = if (isMeasurement) (if (stroke.strokeWidth >= 16f) stroke.strokeWidth else 30f) else if (stroke.strokeWidth >= 12f) stroke.strokeWidth else 20f
                     isAntiAlias = true
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    typeface = if (isMeasurement) Typeface.DEFAULT_BOLD else Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    textAlign = if (isMeasurement) Paint.Align.CENTER else Paint.Align.LEFT
                 }
-                val lines = stroke.text.split("\n")
-                var curY = origin.y + 20f
-                for (line in lines) {
-                    drawText(line, origin.x, curY, paint)
-                    curY += 26f
+                if (isMeasurement) {
+                    val mText = stroke.text
+                    val textH = paint.textSize
+                    paint.color = if (stroke.colorValue != 0) stroke.colorValue else 0xFF0F172A.toInt()
+                    if (angleDeg != 0f) {
+                        save()
+                        rotate(angleDeg, origin.x, origin.y)
+                        drawText(mText, origin.x, origin.y + textH * 0.35f, paint)
+                        restore()
+                    } else {
+                        drawText(mText, origin.x, origin.y + textH * 0.35f, paint)
+                    }
+                } else {
+                    val lines = stroke.text.split("\n")
+                    var curY = origin.y + 20f
+                    for (line in lines) {
+                        drawText(line, origin.x, curY, paint)
+                        curY += 26f
+                    }
                 }
             }
         }
@@ -1614,7 +1709,8 @@ fun CanvasScreen(
                             if (hitNode != null && isMindMapNode(hitNode)) {
                                 viewModel.selectStroke(hitNode.id)
                                 editingNodeStrokeId = hitNode.id
-                                editingNodeText = hitNode.text
+                                val linkedText = viewModel.state.value.strokes.find { it.linkToId == hitNode.id && it.strokeType == StrokeType.TEXT }?.text
+                                editingNodeText = linkedText ?: hitNode.text
                             } else {
                                 if (canvasSize.width > 0 && canvasSize.height > 0) {
                                     viewModel.fitToContent(canvasSize.width, canvasSize.height)
@@ -2725,7 +2821,18 @@ fun CanvasScreen(
                             if (moved < 14f) {
                                 val clickedStroke = viewModel.strokeAt(downWorld)
                                 if (clickedStroke != null) {
+                                    val wasAlreadySelected = clickedStroke.id in latestState.selectedStrokeIds
                                     viewModel.selectStrokeAt(downWorld)
+                                    if (isMindMapNode(clickedStroke) && (wasAlreadySelected || clickedStroke.text.isNotEmpty())) {
+                                        val b = strokeSelectionBounds(clickedStroke)
+                                        val distCenterSq = (downWorld.x - b.center.x) * (downWorld.x - b.center.x) + (downWorld.y - b.center.y) * (downWorld.y - b.center.y)
+                                        val maxHitRad = (b.width * 0.4f).coerceAtLeast(40f)
+                                        if (wasAlreadySelected || distCenterSq <= maxHitRad * maxHitRad) {
+                                            editingNodeStrokeId = clickedStroke.id
+                                            val linkedText = state.strokes.find { it.linkToId == clickedStroke.id && it.strokeType == StrokeType.TEXT }?.text
+                                            editingNodeText = linkedText ?: clickedStroke.text
+                                        }
+                                    }
                                 } else {
                                     viewModel.clearSelection()
                                 }
@@ -2744,9 +2851,20 @@ fun CanvasScreen(
                                     )
                                 )
                             }
-                        } else if (isDraggingSelection && moved < 14f) {
-                            // Tapping an already-selected shape re-opens the toolbar if it was closed
-                            selectionToolbarDismissed = false
+                        } else if (isDraggingSelection) {
+                            if (moved < 14f) {
+                                // Tapping an already-selected shape re-opens the toolbar if it was closed
+                                selectionToolbarDismissed = false
+                            } else {
+                                // Dragging selected mind map down to bottom toolbar header deletes it
+                                val hasSelectedMindmap = latestState.strokes.any { it.id in latestState.selectedStrokeIds && isMindMapNode(it) }
+                                val densityPx = context.resources.displayMetrics.density
+                                val bottomThreshold = canvasSize.height - (105f * densityPx)
+                                if (hasSelectedMindmap && prevPosition.y >= bottomThreshold) {
+                                    viewModel.deleteSelectedStrokes()
+                                    Toast.makeText(context, "Mind map deleted", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }
                         if (groupResizeHandle != null) {
                             groupResizeHandle = null
@@ -2814,24 +2932,42 @@ fun CanvasScreen(
                                 viewModel.finishStroke()
 
                                 val ruler = mathTools.find { it.id == mathGesture.toolId }
-                                val perp = if (ruler != null && ruler.kind == MathToolKind.RULER) {
-                                    perpendicular(ruler.rotationDeg) * mathGesture.rulerEdgeSign
-                                } else {
-                                    Offset(0f, -1f)
+                                val lineVec = end - start
+                                val lineLen = lineVec.getDistance().coerceAtLeast(1f)
+                                val lineDir = lineVec / lineLen
+                                var normal = Offset(-lineDir.y, lineDir.x)
+                                if (ruler != null) {
+                                    val toolCenterWorld = CanvasTransform.screenToWorld(
+                                        ruler.center,
+                                        canvasScale,
+                                        Offset(canvasOffsetX, canvasOffsetY)
+                                    )
+                                    val midWorld = Offset((start.x + end.x) / 2f, (start.y + end.y) / 2f)
+                                    val toTool = toolCenterWorld - midWorld
+                                    if (toTool.x * normal.x + toTool.y * normal.y > 0) {
+                                        normal = -normal
+                                    }
                                 }
 
                                 val mid = Offset((start.x + end.x) / 2f, (start.y + end.y) / 2f)
-                                val labelOffsetWorld = perp * (28f / canvasScale.coerceAtLeast(0.001f))
+                                val labelOffsetWorld = normal * (30f / canvasScale.coerceAtLeast(0.001f))
                                 val labelAt = mid + labelOffsetWorld
 
                                 val lengthText = formatCentimetres(lengthPx, pxPerCm)
-                                val labelColor = if (state.selectedColor != 0) state.selectedColor else (if (state.isDarkCanvas) 0xFFFFFFFF.toInt() else 0xFF1E293B.toInt())
+                                val labelColor = if (state.selectedColor != 0) state.selectedColor else (if (state.isDarkCanvas) 0xFFFFFFFF.toInt() else 0xFF0F172A.toInt())
+
+                                var angleDeg = Math.toDegrees(kotlin.math.atan2(lineVec.y.toDouble(), lineVec.x.toDouble())).toFloat()
+                                if (angleDeg > 90f) angleDeg -= 180f
+                                else if (angleDeg < -90f) angleDeg += 180f
+
+                                val lastLineId = viewModel.state.value.strokes.lastOrNull()?.id ?: ""
                                 viewModel.commitStroke(
                                     measurementLabel(
-                                        lengthText,
-                                        labelAt,
-                                        labelColor
-                                    )
+                                        text = lengthText,
+                                        at = labelAt,
+                                        color = labelColor,
+                                        angleDeg = angleDeg
+                                    ).copy(linkToId = lastLineId)
                                 )
                                 Toast.makeText(context, "Drawn: $lengthText", Toast.LENGTH_SHORT).show()
                             } else {
@@ -2906,7 +3042,7 @@ fun CanvasScreen(
                                         )
                                         val midRad = Math.toRadians((180.0 - leftAngleDeg / 2.0)).toFloat()
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
-                                        val labelScreen = tool.center + midD * (arcR + 32f) - perp * 26f
+                                        val labelScreen = tool.center + midD * (arcR + 32f)
                                         viewModel.commitStroke(
                                             measurementLabel("${leftAngleDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
@@ -2932,7 +3068,7 @@ fun CanvasScreen(
                                         )
                                         val midRad = Math.toRadians((180.0 - leftAngleDeg / 2.0)).toFloat()
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
-                                        val labelScreen = tool.center + midD * (tool.span + 36f) - perp * 24f
+                                        val labelScreen = tool.center + midD * (tool.span + 32f)
                                         viewModel.commitStroke(
                                             measurementLabel("${leftAngleDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
@@ -2957,7 +3093,7 @@ fun CanvasScreen(
                                         )
                                         val midRad = Math.toRadians((pDeg / 2f).toDouble()).toFloat()
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
-                                        val labelScreen = tool.center + midD * (tool.span + 36f) - perp * 24f
+                                        val labelScreen = tool.center + midD * (tool.span + 32f)
                                         viewModel.commitStroke(
                                             measurementLabel("${pDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
@@ -2985,7 +3121,7 @@ fun CanvasScreen(
                                         )
                                         val midRad = Math.toRadians((pDeg / 2f).toDouble()).toFloat()
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
-                                        val labelScreen = tool.center + midD * (arcR + 32f) - perp * 26f
+                                        val labelScreen = tool.center + midD * (arcR + 32f)
                                         viewModel.commitStroke(
                                             measurementLabel("${pDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
@@ -3008,28 +3144,6 @@ fun CanvasScreen(
                                 } else if (mathGesture.arcMode) {
                                     viewModel.finishStroke()
                                 }
-                            } else if (tool != null && tool.kind == MathToolKind.PROTRACTOR &&
-                                mathGesture.zone == MathToolZone.SCALE && tool.markedAngleDeg != null
-                            ) {
-                                val angle = tool.markedAngleDeg
-                                val rim = rimPoint(tool.center, tool.rotationDeg, angle, tool.span)
-                                val labelScreen = rimPoint(tool.center, tool.rotationDeg, angle, tool.span + 36f)
-                                val offset = Offset(canvasOffsetX, canvasOffsetY)
-                                viewModel.commitStroke(
-                                    straightStroke(
-                                        CanvasTransform.screenToWorld(tool.center, canvasScale, offset),
-                                        CanvasTransform.screenToWorld(rim, canvasScale, offset),
-                                        state.selectedColor,
-                                        state.strokeWidth
-                                    )
-                                )
-                                viewModel.commitStroke(
-                                    measurementLabel(
-                                        formatDegrees(angle),
-                                        CanvasTransform.screenToWorld(labelScreen, canvasScale, offset),
-                                        state.selectedColor
-                                    )
-                                )
                             }
                             }
                         mathReadout = null
@@ -3676,17 +3790,23 @@ fun CanvasScreen(
                 val screenCenterX = screenLeft + (screenWidth / 2f)
                 val screenCenterY = screenTop + (screenHeight / 2f)
 
-                // Interactive (+) Branch Adders
+                // Interactive (+) Branch Adders (proportionate, consistent 8.dp spacing)
+                val adderBtnSizeDp = 20.dp
+                val adderIconSizeDp = 13.dp
+                val densityScope = LocalDensity.current
+                val adderBtnPx = with(densityScope) { adderBtnSizeDp.toPx() }
+                val adderMarginPx = with(densityScope) { 8.dp.toPx() }
+
                 // Top adder (+)
                 Box(
                     modifier = Modifier
                         .offset {
                             IntOffset(
-                                (screenCenterX - 14f).roundToInt(),
-                                (screenTop - 40f).roundToInt()
+                                (screenCenterX - adderBtnPx / 2f).roundToInt(),
+                                (screenTop - adderMarginPx - adderBtnPx).roundToInt()
                             )
                         }
-                        .size(28.dp)
+                        .size(adderBtnSizeDp)
                         .clip(CircleShape)
                         .background(Color(0xFF2563EB))
                         .clickable {
@@ -3698,7 +3818,7 @@ fun CanvasScreen(
                         Icons.Default.Add,
                         contentDescription = "Add Top Branch",
                         tint = Color.White,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(adderIconSizeDp)
                     )
                 }
 
@@ -3707,11 +3827,11 @@ fun CanvasScreen(
                     modifier = Modifier
                         .offset {
                             IntOffset(
-                                (screenRight + 12f).roundToInt(),
-                                (screenCenterY - 14f).roundToInt()
+                                (screenRight + adderMarginPx).roundToInt(),
+                                (screenCenterY - adderBtnPx / 2f).roundToInt()
                             )
                         }
-                        .size(28.dp)
+                        .size(adderBtnSizeDp)
                         .clip(CircleShape)
                         .background(Color(0xFF2563EB))
                         .clickable {
@@ -3723,7 +3843,7 @@ fun CanvasScreen(
                         Icons.Default.Add,
                         contentDescription = "Add Right Branch",
                         tint = Color.White,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(adderIconSizeDp)
                     )
                 }
 
@@ -3732,11 +3852,11 @@ fun CanvasScreen(
                     modifier = Modifier
                         .offset {
                             IntOffset(
-                                (screenCenterX - 14f).roundToInt(),
-                                (screenBottom + 12f).roundToInt()
+                                (screenCenterX - adderBtnPx / 2f).roundToInt(),
+                                (screenBottom + adderMarginPx).roundToInt()
                             )
                         }
-                        .size(28.dp)
+                        .size(adderBtnSizeDp)
                         .clip(CircleShape)
                         .background(Color(0xFF2563EB))
                         .clickable {
@@ -3748,7 +3868,7 @@ fun CanvasScreen(
                         Icons.Default.Add,
                         contentDescription = "Add Bottom Branch",
                         tint = Color.White,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(adderIconSizeDp)
                     )
                 }
 
@@ -3757,11 +3877,11 @@ fun CanvasScreen(
                     modifier = Modifier
                         .offset {
                             IntOffset(
-                                (screenLeft - 40f).roundToInt(),
-                                (screenCenterY - 14f).roundToInt()
+                                (screenLeft - adderMarginPx - adderBtnPx).roundToInt(),
+                                (screenCenterY - adderBtnPx / 2f).roundToInt()
                             )
                         }
-                        .size(28.dp)
+                        .size(adderBtnSizeDp)
                         .clip(CircleShape)
                         .background(Color(0xFF2563EB))
                         .clickable {
@@ -3773,7 +3893,7 @@ fun CanvasScreen(
                         Icons.Default.Add,
                         contentDescription = "Add Left Branch",
                         tint = Color.White,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(adderIconSizeDp)
                     )
                 }
 
@@ -3843,7 +3963,8 @@ fun CanvasScreen(
                         },
                         onStartTyping = {
                             editingNodeStrokeId = selectedNode.id
-                            editingNodeText = selectedNode.text ?: ""
+                            val linkedText = state.strokes.find { it.linkToId == selectedNode.id && it.strokeType == StrokeType.TEXT }?.text
+                            editingNodeText = linkedText ?: selectedNode.text ?: ""
                         },
                         onFillColorChanged = { color ->
                             viewModel.setNodeFillColor(selectedNode.id, color)

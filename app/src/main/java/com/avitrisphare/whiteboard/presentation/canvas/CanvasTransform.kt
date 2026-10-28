@@ -202,10 +202,11 @@ object CanvasTransform {
             val p1 = points.first()
             val p2 = points.last()
             if (stroke.stickerKind == "curved") {
-                val cx1 = p1.x + (p2.x - p1.x) * 0.5f
-                val cy1 = p1.y
-                val cx2 = p1.x + (p2.x - p1.x) * 0.5f
-                val cy2 = p2.y
+                val cp = MindmapEngine.calculateCurvedControlPoints(p1, p2)
+                val cx1 = cp.cx1
+                val cy1 = cp.cy1
+                val cx2 = cp.cx2
+                val cy2 = cp.cy2
                 var prev = p1
                 for (step in 1..10) {
                     val t = step / 10f

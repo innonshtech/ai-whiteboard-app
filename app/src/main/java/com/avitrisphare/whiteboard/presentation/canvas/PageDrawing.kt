@@ -90,8 +90,8 @@ fun DrawScope.drawVectorInk(
             renderStroke(context, stroke, scale, false)
         }
         for (stroke in strokes) {
-            if (stroke.isPlacedMedia() && stroke.id in selectedIds) {
-                renderStroke(context, stroke, scale, false)
+            if (stroke.isPlacedMedia()) {
+                renderStroke(context, stroke, scale, stroke.id in selectedIds)
             }
         }
     }
