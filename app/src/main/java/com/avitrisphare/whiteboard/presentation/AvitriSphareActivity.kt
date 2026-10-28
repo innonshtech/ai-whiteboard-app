@@ -39,6 +39,10 @@ import com.avitrisphare.whiteboard.presentation.entry.ClassHomeScreen
 import com.avitrisphare.whiteboard.presentation.entry.LicenseActivationScreen
 import com.avitrisphare.whiteboard.presentation.entry.PanelSessionStore
 import com.avitrisphare.whiteboard.presentation.entry.QrLoginScreen
+import com.avitrisphare.whiteboard.presentation.entry.PanelLockedScreen
+import com.avitrisphare.whiteboard.data.remote.LicenseCheckResult
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -119,6 +123,7 @@ class AvitriSphareActivity : ComponentActivity() {
             var classroomId by remember { mutableStateOf<String?>(null) }
             var isDarkMode by remember { mutableStateOf(true) }
             var start by remember { mutableStateOf<String?>(null) }
+            var isLocked by remember { mutableStateOf(false) }
             var pendingImport by remember { mutableStateOf(intent?.data?.toString()) }
             val scope = rememberCoroutineScope()
 
@@ -146,9 +151,28 @@ class AvitriSphareActivity : ComponentActivity() {
                 val stored = session.snapshot()
                 val key = stored.licenseKey
                 if (key != null) {
-                    when (val checked = panelApi.verifyLicense(key, panelId)) {
-                        is ApiCall.Ok -> session.saveLicense(key, checked.value)
-                        is ApiCall.Err -> if (checked.licenseRejected) session.clearLicense()
+                    when (val check = panelApi.checkLicense(key, panelId)) {
+                        is LicenseCheckResult.Valid -> {
+                            session.saveLicense(key, check.license)
+                            isLocked = false
+                        }
+                        is LicenseCheckResult.Expired -> {
+                            isLocked = true
+                            session.markLocked(true)
+                        }
+                        is LicenseCheckResult.SchoolInactive -> {
+                            isLocked = true
+                            session.markLocked(true)
+                        }
+                        is LicenseCheckResult.Invalid -> {
+                            session.clearLicense()
+                            isLocked = false
+                        }
+                        is LicenseCheckResult.NetworkError -> {
+                            if (session.isLicenseExpiredLocally()) {
+                                isLocked = true
+                            }
+                        }
                     }
                 }
                 val fresh = session.snapshot()
@@ -157,6 +181,7 @@ class AvitriSphareActivity : ComponentActivity() {
                 classroomName = fresh.classroomName
                 classroomId = fresh.classroomId
                 start = when {
+                    isLocked || fresh.isLocked -> "locked"
                     !fresh.isLicensed -> "license"
                     fresh.teacher == null -> "qr"
                     incoming != null -> {
@@ -180,6 +205,44 @@ class AvitriSphareActivity : ComponentActivity() {
                 AvitriSphareTheme(darkTheme = isDarkMode) {
                 val navController = rememberNavController()
 
+                LaunchedEffect(start) {
+                    if (start == null || start == "locked" || start == "license") return@LaunchedEffect
+                    while (isActive) {
+                        delay(3 * 60 * 1000L)
+                        val currentKey = session.snapshot().licenseKey ?: continue
+                        when (val check = panelApi.checkLicense(currentKey, session.panelId())) {
+                            is LicenseCheckResult.Expired, is LicenseCheckResult.SchoolInactive -> {
+                                isLocked = true
+                                session.markLocked(true)
+                                navController.navigate("locked") {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                                break
+                            }
+                            is LicenseCheckResult.Valid -> {
+                                session.saveLicense(currentKey, check.license)
+                            }
+                            is LicenseCheckResult.Invalid -> {
+                                session.clearLicense()
+                                navController.navigate("license") {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                                break
+                            }
+                            is LicenseCheckResult.NetworkError -> {
+                                if (session.isLicenseExpiredLocally()) {
+                                    isLocked = true
+                                    session.markLocked(true)
+                                    navController.navigate("locked") {
+                                        popUpTo(0) { inclusive = true }
+                                    }
+                                    break
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = LocalAvitriSphareColors.current.background
@@ -199,16 +262,85 @@ class AvitriSphareActivity : ComponentActivity() {
                         composable("license") {
                             LicenseActivationScreen(
                                 panelApi = panelApi,
-                                panelId = session.panelId()
+                                panelId = session.panelId(),
+                                deviceUuid = session.formattedDeviceId(),
+                                onLicenseExpired = { expired ->
+                                    schoolName = expired.schoolName
+                                    classroomName = expired.classroomName
+                                    isLocked = true
+                                    session.markLocked(true)
+                                    navController.navigate("locked") {
+                                        popUpTo("license") { inclusive = true }
+                                    }
+                                }
                             ) { key, license ->
                                 session.saveLicense(key, license)
                                 schoolName = license.schoolName
                                 classroomName = license.classroomName
                                 classroomId = license.classroomId
+                                isLocked = false
                                 navController.navigate("qr") {
                                     popUpTo("license") { inclusive = true }
                                 }
                             }
+                        }
+                        composable("locked") {
+                            val snap = session.snapshot()
+                            PanelLockedScreen(
+                                schoolName = schoolName.ifBlank { snap.schoolName },
+                                deviceUuid = session.formattedDeviceId(),
+                                supportEmail = snap.schoolEmail ?: "support@gyoash.com",
+                                supportPhone = snap.schoolPhone ?: "+91 98220 11223",
+                                onCheckAgain = { onDone ->
+                                    val key = session.snapshot().licenseKey
+                                    if (key != null) {
+                                        scope.launch {
+                                            when (val res = panelApi.checkLicense(key, session.panelId())) {
+                                                is LicenseCheckResult.Valid -> {
+                                                    session.saveLicense(key, res.license)
+                                                    schoolName = res.license.schoolName
+                                                    classroomName = res.license.classroomName
+                                                    classroomId = res.license.classroomId
+                                                    isLocked = false
+                                                    onDone(true, "Licence is active!")
+                                                    navController.navigate("qr") {
+                                                        popUpTo("locked") { inclusive = true }
+                                                    }
+                                                }
+                                                is LicenseCheckResult.Expired -> {
+                                                    onDone(false, "Licence is still expired. Contact your administrator.")
+                                                }
+                                                is LicenseCheckResult.SchoolInactive -> {
+                                                    onDone(false, "School subscription is inactive.")
+                                                }
+                                                is LicenseCheckResult.Invalid -> {
+                                                    session.clearLicense()
+                                                    isLocked = false
+                                                    onDone(false, "Licence is invalid.")
+                                                    navController.navigate("license") {
+                                                        popUpTo("locked") { inclusive = true }
+                                                    }
+                                                }
+                                                is LicenseCheckResult.NetworkError -> {
+                                                    onDone(false, "Unable to reach server. Please check network.")
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        navController.navigate("license") {
+                                            popUpTo("locked") { inclusive = true }
+                                        }
+                                    }
+                                },
+                                onEnterNewKey = {
+                                    session.clearLicense()
+                                    teacher = null
+                                    isLocked = false
+                                    navController.navigate("license") {
+                                        popUpTo("locked") { inclusive = true }
+                                    }
+                                }
+                            )
                         }
                         composable("qr") {
                             QrLoginScreen(
@@ -241,6 +373,7 @@ class AvitriSphareActivity : ComponentActivity() {
                                 onChangeLicense = {
                                     session.clearLicense()
                                     teacher = null
+                                    isLocked = false
                                     navController.navigate("license") {
                                         popUpTo(0) { inclusive = true }
                                     }

@@ -1,0 +1,2266 @@
+diff --git a/app/src/main/java/com/avitrisphare/whiteboard/presentation/canvas/CanvasScreen.kt b/app/src/main/java/com/avitrisphare/whiteboard/presentation/canvas/CanvasScreen.kt
+index 61ccc6f..dbdcbc1 100644
+--- a/app/src/main/java/com/avitrisphare/whiteboard/presentation/canvas/CanvasScreen.kt
++++ b/app/src/main/java/com/avitrisphare/whiteboard/presentation/canvas/CanvasScreen.kt
+@@ -96,6 +96,7 @@ import androidx.compose.material.icons.filled.GridOn
+ import androidx.compose.material.icons.filled.Group
+ import androidx.compose.material.icons.filled.HelpOutline
+ import androidx.compose.material.icons.filled.Highlight
++import androidx.compose.material.icons.filled.Hub
+ import androidx.compose.material.icons.filled.HorizontalRule
+ import androidx.compose.material.icons.filled.Image
+ import androidx.compose.material.icons.filled.IosShare
+@@ -194,6 +195,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
+ import androidx.compose.ui.layout.onSizeChanged
+ import androidx.compose.ui.layout.positionInRoot
+ import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.platform.LocalDensity
+ import androidx.compose.ui.platform.LocalView
+ import androidx.compose.ui.viewinterop.AndroidView
+ import androidx.compose.ui.graphics.graphicsLayer
+@@ -276,17 +278,44 @@ private fun decodeMediaBitmap(context: Context, uriString: String, maxDim: Int =
+     }
+ }
+ 
+-private fun DrawScope.drawCenteredNodeText(text: String, cx: Float, cy: Float, colorInt: Int, strokeW: Float) {
++private fun DrawScope.drawCenteredNodeText(
++    text: String,
++    cx: Float,
++    cy: Float,
++    fillColor: Int,
++    strokeW: Float,
++    maxWidth: Float = 140f
++) {
+     if (text.isEmpty()) return
+     drawContext.canvas.nativeCanvas.apply {
++        val r = (fillColor shr 16) and 0xFF
++        val g = (fillColor shr 8) and 0xFF
++        val b = fillColor and 0xFF
++        val isLight = fillColor == 0 || (0.299f * r + 0.587f * g + 0.114f * b) > 130f
++        val resolvedColor = if (isLight) 0xFF0F172A.toInt() else 0xFFFFFFFF.toInt()
++
+         val tPaint = Paint().apply {
+-            color = colorInt
+-            textSize = (strokeW * 4.2f).coerceIn(16f, 32f)
++            color = resolvedColor
++            textSize = (strokeW * 5.2f).coerceIn(16f, 26f)
+             isAntiAlias = true
+             textAlign = Paint.Align.CENTER
+             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+         }
+-        val lines = text.split("\n")
++        val words = text.split(" ")
++        val wrappedLines = mutableListOf<String>()
++        var currentLine = ""
++        for (word in words) {
++            val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
++            if (tPaint.measureText(testLine) <= maxWidth) {
++                currentLine = testLine
++            } else {
++                if (currentLine.isNotEmpty()) wrappedLines.add(currentLine)
++                currentLine = word
++            }
++        }
++        if (currentLine.isNotEmpty()) wrappedLines.add(currentLine)
++        val lines = if (wrappedLines.isEmpty()) text.split("\n") else wrappedLines
++
+         val lineH = tPaint.textSize * 1.25f
+         val startY = cy - ((lines.size - 1) * lineH) / 2f + tPaint.textSize * 0.35f
+         lines.forEachIndexed { i, line ->
+@@ -315,6 +344,41 @@ fun DrawScope.renderStroke(
+     }
+ 
+     if (renderExtendedShape(stroke, safeScale, strokeColor, strokeWidth)) {
++        if (stroke.imageUri.isNotBlank()) {
++            val bmp = decodeMediaBitmap(context, stroke.imageUri)
++            if (bmp != null) {
++                val b = shapeBoundingBox(pointsList)
++                val pad = 6f / safeScale
++                val destRect = android.graphics.Rect(
++                    (b.left + pad).toInt(),
++                    (b.top + pad).toInt(),
++                    (b.right - pad).toInt(),
++                    (b.bottom - pad).toInt()
++                )
++                drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
++            }
++        }
++        if (stroke.text.isNotEmpty()) {
++            val b = shapeBoundingBox(pointsList)
++            drawCenteredNodeText(stroke.text, b.left + b.width / 2f, b.top + b.height / 2f, stroke.fillColor, stroke.strokeWidth, b.width - 20f)
++        }
++        if (stroke.stickerKind.contains(":locked")) {
++            val b = strokeSelectionBounds(stroke)
++            val lockR = 11f / safeScale
++            val lockCenter = Offset(b.left + lockR + 4f / safeScale, b.top + lockR + 4f / safeScale)
++            drawCircle(color = Color(0xFFD97706), radius = lockR, center = lockCenter)
++            drawCircle(color = Color.White, radius = lockR, center = lockCenter, style = DrawStroke(1.5f / safeScale))
++            drawContext.canvas.nativeCanvas.apply {
++                val p = Paint().apply {
++                    color = android.graphics.Color.WHITE
++                    textSize = 12f / safeScale
++                    isAntiAlias = true
++                    textAlign = Paint.Align.CENTER
++                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
++                }
++                drawText("🔒", lockCenter.x, lockCenter.y + 4f / safeScale, p)
++            }
++        }
+         return
+     }
+ 
+@@ -340,8 +404,21 @@ fun DrawScope.renderStroke(
+                     size = Size(width, height),
+                     style = DrawStroke(width = strokeWidth)
+                 )
++                if (stroke.imageUri.isNotBlank()) {
++                    val bmp = decodeMediaBitmap(context, stroke.imageUri)
++                    if (bmp != null) {
++                        val pad = 8f / safeScale
++                        val destRect = android.graphics.Rect(
++                            (left + pad).toInt(),
++                            (top + pad).toInt(),
++                            (left + width - pad).toInt(),
++                            (top + height - pad).toInt()
++                        )
++                        drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
++                    }
++                }
+                 if (stroke.text.isNotEmpty()) {
+-                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.colorValue, stroke.strokeWidth)
++                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.fillColor, stroke.strokeWidth, width - 20f)
+                 }
+             }
+         }
+@@ -369,8 +446,21 @@ fun DrawScope.renderStroke(
+                     cornerRadius = CornerRadius(radius, radius),
+                     style = DrawStroke(width = strokeWidth)
+                 )
++                if (stroke.imageUri.isNotBlank()) {
++                    val bmp = decodeMediaBitmap(context, stroke.imageUri)
++                    if (bmp != null) {
++                        val pad = 6f / safeScale
++                        val destRect = android.graphics.Rect(
++                            (left + pad).toInt(),
++                            (top + pad).toInt(),
++                            (left + width - pad).toInt(),
++                            (top + height - pad).toInt()
++                        )
++                        drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
++                    }
++                }
+                 if (stroke.text.isNotEmpty()) {
+-                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.colorValue, stroke.strokeWidth)
++                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.fillColor, stroke.strokeWidth, width - 20f)
+                 }
+             }
+         }
+@@ -400,8 +490,21 @@ fun DrawScope.renderStroke(
+                     color = strokeColor,
+                     style = DrawStroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                 )
++                if (stroke.imageUri.isNotBlank()) {
++                    val bmp = decodeMediaBitmap(context, stroke.imageUri)
++                    if (bmp != null) {
++                        val pad = 8f / safeScale
++                        val destRect = android.graphics.Rect(
++                            (left + pad).toInt(),
++                            (top + pad).toInt(),
++                            (right - pad).toInt(),
++                            (bottom - pad).toInt()
++                        )
++                        drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
++                    }
++                }
+                 if (stroke.text.isNotEmpty()) {
+-                    drawCenteredNodeText(stroke.text, midX, midY, stroke.colorValue, stroke.strokeWidth)
++                    drawCenteredNodeText(stroke.text, midX, midY, stroke.fillColor, stroke.strokeWidth, (right - left) * 0.7f)
+                 }
+             }
+         }
+@@ -516,7 +619,7 @@ fun DrawScope.renderStroke(
+                 drawHexagon(strokeColor, pointsList.first(), pointsList.last(), strokeWidth)
+             }
+         }
+-        StrokeType.ROUND_RECT -> {
++        StrokeType.ROUND_RECT, StrokeType.ROUNDED_RECTANGLE -> {
+             if (pointsList.size >= 2) {
+                 val p1 = pointsList.first()
+                 val p2 = pointsList.last()
+@@ -524,24 +627,40 @@ fun DrawScope.renderStroke(
+                 val top = minOf(p1.y, p2.y)
+                 val width = kotlin.math.abs(p2.x - p1.x)
+                 val height = kotlin.math.abs(p2.y - p1.y)
+-                val radius = 24f / safeScale
++                val cr = if (stroke.cornerRadius > 0f) stroke.cornerRadius else 18f
++
+                 if (stroke.fillColor != 0) {
+                     drawRoundRect(
+-                        Color(stroke.fillColor),
+-                        Offset(left, top),
+-                        Size(width, height),
+-                        CornerRadius(radius, radius)
++                        color = Color(stroke.fillColor),
++                        topLeft = Offset(left, top),
++                        size = Size(width, height),
++                        cornerRadius = CornerRadius(cr, cr)
+                     )
+                 }
+                 drawRoundRect(
+-                    strokeColor,
+-                    Offset(left, top),
+-                    Size(width, height),
+-                    cornerRadius = CornerRadius(radius, radius),
++                    color = strokeColor,
++                    topLeft = Offset(left, top),
++                    size = Size(width, height),
++                    cornerRadius = CornerRadius(cr, cr),
+                     style = DrawStroke(width = strokeWidth)
+                 )
++
++                if (stroke.imageUri.isNotBlank()) {
++                    val bmp = decodeMediaBitmap(context, stroke.imageUri)
++                    if (bmp != null) {
++                        val pad = 6f / safeScale
++                        val destRect = android.graphics.Rect(
++                            (left + pad).toInt(),
++                            (top + pad).toInt(),
++                            (left + width - pad).toInt(),
++                            (top + height - pad).toInt()
++                        )
++                        drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
++                    }
++                }
++
+                 if (stroke.text.isNotEmpty()) {
+-                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.colorValue, stroke.strokeWidth)
++                    drawCenteredNodeText(stroke.text, left + width / 2f, top + height / 2f, stroke.fillColor, stroke.strokeWidth, width - 20f)
+                 }
+             }
+         }
+@@ -555,51 +674,31 @@ fun DrawScope.renderStroke(
+                 val p1 = pointsList.first()
+                 val p2 = pointsList.last()
+                 val actualWidth = strokeWidth.coerceAtLeast(3f)
+-                drawLine(strokeColor, p1, p2, actualWidth, cap = StrokeCap.Round)
+-                val angle = kotlin.math.atan2(p2.y - p1.y, p2.x - p1.x)
+-                val arrowLen = (actualWidth * 4.5f).coerceIn(16f, 32f)
+-                val arrowAngle = Math.PI / 6.0
+-                val ap1 = Offset(
+-                    p2.x - (arrowLen * kotlin.math.cos(angle - arrowAngle)).toFloat(),
+-                    p2.y - (arrowLen * kotlin.math.sin(angle - arrowAngle)).toFloat()
+-                )
+-                val ap2 = Offset(
+-                    p2.x - (arrowLen * kotlin.math.cos(angle + arrowAngle)).toFloat(),
+-                    p2.y - (arrowLen * kotlin.math.sin(angle + arrowAngle)).toFloat()
+-                )
+-                val arrowPath = Path().apply {
+-                    moveTo(p2.x, p2.y)
+-                    lineTo(ap1.x, ap1.y)
+-                    lineTo(ap2.x, ap2.y)
+-                    close()
+-                }
+-                drawPath(arrowPath, color = strokeColor)
+-            }
+-        }
+-        StrokeType.STICKER -> {
+-            val origin = pointsList.first()
+-            val label = when (stroke.stickerKind) {
+-                "star" -> "⭐"
+-                "tick" -> "✓"
+-                "cross" -> "✕"
+-                "thumb" -> "👍"
+-                "emoji" -> stroke.text.ifEmpty { "😀" }
+-                else -> stroke.text.ifEmpty { stroke.stickerKind }
+-            }
+-            drawContext.canvas.nativeCanvas.apply {
+-                val paint = Paint().apply {
+-                    color = when (stroke.stickerKind) {
+-                        "tick" -> 0xFF10B981.toInt()
+-                        "cross" -> 0xFFEF4444.toInt()
+-                        "star" -> 0xFFF59E0B.toInt()
+-                        else -> stroke.colorValue
++                if (stroke.stickerKind == "straight") {
++                    for (i in 0 until pointsList.size - 1) {
++                        drawLine(
++                            color = strokeColor,
++                            start = pointsList[i],
++                            end = pointsList[i + 1],
++                            strokeWidth = actualWidth,
++                            cap = StrokeCap.Round
++                        )
+                     }
+-                    textSize = (stroke.strokeWidth * 14f).coerceIn(56f, 150f)
+-                    isAntiAlias = true
++                } else {
++                    val wirePath = if (stroke.stickerKind == "curved") {
++                        MindmapEngine.buildComposeCurvedPath(pointsList)
++                    } else {
++                        MindmapEngine.buildComposeOrthogonalPath(pointsList)
++                    }
++                    drawPath(
++                        path = wirePath,
++                        color = strokeColor,
++                        style = DrawStroke(width = actualWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
++                    )
+                 }
+-                drawText(label, origin.x, origin.y + paint.textSize * 0.88f, paint)
+             }
+         }
++
+         StrokeType.IMAGE -> {
+             if (stroke.imageUri.isNotBlank()) {
+                 val bmp = decodeMediaBitmap(context, stroke.imageUri)
+@@ -676,6 +775,93 @@ fun DrawScope.renderStroke(
+                 }
+             }
+         }
++        StrokeType.STICKER -> {
++            val origin = pointsList.first()
++            val size = if (pointsList.size >= 2) {
++                val p2 = pointsList.last()
++                maxOf(kotlin.math.abs(p2.x - origin.x), kotlin.math.abs(p2.y - origin.y)).coerceIn(44f, 320f)
++            } else {
++                (stroke.strokeWidth * 12f).coerceIn(48f, 160f)
++            }
++            val radius = size / 2f
++            val center = Offset(origin.x + radius, origin.y + radius)
++
++            val cleanKind = stroke.stickerKind.replace(":locked", "")
++            val (badgeBg, borderClr, borderInt) = when (cleanKind) {
++                "star" -> Triple(Color(0xFFFEF3C7), Color(0xFFF59E0B), 0xFFF59E0B.toInt())
++                "tick" -> Triple(Color(0xFFD1FAE5), Color(0xFF10B981), 0xFF10B981.toInt())
++                "cross" -> Triple(Color(0xFFFEE2E2), Color(0xFFEF4444), 0xFFEF4444.toInt())
++                "thumb" -> Triple(Color(0xFFDBEAFE), Color(0xFF3B82F6), 0xFF3B82F6.toInt())
++                "science" -> Triple(Color(0xFFE0E7FF), Color(0xFF4F46E5), 0xFF4F46E5.toInt())
++                "math" -> Triple(Color(0xFFF3E8FF), Color(0xFF9333EA), 0xFF9333EA.toInt())
++                "badge" -> Triple(Color(0xFFFEF9C3), Color(0xFFEAB308), 0xFFEAB308.toInt())
++                "school" -> Triple(Color(0xFFFEE2E2), Color(0xFFDC2626), 0xFFDC2626.toInt())
++                "tech" -> Triple(Color(0xFFCCFBF1), Color(0xFF0D9488), 0xFF0D9488.toInt())
++                "custom" -> Triple(Color(0xFFFCE7F3), Color(0xFFDB2777), 0xFFDB2777.toInt())
++                else -> Triple(Color(0xFFF8FAFC), Color(0xFF94A3B8), 0xFF94A3B8.toInt())
++            }
++
++            drawCircle(
++                color = Color(0x1F000000),
++                radius = radius,
++                center = Offset(center.x, center.y + 2f / safeScale)
++            )
++            drawCircle(
++                color = badgeBg,
++                radius = radius,
++                center = center
++            )
++            drawCircle(
++                color = borderClr,
++                radius = radius,
++                center = center,
++                style = DrawStroke(width = 2.5f / safeScale)
++            )
++
++            val isCustomImage = stroke.text.startsWith("/") || stroke.text.startsWith("content://") || stroke.text.startsWith("file://")
++            if (isCustomImage) {
++                val bmp = try {
++                    if (stroke.text.startsWith("/")) {
++                        android.graphics.BitmapFactory.decodeFile(stroke.text)
++                    } else {
++                        context.contentResolver.openInputStream(Uri.parse(stroke.text))?.use {
++                            android.graphics.BitmapFactory.decodeStream(it)
++                        }
++                    }
++                } catch (_: Exception) { null }
++                if (bmp != null) {
++                    val pad = size * 0.18f
++                    val destRect = android.graphics.RectF(
++                        origin.x + pad,
++                        origin.y + pad,
++                        origin.x + size - pad,
++                        origin.y + size - pad
++                    )
++                    drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
++                }
++            } else {
++                val symbol = stroke.text.ifEmpty {
++                    when (cleanKind) {
++                        "star" -> "⭐"
++                        "tick" -> "✓"
++                        "cross" -> "✕"
++                        "thumb" -> "👍"
++                        else -> "⭐"
++                    }
++                }
++                drawContext.canvas.nativeCanvas.apply {
++                    val paint = Paint().apply {
++                        color = borderInt
++                        textSize = size * 0.52f
++                        isAntiAlias = true
++                        textAlign = Paint.Align.CENTER
++                        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
++                    }
++                    val yPos = center.y - (paint.descent() + paint.ascent()) / 2f
++                    drawText(symbol, center.x, yPos, paint)
++                }
++            }
++        }
+         StrokeType.PEN,
+         StrokeType.PENCIL,
+         StrokeType.MARKER,
+@@ -684,29 +870,30 @@ fun DrawScope.renderStroke(
+         else -> {}
+     }
+ 
+-    if (isSelected) {
++    if (stroke.stickerKind.contains(":locked")) {
+         val b = strokeSelectionBounds(stroke)
+-        val pad = 8f / safeScale
+-        val handleRadius = 5f / safeScale
+-        val selColor = Color(0xFF6366F1)
+-        drawRect(
+-            color = selColor,
+-            topLeft = Offset(b.left - pad, b.top - pad),
+-            size = Size(b.width + pad * 2f, b.height + pad * 2f),
+-            style = DrawStroke(
+-                width = 1.5f / safeScale,
+-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f / safeScale, 8f / safeScale))
+-            )
++        val lockR = 11f / safeScale
++        val lockCenter = Offset(b.left + lockR + 4f / safeScale, b.top + lockR + 4f / safeScale)
++        drawCircle(
++            color = Color(0xFFD97706),
++            radius = lockR,
++            center = lockCenter
+         )
+-        val corners = listOf(
+-            Offset(b.left - pad, b.top - pad),
+-            Offset(b.right + pad, b.top - pad),
+-            Offset(b.right + pad, b.bottom + pad),
+-            Offset(b.left - pad, b.bottom + pad)
++        drawCircle(
++            color = Color.White,
++            radius = lockR,
++            center = lockCenter,
++            style = DrawStroke(1.5f / safeScale)
+         )
+-        corners.forEach { pt ->
+-            drawCircle(color = Color.White, radius = handleRadius, center = pt)
+-            drawCircle(color = selColor, radius = handleRadius, center = pt, style = DrawStroke(1.5f / safeScale))
++        drawContext.canvas.nativeCanvas.apply {
++            val p = Paint().apply {
++                color = android.graphics.Color.WHITE
++                textSize = 12f / safeScale
++                isAntiAlias = true
++                textAlign = Paint.Align.CENTER
++                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
++            }
++            drawText("🔒", lockCenter.x, lockCenter.y + 4f / safeScale, p)
+         }
+     }
+ }
+@@ -942,6 +1129,7 @@ fun CanvasScreen(
+     var showLanguageDialog by remember { mutableStateOf(false) }
+     var showAiPanel by remember { mutableStateOf(false) }
+     var showLiveCollabDialog by remember { mutableStateOf(false) }
++    var showMindmapTemplateDialog by remember { mutableStateOf(false) }
+     var showDeleteDialog by remember { mutableStateOf(false) }
+     var showClearDialog by remember { mutableStateOf(false) }
+     var showEditTitleDialog by remember { mutableStateOf(false) }
+@@ -1011,6 +1199,8 @@ fun CanvasScreen(
+     var canvasOffsetX by remember { mutableFloatStateOf(0f) }
+     var canvasOffsetY by remember { mutableFloatStateOf(0f) }
+     var canvasSize by remember { mutableStateOf(Size.Zero) }
++    var lineConnectionSourceNodeId by remember { mutableStateOf<String?>(null) }
++    var lineConnectionPointerWorld by remember { mutableStateOf<Offset?>(null) }
+     var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
+     val chromeBounds = remember { ChromeBounds() }
+     var dockDismissNonce by remember { mutableIntStateOf(0) }
+@@ -1345,14 +1535,26 @@ fun CanvasScreen(
+                 }
+                 .pointerInput(Unit) {
+                     detectTapGestures(
+-                        onDoubleTap = {
+-                            if (canvasSize.width > 0 && canvasSize.height > 0) {
+-                                viewModel.fitToContent(canvasSize.width, canvasSize.height)
++                        onDoubleTap = { screenTap ->
++                            val worldTap = CanvasTransform.screenToWorld(
++                                screenTap,
++                                canvasScale,
++                                Offset(canvasOffsetX, canvasOffsetY)
++                            )
++                            val hitNode = viewModel.strokeAt(worldTap)
++                            if (hitNode != null && isMindMapNode(hitNode)) {
++                                viewModel.selectStroke(hitNode.id)
++                                editingNodeStrokeId = hitNode.id
++                                editingNodeText = hitNode.text
+                             } else {
+-                                canvasScale = 1f
+-                                canvasOffsetX = 0f
+-                                canvasOffsetY = 0f
+-                                viewModel.resetTransform()
++                                if (canvasSize.width > 0 && canvasSize.height > 0) {
++                                    viewModel.fitToContent(canvasSize.width, canvasSize.height)
++                                } else {
++                                    canvasScale = 1f
++                                    canvasOffsetX = 0f
++                                    canvasOffsetY = 0f
++                                    viewModel.resetTransform()
++                                }
+                             }
+                         }
+                     )
+@@ -1572,6 +1774,8 @@ fun CanvasScreen(
+                         var strokeHit = false
+                         var resizeStrokeId: String? = null
+                         var resizeHandle: ShapeHandleHit? = null
++                        var groupResizeHandle: ShapeHandle? = null
++                        var groupResizeInitialBounds: Rect? = null
+                         val mathGesture = MathGesture()
+                         val mathHit = hitTestPlacedTools(mathTools, down.position)
+                         val straightedge = if (mathHit != null) {
+@@ -1673,35 +1877,79 @@ fun CanvasScreen(
+                                 // Hand pan mode
+                             }
+                             WhiteboardTool.SELECT -> {
+-                                val handleSlop = 16f / canvasScale.coerceAtLeast(0.001f)
++                                val slop = 28f / canvasScale.coerceAtLeast(0.001f)
+                                 val moveSlop = 36f / canvasScale.coerceAtLeast(0.001f)
+-                                val selectedHandle = viewModel.state.value.strokes.firstNotNullOfOrNull { stroke ->
+-                                    if (stroke.id !in state.selectedStrokeIds) {
+-                                        null
+-                                    } else {
+-                                        hitShapeHandle(stroke, downWorld, handleSlop)?.let { stroke.id to it }
+-                                    }
+-                                }
+-                                if (selectedHandle != null) {
+-                                    resizeStrokeId = selectedHandle.first
+-                                    resizeHandle = selectedHandle.second
++                                val selectedStrokes = if (state.selectedStrokeIds.isNotEmpty()) {
++                                    viewModel.state.value.strokes.filter { it.id in state.selectedStrokeIds }
++                                } else emptyList()
++
++                                val isLockedSelection = selectedStrokes.isNotEmpty() && selectedStrokes.all { it.stickerKind.contains(":locked") }
++                                val groupHit = if (selectedStrokes.isNotEmpty() && !isLockedSelection) {
++                                    hitSelectionBoundsHandle(selectedStrokes, downWorld, slop)
++                                } else null
++
++                                if (groupHit != null) {
++                                    groupResizeHandle = groupHit.first
++                                    groupResizeInitialBounds = groupHit.second
++                                    viewModel.beginSelectionScale()
+                                 } else {
+-                                    val selectedStrokes = viewModel.state.value.strokes.filter { it.id in state.selectedStrokeIds }
+-                                    val hitSelected = selectedStrokes.isNotEmpty() && selectedStrokes.any { stroke ->
+-                                        val b = strokeSelectionBounds(stroke)
+-                                        downWorld.x >= b.left - moveSlop && downWorld.x <= b.right + moveSlop &&
+-                                        downWorld.y >= b.top - moveSlop && downWorld.y <= b.bottom + moveSlop
+-                                    }
+-                                    if (hitSelected) {
+-                                        isDraggingSelection = true
++                                    val selectedHandle = if (!isLockedSelection) {
++                                        selectedStrokes.firstNotNullOfOrNull { stroke ->
++                                            hitShapeHandle(stroke, downWorld, slop)?.let { stroke.id to it }
++                                        }
++                                    } else null
++                                    if (selectedHandle != null) {
++                                        resizeStrokeId = selectedHandle.first
++                                        resizeHandle = selectedHandle.second
+                                     } else {
+-                                        val hit = viewModel.strokeAt(downWorld)
+-                                        strokeHit = hit != null
+-                                        if (hit != null) {
+-                                            viewModel.selectStrokeAt(downWorld)
+-                                            isDraggingSelection = true
++                                        val isMultiSelection = selectedStrokes.size > 1
++                                        var groupLeft = Float.POSITIVE_INFINITY
++                                        var groupTop = Float.POSITIVE_INFINITY
++                                        var groupRight = Float.NEGATIVE_INFINITY
++                                        var groupBottom = Float.NEGATIVE_INFINITY
++                                        for (stroke in selectedStrokes) {
++                                            val b = strokeSelectionBounds(stroke)
++                                            groupLeft = minOf(groupLeft, b.left)
++                                            groupTop = minOf(groupTop, b.top)
++                                            groupRight = maxOf(groupRight, b.right)
++                                            groupBottom = maxOf(groupBottom, b.bottom)
++                                        }
++                                        val hitGroupBounds = isMultiSelection && groupLeft < groupRight &&
++                                            downWorld.x >= groupLeft - moveSlop && downWorld.x <= groupRight + moveSlop &&
++                                            downWorld.y >= groupTop - moveSlop && downWorld.y <= groupBottom + moveSlop
++
++                                        val hitSelected = hitGroupBounds || (selectedStrokes.isNotEmpty() && selectedStrokes.any { stroke ->
++                                            val b = strokeSelectionBounds(stroke)
++                                            downWorld.x >= b.left - moveSlop && downWorld.x <= b.right + moveSlop &&
++                                            downWorld.y >= b.top - moveSlop && downWorld.y <= b.bottom + moveSlop
++                                        })
++                                        if (hitSelected) {
++                                            if (!isLockedSelection) {
++                                                isDraggingSelection = true
++                                            }
+                                         } else {
+-                                            selectingBox = true
++                                            if (lineConnectionSourceNodeId != null) {
++                                                val hit = viewModel.strokeAt(downWorld)
++                                                if (hit != null && isMindMapNode(hit) && hit.id != lineConnectionSourceNodeId) {
++                                                    viewModel.connectMindmapBoxes(lineConnectionSourceNodeId!!, hit.id)
++                                                    viewModel.selectStroke(hit.id)
++                                                }
++                                                lineConnectionSourceNodeId = null
++                                                lineConnectionPointerWorld = null
++                                                return@awaitEachGesture
++                                            }
++                                            val hit = viewModel.strokeAt(downWorld)
++                                            strokeHit = hit != null
++                                            if (hit != null) {
++                                                if (hit.id !in state.selectedStrokeIds) {
++                                                    viewModel.selectStroke(hit.id)
++                                                }
++                                                if (!hit.stickerKind.contains(":locked")) {
++                                                    isDraggingSelection = true
++                                                }
++                                            } else {
++                                                selectingBox = true
++                                            }
+                                         }
+                                     }
+                                 }
+@@ -1710,7 +1958,24 @@ fun CanvasScreen(
+                                 viewModel.bucketFillAt(downWorld, state.selectedColor)
+                             }
+                             WhiteboardTool.LASSO -> {
+-                                lassoPoints = listOf(downWorld)
++                                val slop = 16f / canvasScale.coerceAtLeast(0.1f)
++                                val selectedStrokes = state.strokes.filter { it.id in state.selectedStrokeIds }
++                                val hitSelected = selectedStrokes.isNotEmpty() && selectedStrokes.any { stroke ->
++                                    val b = strokeSelectionBounds(stroke)
++                                    downWorld.x >= b.left - slop && downWorld.x <= b.right + slop &&
++                                    downWorld.y >= b.top - slop && downWorld.y <= b.bottom + slop
++                                }
++                                if (hitSelected) {
++                                    val isLocked = selectedStrokes.all { it.stickerKind.contains(":locked") }
++                                    if (!isLocked) {
++                                        isDraggingSelection = true
++                                    }
++                                } else {
++                                    if (state.selectedStrokeIds.isNotEmpty()) {
++                                        viewModel.clearSelection()
++                                    }
++                                    lassoPoints = listOf(downWorld)
++                                }
+                             }
+                             WhiteboardTool.LASER -> {
+                                 viewModel.addLaserPoint(downWorld)
+@@ -1906,6 +2171,9 @@ fun CanvasScreen(
+                                         scale = canvasScale,
+                                         offset = Offset(canvasOffsetX, canvasOffsetY)
+                                     )
++                                    if (lineConnectionSourceNodeId != null) {
++                                        lineConnectionPointerWorld = curWorld
++                                    }
+ 
+                                     if (mathGesture.toolId != null && !mathGesture.rulerDrawing) {
+                                         val tool = mathTools.find { it.id == mathGesture.toolId }
+@@ -2008,7 +2276,7 @@ fun CanvasScreen(
+                                                         replaceMathTool(tool.copy(span = newSpan))
+                                                     }
+                                                 }
+-                                                MathToolZone.CLOSE, MathToolZone.ANGLE_MODE_1, MathToolZone.ANGLE_MODE_ARC_LEFT, MathToolZone.ANGLE_MODE_ARC, MathToolZone.ANGLE_MODE_2, MathToolZone.SIDE_1_PENCIL, MathToolZone.SIDE_2_PENCIL, MathToolZone.SIDE_3_PENCIL, MathToolZone.NONE -> Unit
++                                                MathToolZone.CLOSE, MathToolZone.DRAW_MODE_TOGGLE, MathToolZone.ANGLE_MODE_1, MathToolZone.ANGLE_MODE_ARC_LEFT, MathToolZone.ANGLE_MODE_ARC, MathToolZone.ANGLE_MODE_2, MathToolZone.SIDE_1_PENCIL, MathToolZone.SIDE_2_PENCIL, MathToolZone.SIDE_3_PENCIL, MathToolZone.NONE -> Unit
+                                             }
+                                         }
+                                     } else if (mathGesture.rulerDrawing) {
+@@ -2049,8 +2317,12 @@ fun CanvasScreen(
+                                             val lengthText = formatCentimetres(segLengthPx, pxPerCm)
+ 
+                                             val midScreen = (snappedStartScreen + snappedCurrentScreen) / 2f
+-                                            val perp = perpendicular(ruler.rotationDeg)
+-                                            val readoutPos = midScreen + perp * (mathGesture.rulerEdgeSign * 38f)
++                                            val readoutPos = if (ruler.kind == MathToolKind.RULER) {
++                                                val perp = perpendicular(ruler.rotationDeg)
++                                                midScreen + perp * (mathGesture.rulerEdgeSign * 38f)
++                                            } else {
++                                                midScreen + Offset(0f, -28f)
++                                            }
+                                             mathReadout = "Line: $lengthText" to readoutPos
+                                         }
+                                     } else if (activeTool == WhiteboardTool.HAND) {
+@@ -2060,12 +2332,14 @@ fun CanvasScreen(
+                                         canvasOffsetY += panY
+                                         transformMoved = true
+                                         boardStage?.setTransform(canvasScale, canvasOffsetX, canvasOffsetY)
++                                    } else if (groupResizeHandle != null && groupResizeInitialBounds != null) {
++                                        viewModel.scaleSelectedStrokes(groupResizeInitialBounds!!, groupResizeHandle!!, curWorld)
+                                     } else if (resizeStrokeId != null && resizeHandle != null) {
+                                         viewModel.beginSelectionMove()
+                                         viewModel.resizeStroke(resizeStrokeId, resizeHandle, curWorld)
+                                     } else if (activeTool == WhiteboardTool.SELECT && selectingBox) {
+                                         boardStage?.setMarquee(downWorld, curWorld)
+-                                    } else if (activeTool == WhiteboardTool.SELECT && isDraggingSelection) {
++                                    } else if ((activeTool == WhiteboardTool.SELECT || activeTool == WhiteboardTool.LASSO) && isDraggingSelection) {
+                                         val prevWorld = CanvasTransform.screenToWorld(
+                                             screenPoint = prevPosition,
+                                             scale = canvasScale,
+@@ -2188,6 +2462,11 @@ fun CanvasScreen(
+                             // Tapping an already-selected shape when toolbar was closed re-opens the toolbar
+                             selectionToolbarDismissed = false
+                         }
++                        if (groupResizeHandle != null) {
++                            groupResizeHandle = null
++                            groupResizeInitialBounds = null
++                            viewModel.endSelectionScale()
++                        }
+                         viewModel.endSelectionMove()
+ 
+                         if (activeTool == WhiteboardTool.MAGNIFIER) {
+@@ -2249,10 +2528,10 @@ fun CanvasScreen(
+                                 viewModel.finishStroke()
+ 
+                                 val ruler = mathTools.find { it.id == mathGesture.toolId }
+-                                val perp = if (ruler != null) {
++                                val perp = if (ruler != null && ruler.kind == MathToolKind.RULER) {
+                                     perpendicular(ruler.rotationDeg) * mathGesture.rulerEdgeSign
+                                 } else {
+-                                    Offset(-mathGesture.drawDir.y, mathGesture.drawDir.x)
++                                    Offset(0f, -1f)
+                                 }
+ 
+                                 val mid = Offset((start.x + end.x) / 2f, (start.y + end.y) / 2f)
+@@ -2292,117 +2571,11 @@ fun CanvasScreen(
+                                     viewModel.setMathTools(mathTools)
+                                 }
+                                 if (tool != null && mathGesture.zone == MathToolZone.CLOSE && mathGesture.movedPx <= MATH_TAP_SLOP) {
+-                                viewModel.cancelCurrentStroke()
+-                                removeMathTool(tool.id)
+-                                val toolName = tool.kind.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+-                                Toast.makeText(context, "$toolName closed", Toast.LENGTH_SHORT).show()
+-                            } else if (tool != null && tool.kind == MathToolKind.SET_SQUARE && (mathGesture.zone == MathToolZone.PENCIL || mathGesture.zone == MathToolZone.SIDE_1_PENCIL || mathGesture.zone == MathToolZone.SIDE_2_PENCIL || mathGesture.zone == MathToolZone.SIDE_3_PENCIL) && mathGesture.movedPx <= MATH_TAP_SLOP) {
+-                                val half = tool.span / 2f
+-                                val dir = direction(tool.rotationDeg)
+-                                val perp = perpendicular(tool.rotationDeg)
+-                                val pCorner = tool.center - dir * half + perp * half
+-                                val pBase = tool.center + dir * half + perp * half
+-                                val pTop = tool.center - dir * half - perp * half
+-                                val offset = Offset(canvasOffsetX, canvasOffsetY)
+-                                val wCorner = CanvasTransform.screenToWorld(pCorner, canvasScale, offset)
+-                                val wBase = CanvasTransform.screenToWorld(pBase, canvasScale, offset)
+-                                val wTop = CanvasTransform.screenToWorld(pTop, canvasScale, offset)
+-
+-                                val legCm = tool.span / pxPerCm.coerceAtLeast(1f)
+-                                val baseLabel = String.format(Locale.US, "%.1f cm", legCm)
+-                                val heightLabel = String.format(Locale.US, "%.1f cm", legCm)
+-                                val hypLabel = String.format(Locale.US, "%.1f cm", legCm * 1.4142f)
+-
+-                                val midBase = Offset((wCorner.x + wBase.x) / 2f, (wCorner.y + wBase.y) / 2f)
+-                                val midHeight = Offset((wCorner.x + wTop.x) / 2f, (wCorner.y + wTop.y) / 2f)
+-                                val midHyp = Offset((wTop.x + wBase.x) / 2f, (wTop.y + wBase.y) / 2f)
+-
+-                                when (mathGesture.zone) {
+-                                    MathToolZone.SIDE_1_PENCIL -> {
+-                                        viewModel.commitStroke(straightStroke(wCorner, wBase, state.selectedColor, state.strokeWidth))
+-                                        viewModel.commitStroke(measurementLabel(baseLabel, midBase, state.selectedColor))
+-                                        Toast.makeText(context, "Base line ($baseLabel) drawn", Toast.LENGTH_SHORT).show()
+-                                    }
+-                                    MathToolZone.SIDE_2_PENCIL -> {
+-                                        viewModel.commitStroke(straightStroke(wCorner, wTop, state.selectedColor, state.strokeWidth))
+-                                        viewModel.commitStroke(measurementLabel(heightLabel, midHeight, state.selectedColor))
+-                                        Toast.makeText(context, "Height line ($heightLabel) drawn", Toast.LENGTH_SHORT).show()
+-                                    }
+-                                    MathToolZone.SIDE_3_PENCIL -> {
+-                                        viewModel.commitStroke(straightStroke(wTop, wBase, state.selectedColor, state.strokeWidth))
+-                                        viewModel.commitStroke(measurementLabel(hypLabel, midHyp, state.selectedColor))
+-                                        Toast.makeText(context, "Hypotenuse line ($hypLabel) drawn", Toast.LENGTH_SHORT).show()
+-                                    }
+-                                    MathToolZone.PENCIL -> {
+-                                        val pts = listOf(wCorner, wBase, wTop, wCorner)
+-                                        viewModel.commitStroke(
+-                                            Stroke(
+-                                                points = pts,
+-                                                colorValue = state.selectedColor,
+-                                                strokeWidth = state.strokeWidth,
+-                                                strokeType = StrokeType.TRIANGLE
+-                                            )
+-                                        )
+-                                        viewModel.commitStroke(measurementLabel(baseLabel, midBase, state.selectedColor))
+-                                        viewModel.commitStroke(measurementLabel(heightLabel, midHeight, state.selectedColor))
+-                                        viewModel.commitStroke(measurementLabel(hypLabel, midHyp, state.selectedColor))
+-                                        Toast.makeText(context, "Set square (45°-90°-45°) with measurements drawn", Toast.LENGTH_SHORT).show()
+-                                    }
+-                                    else -> Unit
+-                                }
+-                            } else if (tool != null && tool.kind == MathToolKind.TRIANGLE && (mathGesture.zone == MathToolZone.PENCIL || mathGesture.zone == MathToolZone.SIDE_1_PENCIL || mathGesture.zone == MathToolZone.SIDE_2_PENCIL || mathGesture.zone == MathToolZone.SIDE_3_PENCIL) && mathGesture.movedPx <= MATH_TAP_SLOP) {
+-                                val side = tool.span * 1.8f
+-                                val h = side * 0.8660254f
+-                                val dir = direction(tool.rotationDeg)
+-                                val perp = perpendicular(tool.rotationDeg)
+-                                val topScreen = tool.center - perp * (h * 0.6667f)
+-                                val leftScreen = tool.center - dir * (side / 2f) + perp * (h * 0.3333f)
+-                                val rightScreen = tool.center + dir * (side / 2f) + perp * (h * 0.3333f)
+-                                val offset = Offset(canvasOffsetX, canvasOffsetY)
+-                                val wTop = CanvasTransform.screenToWorld(topScreen, canvasScale, offset)
+-                                val wLeft = CanvasTransform.screenToWorld(leftScreen, canvasScale, offset)
+-                                val wRight = CanvasTransform.screenToWorld(rightScreen, canvasScale, offset)
+-
+-                                val sideCm = side / pxPerCm.coerceAtLeast(1f)
+-                                val sideLabel = String.format(Locale.US, "%.1f cm", sideCm)
+-
+-                                val midBottom = Offset((wLeft.x + wRight.x) / 2f, (wLeft.y + wRight.y) / 2f)
+-                                val midLeft = Offset((wTop.x + wLeft.x) / 2f, (wTop.y + wLeft.y) / 2f)
+-                                val midRight = Offset((wTop.x + wRight.x) / 2f, (wTop.y + wRight.y) / 2f)
++                                    viewModel.cancelCurrentStroke()
++                                    removeMathTool(tool.id)
++                                    val toolName = tool.kind.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
++                                    Toast.makeText(context, "$toolName closed", Toast.LENGTH_SHORT).show()
+ 
+-                                when (mathGesture.zone) {
+-                                    MathToolZone.SIDE_1_PENCIL -> {
+-                                        viewModel.commitStroke(straightStroke(wLeft, wRight, state.selectedColor, state.strokeWidth))
+-                                        viewModel.commitStroke(measurementLabel(sideLabel, midBottom, state.selectedColor))
+-                                        Toast.makeText(context, "Side A ($sideLabel) drawn", Toast.LENGTH_SHORT).show()
+-                                    }
+-                                    MathToolZone.SIDE_2_PENCIL -> {
+-                                        viewModel.commitStroke(straightStroke(wLeft, wTop, state.selectedColor, state.strokeWidth))
+-                                        viewModel.commitStroke(measurementLabel(sideLabel, midLeft, state.selectedColor))
+-                                        Toast.makeText(context, "Side B ($sideLabel) drawn", Toast.LENGTH_SHORT).show()
+-                                    }
+-                                    MathToolZone.SIDE_3_PENCIL -> {
+-                                        viewModel.commitStroke(straightStroke(wTop, wRight, state.selectedColor, state.strokeWidth))
+-                                        viewModel.commitStroke(measurementLabel(sideLabel, midRight, state.selectedColor))
+-                                        Toast.makeText(context, "Side C ($sideLabel) drawn", Toast.LENGTH_SHORT).show()
+-                                    }
+-                                    MathToolZone.PENCIL -> {
+-                                        val pts = listOf(wTop, wLeft, wRight, wTop)
+-                                        viewModel.commitStroke(
+-                                            Stroke(
+-                                                points = pts,
+-                                                colorValue = state.selectedColor,
+-                                                strokeWidth = state.strokeWidth,
+-                                                strokeType = StrokeType.TRIANGLE
+-                                            )
+-                                        )
+-                                        viewModel.commitStroke(measurementLabel(sideLabel, midBottom, state.selectedColor))
+-                                        viewModel.commitStroke(measurementLabel(sideLabel, midLeft, state.selectedColor))
+-                                        viewModel.commitStroke(measurementLabel(sideLabel, midRight, state.selectedColor))
+-                                        Toast.makeText(context, "Triangle (60°-60°-60°) with measurements drawn", Toast.LENGTH_SHORT).show()
+-                                    }
+-                                    else -> Unit
+-                                }
+                             } else if (tool != null && tool.kind == MathToolKind.PROTRACTOR &&
+                                 (mathGesture.zone == MathToolZone.ANGLE_MODE_1 ||
+                                  mathGesture.zone == MathToolZone.ANGLE_MODE_ARC_LEFT ||
+@@ -2549,7 +2722,7 @@ fun CanvasScreen(
+                                 } else if (mathGesture.arcMode) {
+                                     viewModel.finishStroke()
+                                 }
+-                            } else if (tool != null && tool.kind == MathToolKind.SET_SQUARE &&
++                            } else if (tool != null && tool.kind == MathToolKind.PROTRACTOR &&
+                                 mathGesture.zone == MathToolZone.SCALE && tool.markedAngleDeg != null
+                             ) {
+                                 val angle = tool.markedAngleDeg
+@@ -2595,10 +2768,14 @@ fun CanvasScreen(
+                                 if (next != latest.pageIndex) viewModel.selectPage(next)
+                             }
+                             if (activeTool == WhiteboardTool.LASSO) {
+-                                viewModel.lassoSelect(lassoPoints)
+-                                lassoPoints = emptyList()
+-                                if (!state.isToolLocked) {
+-                                    viewModel.setTool(WhiteboardTool.SELECT)
++                                if (isDraggingSelection) {
++                                    viewModel.endSelectionMove()
++                                    isDraggingSelection = false
++                                } else {
++                                    if (lassoPoints.size >= 3) {
++                                        viewModel.lassoSelect(lassoPoints)
++                                    }
++                                    lassoPoints = emptyList()
+                                 }
+                             } else if (writingNow && inkPoints.isNotEmpty()) {
+                                 val finishedWidth = if (stylusDraw) {
+@@ -2751,15 +2928,64 @@ fun CanvasScreen(
+                         drawCircle(Color(0xFFFF2A2A), radius, center)
+                     }
+                     if (lassoPoints.size >= 2) {
++                        val path = lassoPoints.toSmoothedPath()
++                        drawPath(
++                            path = path,
++                            color = Color(0x226366F1)
++                        )
+                         drawPath(
+-                            path = lassoPoints.toSmoothedPath(),
+-                            color = Color(0xFF6366F1),
++                            path = path,
++                            color = Color(0xFF4F46E5),
+                             style = DrawStroke(
+-                                width = 1.5f / canvasScale.coerceAtLeast(0.5f),
+-                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f))
++                                width = 2.5f / canvasScale.coerceAtLeast(0.5f),
++                                pathEffect = PathEffect.dashPathEffect(
++                                    floatArrayOf(10f / canvasScale.coerceAtLeast(0.5f), 8f / canvasScale.coerceAtLeast(0.5f))
++                                )
+                             )
+                         )
+                     }
++
++                    if (lineConnectionSourceNodeId != null && lineConnectionPointerWorld != null) {
++                        val sourceStroke = state.strokes.find { it.id == lineConnectionSourceNodeId }
++                        if (sourceStroke != null) {
++                            val startAnchor = MindmapEngine.calculateBoundaryIntersection(sourceStroke.bounds, lineConnectionPointerWorld!!)
++                            drawLine(
++                                color = Color(0xFF2563EB),
++                                start = startAnchor,
++                                end = lineConnectionPointerWorld!!,
++                                strokeWidth = 3f / canvasScale.coerceAtLeast(0.5f),
++                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f / canvasScale.coerceAtLeast(0.5f), 8f / canvasScale.coerceAtLeast(0.5f))),
++                                cap = StrokeCap.Round
++                            )
++                            drawCircle(
++                                color = Color(0xFF2563EB),
++                                radius = 6f / canvasScale.coerceAtLeast(0.5f),
++                                center = startAnchor
++                            )
++                            drawCircle(
++                                color = Color(0xFF3B82F6),
++                                radius = 6f / canvasScale.coerceAtLeast(0.5f),
++                                center = lineConnectionPointerWorld!!
++                            )
++                        }
++                    }
++
++                    if (state.selectedStrokeIds.size == 1) {
++                        val selId = state.selectedStrokeIds.first()
++                        val selStroke = state.strokes.find { it.id == selId }
++                        if (selStroke != null && selStroke.strokeType == StrokeType.CONNECTOR && selStroke.points.size >= 2) {
++                            val p1 = selStroke.points.first()
++                            val p2 = selStroke.points.last()
++                            val mid = Offset((p1.x + p2.x) / 2f, (p1.y + p2.y) / 2f)
++                            val handleR = 7f / canvasScale.coerceAtLeast(0.5f)
++                            drawCircle(Color(0xFF2563EB), radius = handleR, center = p1)
++                            drawCircle(Color.White, radius = handleR - 2f / canvasScale.coerceAtLeast(0.5f), center = p1)
++                            drawCircle(Color(0xFF2563EB), radius = handleR, center = p2)
++                            drawCircle(Color.White, radius = handleR - 2f / canvasScale.coerceAtLeast(0.5f), center = p2)
++                            drawCircle(Color(0xFF2563EB), radius = handleR, center = mid)
++                            drawCircle(Color.White, radius = handleR - 2f / canvasScale.coerceAtLeast(0.5f), center = mid)
++                        }
++                    }
+                 }
+                 val eraserCursor = eraserSession.cursor
+                 if (state.currentTool == WhiteboardTool.ERASER && eraserCursor != null) {
+@@ -2917,8 +3143,10 @@ fun CanvasScreen(
+                 }
+             }
+         }
++
+         }
+ 
++
+         AvitriSphareWhiteboardChrome(
+             state = state,
+             viewModel = viewModel,
+@@ -2935,6 +3163,7 @@ fun CanvasScreen(
+                 iwbPickerLauncher.launch(arrayOf("*/*"))
+             },
+             onLive = { showLiveCollabDialog = true },
++            onOpenMindmapTemplates = { showMindmapTemplateDialog = !showMindmapTemplateDialog },
+             onHelp = { showHelpDialog = true },
+             onClear = { showClearDialog = true },
+             onRename = { showEditTitleDialog = true },
+@@ -3096,78 +3325,313 @@ fun CanvasScreen(
+             }
+         )
+ 
+-        // Floating Utility Panels (Timer, Stopwatch, Calculator, Periodic Table)
+-        // Dynamically rendered in toolZOrder so whichever tool is clicked appears at the top
+-        toolZOrder.forEach { toolKind ->
+-            when (toolKind) {
+-                UtilityToolKind.TIMER -> {
+-                    if (timerState.isVisible) {
+-                        TimerFloatingPanel(
+-                            state = timerState,
+-                            onStateChange = { timerState = it },
+-                            onBringToFront = { bringToolToFront(UtilityToolKind.TIMER) }
+-                        )
+-                    }
++        // Mind Map Node & Connector Floating Controls (Layout, Connect, Adders)
++        if (lineConnectionSourceNodeId == null && state.selectedStrokeIds.size == 1) {
++            val selectedId = state.selectedStrokeIds.first()
++            val selectedStroke = state.strokes.find { it.id == selectedId }
++            if (selectedStroke != null && selectedStroke.strokeType == StrokeType.CONNECTOR && selectedStroke.points.size >= 2) {
++                val p1 = selectedStroke.points.first()
++                val p2 = selectedStroke.points.last()
++                val midX = (p1.x + p2.x) / 2f
++                val midY = (p1.y + p2.y) / 2f
++                val screenMidX = canvasOffsetX + (midX * canvasScale)
++                val screenMidY = canvasOffsetY + (midY * canvasScale)
++
++                val connectorAbove = screenMidY >= 180f
++                val connectorY = if (connectorAbove) {
++                    (screenMidY - 60f).roundToInt().coerceAtLeast(80)
++                } else {
++                    (screenMidY + 24f).roundToInt()
+                 }
+-                UtilityToolKind.STOPWATCH -> {
+-                    if (stopwatchState.isVisible) {
+-                        StopwatchFloatingPanel(
+-                            state = stopwatchState,
+-                            onStateChange = { stopwatchState = it },
+-                            onBringToFront = { bringToolToFront(UtilityToolKind.STOPWATCH) }
+-                        )
+-                    }
++                val maxConnectorX = if (canvasSize.width > 260f) (canvasSize.width - 260f).roundToInt() else 16
++                val connectorX = (screenMidX - 110f).roundToInt().coerceIn(16, maxConnectorX)
++
++                Box(
++                    modifier = Modifier
++                        .offset {
++                            IntOffset(connectorX, connectorY)
++                        }
++                ) {
++                    MindmapConnectorToolbar(
++                        connector = selectedStroke,
++                        onToggleStyle = { viewModel.toggleSingleConnectorStyle(selectedStroke.id) },
++                        onColorChanged = { viewModel.setConnectorColor(selectedStroke.id, it) },
++                        onWidthChanged = { viewModel.setConnectorWidth(selectedStroke.id, it) },
++                        onDelete = { viewModel.deleteSingleConnector(selectedStroke.id) }
++                    )
+                 }
+-                UtilityToolKind.CALCULATOR -> {
+-                    if (calculatorState.isVisible) {
+-                        CalculatorFloatingPanel(
+-                            state = calculatorState,
+-                            onStateChange = { calculatorState = it },
+-                            onBringToFront = { bringToolToFront(UtilityToolKind.CALCULATOR) }
+-                        )
+-                    }
++            } else if (selectedStroke != null && isMindMapNode(selectedStroke) && selectedStroke.points.size >= 2) {
++                val selectedNode = selectedStroke
++                val minX = minOf(selectedNode.points[0].x, selectedNode.points[1].x)
++                val minY = minOf(selectedNode.points[0].y, selectedNode.points[1].y)
++                val maxX = maxOf(selectedNode.points[0].x, selectedNode.points[1].x)
++                val maxY = maxOf(selectedNode.points[0].y, selectedNode.points[1].y)
++
++                val screenLeft = canvasOffsetX + (minX * canvasScale)
++                val screenTop = canvasOffsetY + (minY * canvasScale)
++                val screenRight = canvasOffsetX + (maxX * canvasScale)
++                val screenBottom = canvasOffsetY + (maxY * canvasScale)
++                val screenWidth = screenRight - screenLeft
++                val screenHeight = screenBottom - screenTop
++                val screenCenterX = screenLeft + (screenWidth / 2f)
++                val screenCenterY = screenTop + (screenHeight / 2f)
++
++                // Interactive (+) Branch Adders
++                // Top adder (+)
++                Box(
++                    modifier = Modifier
++                        .offset {
++                            IntOffset(
++                                (screenCenterX - 14f).roundToInt(),
++                                (screenTop - 40f).roundToInt()
++                            )
++                        }
++                        .size(28.dp)
++                        .clip(CircleShape)
++                        .background(Color(0xFF2563EB))
++                        .clickable {
++                            viewModel.addMindMapBranchDirection(selectedNode.id, "top")
++                        },
++                    contentAlignment = Alignment.Center
++                ) {
++                    Icon(
++                        Icons.Default.Add,
++                        contentDescription = "Add Top Branch",
++                        tint = Color.White,
++                        modifier = Modifier.size(18.dp)
++                    )
+                 }
+-                UtilityToolKind.PERIODIC_TABLE -> {
+-                    if (periodicTableState.isVisible) {
+-                        PeriodicTableFloatingPanel(
+-                            state = periodicTableState,
+-                            onStateChange = { periodicTableState = it },
+-                            onBringToFront = { bringToolToFront(UtilityToolKind.PERIODIC_TABLE) }
+-                        )
+-                    }
++
++                // Right adder (+)
++                Box(
++                    modifier = Modifier
++                        .offset {
++                            IntOffset(
++                                (screenRight + 12f).roundToInt(),
++                                (screenCenterY - 14f).roundToInt()
++                            )
++                        }
++                        .size(28.dp)
++                        .clip(CircleShape)
++                        .background(Color(0xFF2563EB))
++                        .clickable {
++                            viewModel.addMindMapBranchDirection(selectedNode.id, "right")
++                        },
++                    contentAlignment = Alignment.Center
++                ) {
++                    Icon(
++                        Icons.Default.Add,
++                        contentDescription = "Add Right Branch",
++                        tint = Color.White,
++                        modifier = Modifier.size(18.dp)
++                    )
+                 }
+-            }
+-        }
+ 
+-        val openDocument = state.document
+-        if (openDocument != null) {
+-            Surface(
+-                modifier = Modifier
+-                    .align(Alignment.TopCenter)
+-                    .statusBarsPadding()
+-                    .padding(top = 8.dp),
+-                shape = RoundedCornerShape(16.dp),
+-                color = Color(0xF21C2130),
+-                shadowElevation = 8.dp
+-            ) {
+-                Row(
+-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+-                    verticalAlignment = Alignment.CenterVertically
++                // Bottom adder (+)
++                Box(
++                    modifier = Modifier
++                        .offset {
++                            IntOffset(
++                                (screenCenterX - 14f).roundToInt(),
++                                (screenBottom + 12f).roundToInt()
++                            )
++                        }
++                        .size(28.dp)
++                        .clip(CircleShape)
++                        .background(Color(0xFF2563EB))
++                        .clickable {
++                            viewModel.addMindMapBranchDirection(selectedNode.id, "bottom")
++                        },
++                    contentAlignment = Alignment.Center
+                 ) {
+-                    TextButton(onClick = {
+-                        viewModel.selectPage(pageStep(state.pageIndex, state.pageCount, -1))
+-                    }) { Text("Prev", color = Color.White) }
+-                    Text(
+-                        "${openDocument.name}  ${state.pageIndex + 1}/${state.pageCount}",
+-                        color = Color.White,
+-                        fontSize = 13.sp,
+-                        maxLines = 1
++                    Icon(
++                        Icons.Default.Add,
++                        contentDescription = "Add Bottom Branch",
++                        tint = Color.White,
++                        modifier = Modifier.size(18.dp)
+                     )
+-                    TextButton(onClick = {
+-                        viewModel.selectPage(pageStep(state.pageIndex, state.pageCount, 1))
+-                    }) { Text("Next", color = Color.White) }
++                }
+ 
+-                    if (openDocument.kind == DocumentKind.PDF) {
++                // Left adder (+)
++                Box(
++                    modifier = Modifier
++                        .offset {
++                            IntOffset(
++                                (screenLeft - 40f).roundToInt(),
++                                (screenCenterY - 14f).roundToInt()
++                            )
++                        }
++                        .size(28.dp)
++                        .clip(CircleShape)
++                        .background(Color(0xFF2563EB))
++                        .clickable {
++                            viewModel.addMindMapBranchDirection(selectedNode.id, "left")
++                        },
++                    contentAlignment = Alignment.Center
++                ) {
++                    Icon(
++                        Icons.Default.Add,
++                        contentDescription = "Add Left Branch",
++                        tint = Color.White,
++                        modifier = Modifier.size(18.dp)
++                    )
++                }
++
++                // Floating Node Capsule Toolbar (Interact, Layout, Connect, Shape, Outline, Fill, Pen, Type, Image, React, Lock, Delete)
++                val density = LocalDensity.current
++                val safeMarginPx = with(density) { 16.dp.toPx() }
++                val safeTopMarginPx = with(density) { 76.dp.toPx() }
++                val safeBottomMarginPx = with(density) { 160.dp.toPx() } // clearance for dock + page thumbnails
++
++                val toolbarHeightDp = 60.dp
++                val toolbarHeightPx = with(density) { (toolbarHeightDp + 8.dp).toPx() }
++
++                // Available viewport width minus safe horizontal margins
++                val availableWidthPx = (canvasSize.width - (safeMarginPx * 2f)).coerceAtLeast(with(density) { 200.dp.toPx() })
++                val maxToolbarWidthDp = with(density) { availableWidthPx.toDp() }
++                val targetToolbarWidthDp = minOf(maxToolbarWidthDp, 680.dp)
++                val targetToolbarWidthPx = with(density) { targetToolbarWidthDp.toPx() }
++
++                // Keep toolbar within viewport horizontally, centered on node when possible
++                val desiredLeftPx = screenCenterX - (targetToolbarWidthPx / 2f)
++                val minToolbarX = safeMarginPx
++                val maxToolbarX = (canvasSize.width - safeMarginPx - targetToolbarWidthPx).coerceAtLeast(minToolbarX)
++                val toolbarX = desiredLeftPx.coerceIn(minToolbarX, maxToolbarX).roundToInt()
++
++                // Keep toolbar within viewport vertically, preventing overlap with chrome
++                val gapPx = with(density) { 12.dp.toPx() }
++                val yAbove = screenTop - toolbarHeightPx - gapPx
++                val yBelow = screenBottom + with(density) { 44.dp.toPx() } // clearance for bottom adder button (28dp + margin)
++
++                val toolbarY = if (yAbove >= safeTopMarginPx) {
++                    yAbove.roundToInt()
++                } else if (yBelow + toolbarHeightPx <= canvasSize.height - safeBottomMarginPx) {
++                    yBelow.roundToInt()
++                } else {
++                    if (screenTop > safeTopMarginPx + toolbarHeightPx) {
++                        yAbove.roundToInt().coerceAtLeast(safeTopMarginPx.roundToInt())
++                    } else {
++                        (canvasSize.height - safeBottomMarginPx - toolbarHeightPx).roundToInt().coerceAtLeast(safeTopMarginPx.roundToInt())
++                    }
++                }
++
++                Box(
++                    modifier = Modifier
++                        .offset {
++                            IntOffset(toolbarX, toolbarY)
++                        }
++                        .widthIn(max = targetToolbarWidthDp)
++                ) {
++                    MindmapNodeToolbar(
++                        node = selectedNode,
++                        maxAllowedWidth = targetToolbarWidthDp,
++                        isLineConnecting = lineConnectionSourceNodeId == selectedNode.id,
++                        onStartLineConnection = {
++                            if (lineConnectionSourceNodeId == selectedNode.id) {
++                                lineConnectionSourceNodeId = null
++                                lineConnectionPointerWorld = null
++                            } else {
++                                lineConnectionSourceNodeId = selectedNode.id
++                                lineConnectionPointerWorld = selectedNode.bounds.center
++                                Toast.makeText(context, "Tap another box to connect, or tap canvas to cancel", Toast.LENGTH_SHORT).show()
++                            }
++                        },
++                        onStartWriting = {
++                            viewModel.startNodeWriting(selectedNode.id)
++                            viewModel.setTool(state.inkTool)
++                            Toast.makeText(context, "Pen active: write directly inside node", Toast.LENGTH_SHORT).show()
++                        },
++                        onStartTyping = {
++                            editingNodeStrokeId = selectedNode.id
++                            editingNodeText = selectedNode.text ?: ""
++                        },
++                        onFillColorChanged = { color ->
++                            viewModel.setNodeFillColor(selectedNode.id, color)
++                        },
++                        onOutlineColorChanged = { color ->
++                            viewModel.setNodeOutlineColor(selectedNode.id, color)
++                        },
++                        onOutlineWidthChanged = { width ->
++                            viewModel.setNodeOutlineWidth(selectedNode.id, width)
++                        },
++                        onShapeChanged = { newShape ->
++                            viewModel.setNodeShape(selectedNode.id, newShape)
++                        },
++                        onWireStyleToggle = {
++                            viewModel.toggleConnectorWireStyle(selectedNode.id)
++                        },
++                        onLayoutToggle = { isHorizontal ->
++                            viewModel.applyMindmapLayout(selectedNode.id, isHorizontal)
++                        },
++                        onLayerReorder = { action ->
++                            viewModel.reorderNodeLayer(selectedNode.id, action)
++                        },
++                        onLockToggle = {
++                            viewModel.toggleLockSelection(selectedNode.id)
++                        },
++                        onSelectWholeDiagram = {
++                            viewModel.selectConnectedMindmap(selectedNode.id)
++                        },
++                        onInsertImage = {
++                            viewModel.targetMindmapBoxId = selectedNode.id
++                            imagePickerLauncher.launch("image/*")
++                        },
++                        onOpenStickers = {
++                            viewModel.targetMindmapBoxId = selectedNode.id
++                            showStickerEmojiDialog = true
++                        },
++                        onDelete = {
++                            viewModel.deleteSelectedStrokes()
++                        }
++                    )
++                }
++            }
++        }
++
++
++        // Floating Utility Panels (Timer, Stopwatch, Calculator, Periodic Table)
++        CanvasUtilityPanelsHost(
++            toolZOrder = toolZOrder,
++            timerState = timerState,
++            onTimerStateChange = { timerState = it },
++            stopwatchState = stopwatchState,
++            onStopwatchStateChange = { stopwatchState = it },
++            calculatorState = calculatorState,
++            onCalculatorStateChange = { calculatorState = it },
++            periodicTableState = periodicTableState,
++            onPeriodicTableStateChange = { periodicTableState = it },
++            onBringToFront = { bringToolToFront(it) }
++        )
++
++        val openDocument = state.document
++        if (openDocument != null) {
++            Surface(
++                modifier = Modifier
++                    .align(Alignment.TopCenter)
++                    .statusBarsPadding()
++                    .padding(top = 8.dp),
++                shape = RoundedCornerShape(16.dp),
++                color = Color(0xF21C2130),
++                shadowElevation = 8.dp
++            ) {
++                Row(
++                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
++                    verticalAlignment = Alignment.CenterVertically
++                ) {
++                    TextButton(onClick = {
++                        viewModel.selectPage(pageStep(state.pageIndex, state.pageCount, -1))
++                    }) { Text("Prev", color = Color.White) }
++                    Text(
++                        "${openDocument.name}  ${state.pageIndex + 1}/${state.pageCount}",
++                        color = Color.White,
++                        fontSize = 13.sp,
++                        maxLines = 1
++                    )
++                    TextButton(onClick = {
++                        viewModel.selectPage(pageStep(state.pageIndex, state.pageCount, 1))
++                    }) { Text("Next", color = Color.White) }
++
++                    if (openDocument.kind == DocumentKind.PDF) {
+                         if (state.isPdfOcrActive) {
+                             Row(
+                                 verticalAlignment = Alignment.CenterVertically,
+@@ -3770,196 +4234,25 @@ fun CanvasScreen(
+             }
+         }
+ 
+-        // 5. Left Floating Sidebar (Exact Match to User's Image 1)
+-        AnimatedVisibility(
++        // 5. Left Floating Sidebar
++        CanvasSidebarMenu(
+             visible = showSidebar,
+-            enter = fadeIn() + slideInHorizontally { -it },
+-            exit = fadeOut() + slideOutHorizontally { -it }
+-        ) {
+-            Box(
+-                modifier = Modifier
+-                    .fillMaxSize()
+-                    .background(Color(0x40000000))
+-                    .clickable { showSidebar = false }
+-            ) {
+-                Surface(
+-                    shape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
+-                    color = Color.White,
+-                    shadowElevation = 16.dp,
+-                    modifier = Modifier
+-                        .width(260.dp)
+-                        .fillMaxHeight()
+-                        .statusBarsPadding()
+-                        .clickable(enabled = false) {}
+-                ) {
+-                    Column(
+-                        modifier = Modifier
+-                            .fillMaxSize()
+-                            .padding(12.dp)
+-                            .verticalScroll(rememberScrollState())
+-                    ) {
+-                        // Sidebar Header
+-                        Row(
+-                            modifier = Modifier.fillMaxWidth(),
+-                            horizontalArrangement = Arrangement.SpaceBetween,
+-                            verticalAlignment = Alignment.CenterVertically
+-                        ) {
+-                            Column {
+-                                Text(
+-                                    "AvitriSphare",
+-                                    fontSize = 18.sp,
+-                                    fontWeight = FontWeight.Bold,
+-                                    color = Color(0xFF1F2937)
+-                                )
+-                                Text(
+-                                    stringResource(R.string.app_subtitle),
+-                                    fontSize = 12.sp,
+-                                    fontWeight = FontWeight.Medium,
+-                                    color = Color(0xFF6B7280)
+-                                )
+-                            }
+-                            IconButton(
+-                                onClick = { showSidebar = false },
+-                                modifier = Modifier.size(28.dp)
+-                            ) {
+-                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), tint = Color(0xFF6B7280))
+-                            }
+-                        }
+-
+-                        Spacer(modifier = Modifier.height(16.dp))
+-
+-                        // 0. Profile
+-                        SidebarMenuItem(
+-                            icon = Icons.Default.Person,
+-                            label = stringResource(R.string.tool_profile),
+-                            onClick = {
+-                                showSidebar = false
+-                                showProfileDialog = true
+-                            }
+-                        )
+-
+-                        SidebarMenuItem(
+-                            icon = Icons.Default.Edit,
+-                            label = stringResource(R.string.menu_rename_board),
+-                            onClick = {
+-                                showSidebar = false
+-                                showEditTitleDialog = true
+-                            }
+-                        )
+-
+-                        // 1. Open (Ctrl+O)
+-                        SidebarMenuItem(
+-                            icon = Icons.Default.FolderOpen,
+-                            label = stringResource(R.string.menu_open),
+-                            shortcut = "Ctrl+O",
+-                            onClick = {
+-                                showSidebar = false
+-                                onNavigateBack()
+-                            }
+-                        )
+-
+-                        // 2. Export lesson (PDF, PNG ZIP, IWB)
+-                        SidebarMenuItem(
+-                            icon = Icons.Default.IosShare,
+-                            label = stringResource(R.string.menu_export_lesson),
+-                            shortcut = "Ctrl+Shift+E",
+-                            isSelected = true,
+-                            onClick = {
+-                                showSidebar = false
+-                                exportResult = null
+-                                showExportLessonDialog = true
+-                            }
+-                        )
+-
+-                        // 3. Open GYOASH Lesson (.iwb)...
+-                        SidebarMenuItem(
+-                            icon = Icons.Default.FolderOpen,
+-                            label = stringResource(R.string.menu_open_iwb),
+-                            onClick = {
+-                                showSidebar = false
+-                                iwbPickerLauncher.launch(arrayOf("*/*"))
+-                            }
+-                        )
+-
+-                        // 4. Live collaboration...
+-                        SidebarMenuItem(
+-                            icon = Icons.Default.Group,
+-                            label = stringResource(R.string.menu_live_collab),
+-                            onClick = {
+-                                showSidebar = false
+-                                showLiveCollabDialog = true
+-                            }
+-                        )
+-
+-                        Divider(
+-                            color = Color(0xFFF3F4F6),
+-                            thickness = 1.dp,
+-                            modifier = Modifier.padding(vertical = 8.dp)
+-                        )
+-
+-                        // 5. Command palette (Ctrl+/)
+-                        SidebarMenuItem(
+-                            icon = Icons.Default.Bolt,
+-                            label = stringResource(R.string.menu_command_palette),
+-                            shortcut = "Ctrl+/",
+-                            onClick = {
+-                                showSidebar = false
+-                                showCommandPalette = true
+-                            }
+-                        )
+-
+-                        // 6. Find on canvas (Ctrl+F)
+-                        SidebarMenuItem(
+-                            icon = Icons.Default.Search,
+-                            label = stringResource(R.string.menu_find_on_canvas),
+-                            shortcut = "Ctrl+F",
+-                            onClick = {
+-                                showSidebar = false
+-                                showCommandPalette = true
+-                            }
+-                        )
+-
+-                        // 7. Help (?)
+-                        SidebarMenuItem(
+-                            icon = Icons.Default.HelpOutline,
+-                            label = stringResource(R.string.menu_help),
+-                            shortcut = "?",
+-                            onClick = {
+-                                showSidebar = false
+-                                showHelpDialog = true
+-                            }
+-                        )
+-
+-                        // 8. Reset the canvas
+-                        SidebarMenuItem(
+-                            icon = Icons.Default.LayersClear,
+-                            label = stringResource(R.string.menu_reset_canvas),
+-                            onClick = {
+-                                showSidebar = false
+-                                showClearDialog = true
+-                            }
+-                        )
+-
+-                        Divider(
+-                            color = Color(0xFFF3F4F6),
+-                            thickness = 1.dp,
+-                            modifier = Modifier.padding(vertical = 8.dp)
+-                        )
+-
+-                        // 9. Change Language (English, Hindi, Marathi)
+-                        SidebarMenuItem(
+-                            icon = Icons.Default.Language,
+-                            label = stringResource(R.string.change_language),
+-                            shortcut = currentLanguage.nativeName,
+-                            onClick = {
+-                                showSidebar = false
+-                                showLanguageDialog = true
+-                            }
+-                        )
+-                    }
+-                }
+-            }
+-        }
++            onDismiss = { showSidebar = false },
++            onRenameBoard = { showEditTitleDialog = true },
++            onOpen = { onNavigateBack() },
++            onExportLesson = {
++                exportResult = null
++                showExportLessonDialog = true
++            },
++            onOpenIwb = { iwbPickerLauncher.launch(arrayOf("*/*")) },
++            onMindmapTemplates = { showMindmapTemplateDialog = true },
++            onCommandPalette = { showCommandPalette = true },
++            onFindOnCanvas = { showCommandPalette = true },
++            onHelp = { showHelpDialog = true },
++            onResetCanvas = { showClearDialog = true },
++            currentLanguageName = currentLanguage.nativeName,
++            onChangeLanguage = { showLanguageDialog = true }
++        )
+ 
+         if (state.isLoading) {
+             CircularProgressIndicator(
+@@ -3969,446 +4262,140 @@ fun CanvasScreen(
+         }
+     }
+ 
+-    // 6. Live Collaboration Modal Dialog (Exact Match to User's Images 2 & 3)
++    // 6. Live Collaboration Modal Dialog
+     if (showLiveCollabDialog) {
+-        Dialog(onDismissRequest = { showLiveCollabDialog = false }) {
+-            Surface(
+-                shape = RoundedCornerShape(16.dp),
+-                color = Color.White,
+-                shadowElevation = 16.dp,
+-                modifier = Modifier
+-                    .fillMaxWidth()
+-                    .padding(horizontal = 8.dp)
+-            ) {
+-                Column(
+-                    modifier = Modifier
+-                        .padding(24.dp)
+-                        .verticalScroll(rememberScrollState()),
+-                    horizontalAlignment = if (!state.isLiveCollabActive) Alignment.CenterHorizontally else Alignment.Start
+-                ) {
+-                    // Title: Live collaboration
+-                    Text(
+-                        text = "Live collaboration",
+-                        fontSize = 20.sp,
+-                        fontWeight = FontWeight.Bold,
+-                        color = Color(0xFF5B5BD6)
+-                    )
+-
+-                    Spacer(modifier = Modifier.height(16.dp))
+-
+-                    if (!state.isLiveCollabActive) {
+-                        // Image 2 State: Before Session Started
+-                        Text(
+-                            text = "Invite people to collaborate on your drawing.",
+-                            fontSize = 14.sp,
+-                            color = Color(0xFF1F2937),
+-                            fontWeight = FontWeight.Medium
+-                        )
+-
+-                        Spacer(modifier = Modifier.height(12.dp))
+-
+-                        Text(
+-                            text = "Don't worry, the session is end-to-end encrypted, and fully private. Not even our server can see what you draw.",
+-                            fontSize = 13.sp,
+-                            color = Color(0xFF4B5563),
+-                            lineHeight = 18.sp,
+-                            modifier = Modifier.padding(horizontal = 4.dp)
+-                        )
+-
+-                        Spacer(modifier = Modifier.height(24.dp))
+-
+-                        // Start Session Button
+-                        Button(
+-                            onClick = { viewModel.startLiveSession() },
+-                            shape = RoundedCornerShape(12.dp),
+-                            colors = ButtonDefaults.buttonColors(
+-                                containerColor = Color(0xFF5B5BD6),
+-                                contentColor = Color.White
+-                            ),
+-                            modifier = Modifier
+-                                .fillMaxWidth()
+-                                .height(48.dp)
+-                        ) {
+-                            Icon(
+-                                Icons.Default.PlayArrow,
+-                                contentDescription = null,
+-                                modifier = Modifier.size(20.dp)
+-                            )
+-                            Spacer(modifier = Modifier.width(8.dp))
+-                            Text(
+-                                "Start session",
+-                                fontSize = 15.sp,
+-                                fontWeight = FontWeight.SemiBold
+-                            )
+-                        }
+-                    } else {
+-                        // Image 3 State: Active Live Session
+-                        // 1. Your name
+-                        Text(
+-                            text = "Your name",
+-                            fontSize = 13.sp,
+-                            fontWeight = FontWeight.Medium,
+-                            color = Color(0xFF1F2937)
+-                        )
+-                        Spacer(modifier = Modifier.height(6.dp))
+-                        OutlinedTextField(
+-                            value = state.userName,
+-                            onValueChange = { viewModel.setUserName(it) },
+-                            singleLine = true,
+-                            shape = RoundedCornerShape(10.dp),
+-                            colors = OutlinedTextFieldDefaults.colors(
+-                                focusedContainerColor = Color(0xFFF3F4F6),
+-                                unfocusedContainerColor = Color(0xFFF3F4F6),
+-                                focusedBorderColor = Color(0xFF5B5BD6),
+-                                unfocusedBorderColor = Color.Transparent
+-                            ),
+-                            modifier = Modifier.fillMaxWidth()
+-                        )
+-
+-                        Spacer(modifier = Modifier.height(16.dp))
+-
+-                        // 2. Link with Copy button
+-                        val roomUrl = "https://avitrisphere.app/#room=${state.collabRoomId}"
+-                        Text(
+-                            text = "Link",
+-                            fontSize = 13.sp,
+-                            fontWeight = FontWeight.Medium,
+-                            color = Color(0xFF1F2937)
+-                        )
+-                        Spacer(modifier = Modifier.height(6.dp))
+-                        Row(
+-                            verticalAlignment = Alignment.CenterVertically,
+-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+-                            modifier = Modifier.fillMaxWidth()
+-                        ) {
+-                            OutlinedTextField(
+-                                value = roomUrl,
+-                                onValueChange = {},
+-                                readOnly = true,
+-                                singleLine = true,
+-                                shape = RoundedCornerShape(10.dp),
+-                                colors = OutlinedTextFieldDefaults.colors(
+-                                    focusedContainerColor = Color(0xFFF9FAFB),
+-                                    unfocusedContainerColor = Color(0xFFF9FAFB),
+-                                    focusedBorderColor = Color(0xFFD1D5DB),
+-                                    unfocusedBorderColor = Color(0xFFE5E7EB)
+-                                ),
+-                                modifier = Modifier.weight(1f)
+-                            )
+-                            Button(
+-                                onClick = {
+-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+-                                    val clip = ClipData.newPlainText("AvitriSphare Live Session", roomUrl)
+-                                    clipboard.setPrimaryClip(clip)
+-                                    Toast.makeText(context, "Link copied to clipboard!", Toast.LENGTH_SHORT).show()
+-                                },
+-                                shape = RoundedCornerShape(10.dp),
+-                                colors = ButtonDefaults.buttonColors(
+-                                    containerColor = Color(0xFF5B5BD6),
+-                                    contentColor = Color.White
+-                                ),
+-                                modifier = Modifier.height(52.dp)
+-                            ) {
+-                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+-                                Spacer(modifier = Modifier.width(6.dp))
+-                                Text("Copy link", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+-                            }
+-                        }
+-
+-                        Spacer(modifier = Modifier.height(18.dp))
+-
+-                        // 3. QR Code Preview
+-                        val qrBitmap = remember(roomUrl) { QRCodeHelper.generateQRCodeBitmap(roomUrl, 240) }
+-                        Box(
+-                            modifier = Modifier
+-                                .fillMaxWidth()
+-                                .clip(RoundedCornerShape(12.dp))
+-                                .background(Color(0xFFF9FAFB))
+-                                .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp))
+-                                .padding(16.dp),
+-                            contentAlignment = Alignment.Center
+-                        ) {
+-                            Image(
+-                                bitmap = qrBitmap,
+-                                contentDescription = "Room QR Code",
+-                                modifier = Modifier.size(160.dp)
+-                            )
+-                        }
+-
+-                        Spacer(modifier = Modifier.height(16.dp))
+-
+-                        // 4. Privacy & Disconnect note
+-                        Text(
+-                            text = "ðŸ”’ Don't worry, the session is end-to-end encrypted, and fully private. Not even our server can see what you draw.",
+-                            fontSize = 12.sp,
+-                            color = Color(0xFF4B5563),
+-                            lineHeight = 16.sp
+-                        )
+-
+-                        Spacer(modifier = Modifier.height(8.dp))
+-
+-                        Text(
+-                            text = "Stopping the session will disconnect you from the room, but you'll be able to continue working with the scene, locally. Note that this won't affect other people, and they'll still be able to collaborate on their version.",
+-                            fontSize = 11.sp,
+-                            color = Color(0xFF6B7280),
+-                            lineHeight = 15.sp
+-                        )
+-
+-                        Spacer(modifier = Modifier.height(16.dp))
++        LiveCollaborationDialog(
++            context = context,
++            isActive = state.isLiveCollabActive,
++            userName = state.userName,
++            collabRoomId = state.collabRoomId,
++            onStartSession = { viewModel.startLiveSession() },
++            onStopSession = { viewModel.stopLiveSession() },
++            onUserNameChange = { viewModel.setUserName(it) },
++            onDismiss = { showLiveCollabDialog = false }
++        )
++    }
+ 
+-                        // 5. Stop session button
+-                        Button(
+-                            onClick = { viewModel.stopLiveSession() },
+-                            shape = RoundedCornerShape(10.dp),
+-                            colors = ButtonDefaults.buttonColors(
+-                                containerColor = Color(0xFFFEE2E2),
+-                                contentColor = Color(0xFFDC2626)
+-                            ),
+-                            modifier = Modifier.fillMaxWidth()
+-                        ) {
+-                            Text("Stop session", fontWeight = FontWeight.Bold)
+-                        }
+-                    }
++    // Mind Map Template Picker Dialog (Image 1)
++    if (showMindmapTemplateDialog) {
++        MindmapTemplateDialog(
++            onDismiss = { showMindmapTemplateDialog = false },
++            onSelectTemplate = { kind ->
++                showMindmapTemplateDialog = false
++                val screenCenter = if (canvasSize.width > 0f && canvasSize.height > 0f) {
++                    Offset(canvasSize.width / 2f, canvasSize.height / 2f)
++                } else {
++                    Offset(540f, 400f)
+                 }
++                val center = CanvasTransform.screenToWorld(
++                    screenPoint = screenCenter,
++                    scale = canvasScale,
++                    offset = Offset(canvasOffsetX, canvasOffsetY)
++                )
++                viewModel.createMindMapTemplate(
++                    kind = kind,
++                    center = center,
++                    viewportWidth = canvasSize.width,
++                    viewportHeight = canvasSize.height
++                )
+             }
+-        }
++        )
+     }
+ 
+     // Command Palette Dialog
+     if (showCommandPalette) {
+-        Dialog(onDismissRequest = { showCommandPalette = false }) {
+-            Surface(
+-                shape = RoundedCornerShape(14.dp),
+-                color = Color.White,
+-                shadowElevation = 12.dp,
+-                modifier = Modifier
+-                    .fillMaxWidth()
+-                    .padding(8.dp)
+-            ) {
+-                Column(modifier = Modifier.padding(16.dp)) {
+-                    OutlinedTextField(
+-                        value = commandSearchQuery,
+-                        onValueChange = { commandSearchQuery = it },
+-                        placeholder = { Text("Search tools & commands...") },
+-                        singleLine = true,
+-                        leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF9CA3AF)) },
+-                        colors = OutlinedTextFieldDefaults.colors(
+-                            focusedContainerColor = Color(0xFFF9FAFB),
+-                            unfocusedContainerColor = Color(0xFFF9FAFB),
+-                            focusedBorderColor = Color(0xFF5B5BD6),
+-                            unfocusedBorderColor = Color(0xFFE5E7EB)
+-                        ),
+-                        modifier = Modifier.fillMaxWidth()
+-                    )
+-                    Spacer(modifier = Modifier.height(12.dp))
+-                    listOf(
+-                        "Start Live Collaboration" to { showCommandPalette = false; showLiveCollabDialog = true },
+-                        "Insert Image" to { showCommandPalette = false; imagePickerLauncher.launch("image/*") },
+-                        "Draw Rectangle" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.RECTANGLE) },
+-                        "Draw Diamond" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.DIAMOND) },
+-                        "Draw Arrow" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.ARROW) },
+-                        "Toggle Laser Pointer" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.LASER) },
+-                        "Place ruler" to { showCommandPalette = false; placeMathTool(MathToolKind.RULER, canvasCenter()) },
+-                        "Place compass" to { showCommandPalette = false; placeMathTool(MathToolKind.COMPASS, canvasCenter()) },
+-                        "Place protractor" to { showCommandPalette = false; placeMathTool(MathToolKind.PROTRACTOR, canvasCenter()) },
+-                        "Place set square" to { showCommandPalette = false; placeMathTool(MathToolKind.SET_SQUARE, canvasCenter()) },
+-                        "Place triangle" to { showCommandPalette = false; placeMathTool(MathToolKind.TRIANGLE, canvasCenter()) },
+-                        "Flowchart: 3 Connected Nodes" to { showCommandPalette = false; viewModel.createThreeNodeFlowchart(canvasCenter()) },
+-                        "Flowchart: Process Node" to { showCommandPalette = false; viewModel.addFlowchartNode("process", canvasCenter()) },
+-                        "Flowchart: Decision Node" to { showCommandPalette = false; viewModel.addFlowchartNode("decision", canvasCenter()) },
+-                        "Flowchart: Terminator Node" to { showCommandPalette = false; viewModel.addFlowchartNode("terminator", canvasCenter()) },
+-                        "Stickers & Emoji" to { showCommandPalette = false; showStickerEmojiDialog = true },
+-                        "Countdown Timer" to { showCommandPalette = false; timerState = timerState.copy(isVisible = true); bringToolToFront(UtilityToolKind.TIMER) },
+-                        "Stopwatch" to { showCommandPalette = false; stopwatchState = stopwatchState.copy(isVisible = true); bringToolToFront(UtilityToolKind.STOPWATCH) },
+-                        "Scientific Calculator" to { showCommandPalette = false; calculatorState = calculatorState.copy(isVisible = true); bringToolToFront(UtilityToolKind.CALCULATOR) },
+-                        "Periodic Table" to { showCommandPalette = false; periodicTableState = periodicTableState.copy(isVisible = true); bringToolToFront(UtilityToolKind.PERIODIC_TABLE) },
+-                        "Graph paper" to { showCommandPalette = false; viewModel.toggleGraphPaper() },
+-                        "Standard eraser" to { showCommandPalette = false; viewModel.setEraserMode(EraserMode.STANDARD) },
+-                        "Smart eraser" to { showCommandPalette = false; viewModel.setEraserMode(EraserMode.SMART) },
+-                        "Clear page" to { showCommandPalette = false; showClearDialog = true },
+-                        "Export as PNG" to { showCommandPalette = false; viewModel.exportAsPng(context) { exportedUri = it; showExportDialog = true } },
+-                        "Export lesson (PDF/ZIP/IWB)" to {
+-                            showCommandPalette = false
+-                            exportResult = null
+-                            showExportLessonDialog = true
+-                        },
+-                        "Open GYOASH Lesson (.iwb)" to {
+-                            showCommandPalette = false
+-                            iwbPickerLauncher.launch(arrayOf("*/*"))
+-                        },
+-                        "Reset Zoom (100%)" to { showCommandPalette = false; viewModel.resetTransform() },
+-                        "Fit to Content" to { showCommandPalette = false; viewModel.fitToContent(canvasSize.width, canvasSize.height) },
+-                        "Paste from clipboard" to { showCommandPalette = false; viewModel.pasteStrokeClipboard() },
+-                        "Add new page" to { showCommandPalette = false; viewModel.addPage() },
+-                        "Duplicate current page" to { showCommandPalette = false; viewModel.duplicatePage(state.pageIndex) }
+-                    ).filter { it.first.contains(commandSearchQuery, ignoreCase = true) }
+-                        .forEach { (name, action) ->
+-                            Row(
+-                                modifier = Modifier
+-                                    .fillMaxWidth()
+-                                    .clip(RoundedCornerShape(8.dp))
+-                                    .clickable { action() }
+-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+-                                verticalAlignment = Alignment.CenterVertically
+-                            ) {
+-                                Icon(Icons.Default.Bolt, null, tint = Color(0xFF5B5BD6), modifier = Modifier.size(16.dp))
+-                                Spacer(modifier = Modifier.width(10.dp))
+-                                Text(name, fontSize = 14.sp, color = Color(0xFF1F2937), fontWeight = FontWeight.Medium)
+-                            }
+-                        }
+-                }
+-            }
+-        }
++        CanvasCommandPaletteDialog(
++            searchQuery = commandSearchQuery,
++            onSearchQueryChange = { commandSearchQuery = it },
++            onDismiss = { showCommandPalette = false },
++            commands = listOf(
++                "Start Live Collaboration" to { showCommandPalette = false; showLiveCollabDialog = true },
++                "Insert Image" to { showCommandPalette = false; imagePickerLauncher.launch("image/*") },
++                "Draw Rectangle" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.RECTANGLE) },
++                "Draw Diamond" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.DIAMOND) },
++                "Draw Arrow" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.ARROW) },
++                "Toggle Laser Pointer" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.LASER) },
++                "Place ruler" to { showCommandPalette = false; placeMathTool(MathToolKind.RULER, canvasCenter()) },
++                "Place compass" to { showCommandPalette = false; placeMathTool(MathToolKind.COMPASS, canvasCenter()) },
++                "Place protractor" to { showCommandPalette = false; placeMathTool(MathToolKind.PROTRACTOR, canvasCenter()) },
++                "Place set square" to { showCommandPalette = false; placeMathTool(MathToolKind.SET_SQUARE, canvasCenter()) },
++                "Place triangle" to { showCommandPalette = false; placeMathTool(MathToolKind.TRIANGLE, canvasCenter()) },
++                "Flowchart: 3 Connected Nodes" to { showCommandPalette = false; viewModel.createThreeNodeFlowchart(canvasCenter()) },
++                "Flowchart: Process Node" to { showCommandPalette = false; viewModel.addFlowchartNode("process", canvasCenter()) },
++                "Flowchart: Decision Node" to { showCommandPalette = false; viewModel.addFlowchartNode("decision", canvasCenter()) },
++                "Flowchart: Terminator Node" to { showCommandPalette = false; viewModel.addFlowchartNode("terminator", canvasCenter()) },
++                "Mind Map: Open Templates" to { showCommandPalette = false; showMindmapTemplateDialog = true },
++                "Stickers & Emoji" to { showCommandPalette = false; showStickerEmojiDialog = true },
++                "Countdown Timer" to { showCommandPalette = false; timerState = timerState.copy(isVisible = true); bringToolToFront(UtilityToolKind.TIMER) },
++                "Stopwatch" to { showCommandPalette = false; stopwatchState = stopwatchState.copy(isVisible = true); bringToolToFront(UtilityToolKind.STOPWATCH) },
++                "Scientific Calculator" to { showCommandPalette = false; calculatorState = calculatorState.copy(isVisible = true); bringToolToFront(UtilityToolKind.CALCULATOR) },
++                "Periodic Table" to { showCommandPalette = false; periodicTableState = periodicTableState.copy(isVisible = true); bringToolToFront(UtilityToolKind.PERIODIC_TABLE) },
++                "Graph paper" to { showCommandPalette = false; viewModel.toggleGraphPaper() },
++                "Standard eraser" to { showCommandPalette = false; viewModel.setEraserMode(EraserMode.STANDARD) },
++                "Smart eraser" to { showCommandPalette = false; viewModel.setEraserMode(EraserMode.SMART) },
++                "Clear page" to { showCommandPalette = false; showClearDialog = true },
++                "Export as PNG" to { showCommandPalette = false; viewModel.exportAsPng(context) { exportedUri = it; showExportDialog = true } },
++                "Export lesson (PDF/ZIP/IWB)" to {
++                    showCommandPalette = false
++                    exportResult = null
++                    showExportLessonDialog = true
++                },
++                "Open GYOASH Lesson (.iwb)" to {
++                    showCommandPalette = false
++                    iwbPickerLauncher.launch(arrayOf("*/*"))
++                },
++                "Reset Zoom (100%)" to { showCommandPalette = false; viewModel.resetTransform() },
++                "Fit to Content" to { showCommandPalette = false; viewModel.fitToContent(canvasSize.width, canvasSize.height) },
++                "Paste from clipboard" to { showCommandPalette = false; viewModel.pasteStrokeClipboard() },
++                "Add new page" to { showCommandPalette = false; viewModel.addPage() },
++                "Duplicate current page" to { showCommandPalette = false; viewModel.duplicatePage(state.pageIndex) }
++            )
++        )
+     }
+ 
+     // Help & Shortcuts Dialog
+     if (showHelpDialog) {
+-        BoardModal(
+-            title = "Whiteboard guide",
+-            onDismiss = { showHelpDialog = false },
+-            confirmLabel = "Got it",
+-            onConfirm = { showHelpDialog = false },
+-            cancelLabel = null
+-        ) {
+-            Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+-                Text(
+-                    "V selects. H pans. R rectangle, D diamond, O circle, A arrow, L line. P pen, plus pencil, marker, highlighter, and brush. T text. E eraser: Standard erases inside the circle, Smart removes the whole stroke. Palm touches wider than 3 cm are ignored while a stylus is down. K laser, B bucket fill, 9 inserts an image.",
+-                    fontSize = 13.sp,
+-                    color = Color(0xFF4B5563),
+-                    lineHeight = 20.sp
+-                )
+-                Spacer(modifier = Modifier.height(10.dp))
+-                Text(
+-                    "Drag the ruler, compass, or protractor from the toolbar onto the board. Drag either end to rotate. On the compass, drag the pencil to set the radius in centimetres, then tap it to draw a circle or sweep it to draw an arc. On the protractor, tap the scale to mark an angle in degrees. Draw along the ruler edge to place a straight line with its length. Two fingers on a tool move and rotate it. Drag a tool back to the toolbar to remove it. Graph paper adds a squared background. A rough circle, ellipse, rectangle, square, triangle, line, arrow, star, or diamond offers Convert to shape half a second after you lift the pen. Yes converts it, No keeps the drawing, and no answer converts it after two seconds. Turn Shape recognition off in the menu for free drawing. A converted shape can be moved, resized from its corners, and recoloured.",
+-                    fontSize = 12.sp,
+-                    color = Color(0xFF6B7280)
+-                )
+-                Spacer(modifier = Modifier.height(10.dp))
+-                Text("Pinch with 2 fingers on empty board to zoom from 10% to 500%. Two fingers also pan. Ctrl+Z undoes, Ctrl+Y redoes. Double tap fits the page.", fontSize = 12.sp, color = Color(0xFF6B7280))
+-                if (state.panelIdForHelp.isNotBlank()) {
+-                    Spacer(modifier = Modifier.height(10.dp))
+-                    Text(
+-                        "Panel: ${state.panelIdForHelp} · ${state.licenseStateForHelp}",
+-                        fontSize = 11.sp,
+-                        color = Color(0xFF9CA3AF)
+-                    )
+-                }
+-            }
+-        }
++        CanvasHelpDialog(
++            panelId = state.panelIdForHelp,
++            licenseState = state.licenseStateForHelp,
++            onDismiss = { showHelpDialog = false }
++        )
+     }
+ 
+     if (showImageSearch) {
+-        Dialog(onDismissRequest = { showImageSearch = false }) {
+-            Surface(shape = RoundedCornerShape(20.dp), color = Color.White, modifier = Modifier.fillMaxWidth()) {
+-                Column(modifier = Modifier.padding(16.dp)) {
+-                    BoardModalHeader("Google Images") { showImageSearch = false }
+-                    Text(
+-                        "Search stays in this window. Tap a picture to paste it on the board.",
+-                        fontSize = 12.sp,
+-                        color = Color(0xFF6B7280)
+-                    )
+-                    Spacer(Modifier.height(8.dp))
+-                    OutlinedTextField(
+-                        value = imageQuery,
+-                        onValueChange = { imageQuery = it },
+-                        singleLine = true,
+-                        placeholder = { Text("Search images") },
+-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+-                        keyboardActions = KeyboardActions(onSearch = { imageSearchTerm = imageQuery.trim() }),
+-                        modifier = Modifier.fillMaxWidth()
+-                    )
+-                    TextButton(onClick = { imageSearchTerm = imageQuery.trim() }) {
+-                        Text("Search in this window", color = Color(0xFF5B5BD6))
+-                    }
+-                    AndroidView(
+-                        factory = { viewContext ->
+-                            android.webkit.WebView(viewContext).apply {
+-                                browseInsideApp(onImage = { raw ->
+-                                    val image = googleImageResultUrl(raw) ?: raw
+-                                    if (image.startsWith("http://") || image.startsWith("https://")) {
+-                                        val centerWorld = CanvasTransform.screenToWorld(
+-                                            screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
+-                                            scale = canvasScale,
+-                                            offset = Offset(canvasOffsetX, canvasOffsetY)
+-                                        )
+-                                        viewModel.addImage(image, centerWorld)
+-                                        showImageSearch = false
+-                                    }
+-                                })
+-                            }
+-                        },
+-                        update = { web ->
+-                            val target = if (imageSearchTerm.isBlank()) {
+-                                "https://www.google.com/search?tbm=isch&udm=2"
+-                            } else {
+-                                googleImageSearchUrl(imageSearchTerm)
+-                            }
+-                            if (web.tag != target) {
+-                                web.tag = target
+-                                web.loadUrl(target)
+-                            }
+-                        },
+-                        modifier = Modifier.fillMaxWidth().height(420.dp)
+-                    )
+-                }
++        ImageSearchDialog(
++            query = imageQuery,
++            onQueryChange = { imageQuery = it },
++            searchTerm = imageSearchTerm,
++            onSearchTermChange = { imageSearchTerm = it },
++            onDismiss = { showImageSearch = false },
++            onSelectImage = { image ->
++                val centerWorld = CanvasTransform.screenToWorld(
++                    screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
++                    scale = canvasScale,
++                    offset = Offset(canvasOffsetX, canvasOffsetY)
++                )
++                viewModel.addImage(image, centerWorld)
++                showImageSearch = false
+             }
+-        }
++        )
+     }
+ 
+     if (showYouTubeDialog) {
+-        Dialog(onDismissRequest = { showYouTubeDialog = false }) {
+-            Surface(shape = RoundedCornerShape(20.dp), color = Color.White, modifier = Modifier.fillMaxWidth()) {
+-                Column(modifier = Modifier.padding(16.dp)) {
+-                    BoardModalHeader("YouTube") { showYouTubeDialog = false }
+-                    Text("Paste a link or tap a video in the results.", fontSize = 12.sp, color = Color(0xFF6B7280))
+-                    Spacer(Modifier.height(8.dp))
+-                    OutlinedTextField(
+-                        value = youtubeQuery,
+-                        onValueChange = { youtubeQuery = it },
+-                        singleLine = true,
+-                        placeholder = { Text("Link or search") },
+-                        modifier = Modifier.fillMaxWidth()
+-                    )
+-                    Spacer(Modifier.height(8.dp))
+-                    TextButton(onClick = {
+-                        val centerWorld = CanvasTransform.screenToWorld(
+-                            screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
+-                            scale = canvasScale,
+-                            offset = Offset(canvasOffsetX, canvasOffsetY)
+-                        )
+-                        if (youtubeVideoId(youtubeQuery) != null) {
+-                            viewModel.addYouTube(youtubeQuery, centerWorld)
+-                            showYouTubeDialog = false
+-                        }
+-                    }) { Text("Place link on board") }
+-                    AndroidView(
+-                        factory = { viewContext ->
+-                            android.webkit.WebView(viewContext).apply {
+-                                browseInsideApp(onNavigate = { url ->
+-                                    if (youtubeVideoId(url) == null) return@browseInsideApp false
+-                                    val centerWorld = CanvasTransform.screenToWorld(
+-                                        screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
+-                                        scale = canvasScale,
+-                                        offset = Offset(canvasOffsetX, canvasOffsetY)
+-                                    )
+-                                    viewModel.addYouTube(url, centerWorld)
+-                                    showYouTubeDialog = false
+-                                    true
+-                                })
+-                            }
+-                        },
+-                        update = { web ->
+-                            val target = if (youtubeQuery.isBlank()) "https://m.youtube.com" else youtubeSearchUrl(youtubeQuery)
+-                            if (web.tag != target) {
+-                                web.tag = target
+-                                web.loadUrl(target)
+-                            }
+-                        },
+-                        modifier = Modifier.fillMaxWidth().height(420.dp)
+-                    )
+-                }
++        YouTubeDialog(
++            query = youtubeQuery,
++            onQueryChange = { youtubeQuery = it },
++            onDismiss = { showYouTubeDialog = false },
++            onSelectVideo = { url ->
++                val centerWorld = CanvasTransform.screenToWorld(
++                    screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
++                    scale = canvasScale,
++                    offset = Offset(canvasOffsetX, canvasOffsetY)
++                )
++                viewModel.addYouTube(url, centerWorld)
++                showYouTubeDialog = false
+             }
+-        }
++        )
+     }
+ 
+     if (paneWebIndex >= 0) {
+@@ -4480,7 +4467,7 @@ fun CanvasScreen(
+ 
+     if (editingNodeStrokeId != null) {
+         BoardModal(
+-            title = "Node text",
++            title = "Edit Text",
+             onDismiss = { editingNodeStrokeId = null },
+             confirmLabel = "Save",
+             onConfirm = {
+@@ -4493,7 +4480,7 @@ fun CanvasScreen(
+             OutlinedTextField(
+                 value = editingNodeText,
+                 onValueChange = { editingNodeText = it },
+-                placeholder = { Text("Type text for this node…") },
++                placeholder = { Text("Type text for this mind map shape…") },
+                 colors = boardFieldColors(),
+                 modifier = Modifier.fillMaxWidth()
+             )
+@@ -4584,6 +4571,7 @@ fun CanvasScreen(
+             confirmLabel = stringResource(R.string.dialog_clear_title),
+             onConfirm = {
+                 viewModel.clearCanvas()
++                removeAllMathTools()
+                 showClearDialog = false
+             },
+             confirmDestructive = true
+@@ -4663,8 +4651,12 @@ fun CanvasScreen(
+         StickerEmojiPickerDialog(
+             onDismiss = { showStickerEmojiDialog = false },
+             onSelectSticker = { kind, text ->
+-                val center = canvasCenter()
+-                viewModel.insertSticker(kind, center, text)
++                val centerWorld = CanvasTransform.screenToWorld(
++                    screenPoint = canvasCenter(),
++                    scale = canvasScale,
++                    offset = Offset(canvasOffsetX, canvasOffsetY)
++                )
++                viewModel.insertSticker(kind, Offset(centerWorld.x - 48f, centerWorld.y - 48f), text)
+             }
+         )
+     }
+@@ -4689,108 +4681,6 @@ private class ChromeBounds {
+     var frost: List<Rect> = emptyList()
+ }
+ 
+-@Composable
+-private fun boardFieldColors() = OutlinedTextFieldDefaults.colors(
+-    focusedTextColor = Color(0xFF1F2937),
+-    unfocusedTextColor = Color(0xFF1F2937),
+-    focusedBorderColor = Color(0xFF6366F1),
+-    unfocusedBorderColor = Color(0xFFE5E7EB),
+-    focusedContainerColor = Color(0xFFF8FAFC),
+-    unfocusedContainerColor = Color(0xFFF8FAFC),
+-    cursorColor = Color(0xFF6366F1)
+-)
+-
+-@Composable
+-private fun BoardModalHeader(title: String, onDismiss: () -> Unit) {
+-    Row(
+-        modifier = Modifier.fillMaxWidth(),
+-        verticalAlignment = Alignment.CenterVertically
+-    ) {
+-        Text(
+-            title,
+-            fontWeight = FontWeight.SemiBold,
+-            fontSize = 18.sp,
+-            color = Color(0xFF111827),
+-            modifier = Modifier.weight(1f)
+-        )
+-        Box(
+-            modifier = Modifier
+-                .size(32.dp)
+-                .clip(CircleShape)
+-                .background(Color(0xFFF3F4F6))
+-                .clickable(onClick = onDismiss),
+-            contentAlignment = Alignment.Center
+-        ) {
+-            Icon(
+-                Icons.Default.Close,
+-                contentDescription = "Close",
+-                tint = Color(0xFF6B7280),
+-                modifier = Modifier.size(16.dp)
+-            )
+-        }
+-    }
+-}
+-
+-@Composable
+-private fun BoardModal(
+-    title: String,
+-    onDismiss: () -> Unit,
+-    confirmLabel: String? = null,
+-    onConfirm: (() -> Unit)? = null,
+-    confirmDestructive: Boolean = false,
+-    cancelLabel: String? = "Cancel",
+-    content: @Composable ColumnScope.() -> Unit
+-) {
+-    Dialog(onDismissRequest = onDismiss) {
+-        Surface(
+-            shape = RoundedCornerShape(20.dp),
+-            color = Color.White,
+-            shadowElevation = 16.dp,
+-            modifier = Modifier
+-                .fillMaxWidth()
+-                .padding(horizontal = 8.dp)
+-        ) {
+-            Column(modifier = Modifier.padding(20.dp)) {
+-                BoardModalHeader(title, onDismiss)
+-                Spacer(Modifier.height(14.dp))
+-                content()
+-                if (confirmLabel != null || cancelLabel != null) {
+-                    Spacer(Modifier.height(18.dp))
+-                    Row(
+-                        modifier = Modifier.fillMaxWidth(),
+-                        horizontalArrangement = Arrangement.End,
+-                        verticalAlignment = Alignment.CenterVertically
+-                    ) {
+-                        if (cancelLabel != null) {
+-                            TextButton(onClick = onDismiss) {
+-                                Text(cancelLabel, color = Color(0xFF6B7280), fontWeight = FontWeight.Medium)
+-                            }
+-                            Spacer(Modifier.width(8.dp))
+-                        }
+-                        if (confirmLabel != null && onConfirm != null) {
+-                            val fill = if (confirmDestructive) {
+-                                Brush.linearGradient(listOf(Color(0xFFEF4444), Color(0xFFF97316)))
+-                            } else {
+-                                Brush.horizontalGradient(
+-                                    listOf(Color(0xFF22D3EE), Color(0xFF3B82F6), Color(0xFFA855F7))
+-                                )
+-                            }
+-                            Box(
+-                                modifier = Modifier
+-                                    .clip(RoundedCornerShape(12.dp))
+-                                    .background(fill)
+-                                    .clickable(onClick = onConfirm)
+-                                    .padding(horizontal = 18.dp, vertical = 10.dp)
+-                            ) {
+-                                Text(confirmLabel, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+-                            }
+-                        }
+-                    }
+-                }
+-            }
+-        }
+-    }
+-}
+ 
+ private fun frostUnchanged(current: List<Rect>, next: List<Rect>): Boolean {
+     if (current.size != next.size) return false
