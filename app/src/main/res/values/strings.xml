@@ -62,11 +62,13 @@
     <string name="tool_exit">Exit</string>
     <string name="tool_class">Class</string>
     <string name="clear_all">Clear all</string>
+    <string name="tool_clean_all">Clean all</string>
 
     <!-- Popover Menu Items -->
-    <string name="magic_pen">Magic pen</string>
+    <string name="magic_pen">Shape Recognition</string>
+    <string name="shape_recognition">Shape Recognition</string>
     <string name="smart_write">Smart Write</string>
-    <string name="smart_write_tip">Turn off Smart Write to use Magic pen.</string>
+    <string name="smart_write_tip">Turn off Smart Write to use Shape Recognition.</string>
     <string name="popover_background">Background</string>
     <string name="save_slides_pdf">Save slides (PDF)</string>
     <string name="popover_zoom_in">Zoom in</string>
@@ -121,6 +123,8 @@
     <!-- Dialogs -->
     <string name="dialog_clear_title">Clear all</string>
     <string name="dialog_clear_msg">Clear everything on this page? You can bring it back with Undo.</string>
+    <string name="dialog_clean_all_title">Clean all</string>
+    <string name="dialog_clean_all_msg">Clean everything on this canvas including pen drawings, shapes, geometry tools, and images? You can bring them back with Undo.</string>
     <string name="dialog_rename_title">Rename whiteboard</string>
     <string name="dialog_edit_title">Edit title</string>
     <string name="dialog_delete_title">Delete note</string>
@@ -217,7 +221,7 @@
     <string name="geo_arm_other">Arm %1$d° · other %2$d°</string>
     <string name="geo_remove_board">Remove from board</string>
     <string name="geo_place_board">Place on board</string>
-    <string name="geo_aids_description">Graph paper, a straight line, an arrow, a frame, and shape recognition.</string>
+    <string name="geo_aids_description">Graph paper, a straight line, an arrow, and a frame.</string>
     <string name="geo_aid_graph">Graph</string>
     <string name="geo_aid_line">Line</string>
     <string name="geo_aid_arrow">Arrow</string>

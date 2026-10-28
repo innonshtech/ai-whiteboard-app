@@ -51,6 +51,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.heightIn
@@ -101,6 +102,8 @@ import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Highlight
 import androidx.compose.material.icons.filled.HorizontalRule
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.LayersClear
 import androidx.compose.material.icons.filled.Lock
@@ -762,17 +765,19 @@ fun SidebarMenuItem(
     shortcut: String = "",
     isSelected: Boolean = false,
     isDark: Boolean = false,
+    iconTint: Color? = null,
+    textColor: Color? = null,
     onClick: () -> Unit
 ) {
     val activeBg = if (isSelected) {
         if (isDark) Color(0xFF312E81) else Color(0xFFEEF2FF)
     } else Color.Transparent
-    val activeText = if (isSelected) {
+    val activeText = textColor ?: if (isSelected) {
         if (isDark) Color(0xFFA5B4FC) else Color(0xFF4338CA)
     } else {
         if (isDark) Color(0xFFF1F5F9) else Color(0xFF1F2937)
     }
-    val activeIcon = if (isSelected) {
+    val activeIcon = iconTint ?: if (isSelected) {
         if (isDark) Color(0xFF818CF8) else Color(0xFF4F46E5)
     } else {
         if (isDark) Color(0xFF94A3B8) else Color(0xFF4B5563)
@@ -967,6 +972,7 @@ fun CanvasScreen(
     var showAiPanel by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var showCleanAllDialog by remember { mutableStateOf(false) }
     var showEditTitleDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var showExportLessonDialog by remember { mutableStateOf(false) }
@@ -1009,7 +1015,6 @@ fun CanvasScreen(
     var canvasScale by remember { mutableFloatStateOf(1f) }
     val liveInkTick = remember { mutableIntStateOf(0) }
     val liveInk = remember { LiveInk() }
-    val eraserTick = remember { mutableIntStateOf(0) }
     val eraserSession = remember { EraserSession() }
     var boardStage by remember { mutableStateOf<BoardStageView?>(null) }
     var shadeFromTop by remember { mutableStateOf(true) }
@@ -1047,6 +1052,9 @@ fun CanvasScreen(
 
     // Math instruments live in screen space so centimetre marks stay physical size.
     var mathTools by remember { mutableStateOf(state.mathTools) }
+    LaunchedEffect(state.mathTools) {
+        mathTools = state.mathTools
+    }
     var mathGhost by remember { mutableStateOf<PlacedMathTool?>(null) }
     var mathReadout by remember { mutableStateOf<Pair<String, Offset>?>(null) }
     var rulerLivePreview by remember { mutableStateOf<Pair<Offset, Offset>?>(null) }
@@ -1380,9 +1388,23 @@ fun CanvasScreen(
                 }
                 .onGloballyPositioned { canvasOrigin = it.positionInRoot() }
                 .pointerInteropFilter { event ->
-                    touchContacts.record(event)
+                    val hover = event.actionMasked == MotionEvent.ACTION_HOVER_MOVE ||
+                        event.actionMasked == MotionEvent.ACTION_HOVER_ENTER ||
+                        event.actionMasked == MotionEvent.ACTION_HOVER_EXIT
+                    if (!hover) touchContacts.record(event)
                     val stage = boardStage
-                    if (stage != null && stage.shouldDeliverToMedia(event, viewModel.state.value.currentTool)) {
+                    val toolNow = viewModel.state.value.currentTool
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_HOVER_MOVE -> {
+                            if (toolNow == WhiteboardTool.ERASER && !eraserSession.active) {
+                                stage?.showEraserCursor(event.x, event.y, viewModel.state.value.eraserSize)
+                            }
+                        }
+                        MotionEvent.ACTION_HOVER_EXIT -> {
+                            if (!eraserSession.active) stage?.hideEraserCursor()
+                        }
+                    }
+                    if (stage != null && stage.shouldDeliverToMedia(event, toolNow)) {
                         stage.deliverToMedia(event)
                         true
                     } else {
@@ -1424,8 +1446,12 @@ fun CanvasScreen(
                                 type == PointerType.Stylus ||
                                 type == PointerType.Eraser
                         }
+                        fun PointerInputChange.isMousePointer(): Boolean {
+                            val tool = touchContacts.toolType(id)
+                            return tool == MotionEvent.TOOL_TYPE_MOUSE || type == PointerType.Mouse
+                        }
                         fun PointerInputChange.isPalmTouch(): Boolean {
-                            if (isStylusPointer()) return false
+                            if (isStylusPointer() || isMousePointer()) return false
                             return isPalmContactArea(
                                 touchMajorPx = touchContacts.majorPx(id),
                                 xdpi = xdpi,
@@ -1434,14 +1460,18 @@ fun CanvasScreen(
                             )
                         }
                         fun PointerInputChange.rejectedPalm(stylusDrawing: Boolean): Boolean {
-                            val stylus = isStylusPointer()
-                            if (stylus) return false
-                            val palm = isPalmTouch()
-                            if (!palm) return false
-                            // Resting palm while drawing with a stylus is ALWAYS ignored/rejected
-                            if (stylusDrawing || touchContacts.stylusActive) return true
-                            // If no stylus is active, allow palm contact through for palm erasing
-                            return false
+                            if (isStylusPointer() || isMousePointer()) return false
+                            // Any hand contact is ignored while the pen is down, including frames
+                            // that do not report a contact size.
+                            return stylusDrawing || touchContacts.stylusActive
+                        }
+                        fun PointerInputChange.isHandEraser(tool: WhiteboardTool): Boolean {
+                            if (isStylusPointer() || isMousePointer()) return false
+                            if (tool != WhiteboardTool.ERASER && tool !in WRITING_TOOLS) return false
+                            if (isPalmTouch()) return true
+                            // A finger or palm after the pen has written should erase, not draw.
+                            // The eraser tool itself keeps the size the user picked.
+                            return touchContacts.sawStylus && tool in WRITING_TOOLS
                         }
                         var down = awaitFirstDown(requireUnconsumed = false)
                         dockDismissNonce++
@@ -1461,9 +1491,7 @@ fun CanvasScreen(
                             offset = Offset(canvasOffsetX, canvasOffsetY)
                         )
                         val latestState = viewModel.state.value
-                        val isPalmEraser = (latestState.currentTool in WRITING_TOOLS || latestState.currentTool == WhiteboardTool.ERASER) &&
-                            !down.isStylusPointer() &&
-                            down.isPalmTouch()
+                        val isPalmEraser = down.isHandEraser(latestState.currentTool)
                         var prevPosition = down.position
                         var shapePoints = listOf(downWorld)
                         val stylusDraw = down.isStylusPointer()
@@ -1530,10 +1558,17 @@ fun CanvasScreen(
                         } else {
                             latestState.currentTool
                         }
-                        val palmMajor = touchContacts.majorPx(down.id)
-                        val customEraserRadius = if (isPalmEraser && palmMajor > 0f) {
-                            (palmMajor / 2f) / canvasScale.coerceAtLeast(0.001f)
-                        } else null
+                        fun handRadius(pointerId: androidx.compose.ui.input.pointer.PointerId): Float {
+                            val major = touchContacts.majorPx(pointerId)
+                            val screenRadius = if (major > 0f) major / 2f else viewModel.state.value.eraserSize * 2.4f
+                            return screenRadius / canvasScale.coerceAtLeast(0.001f)
+                        }
+                        val customEraserRadius = if (isPalmEraser) handRadius(down.id) else null
+                        var erasing = activeTool == WhiteboardTool.ERASER
+                        var erasingByHand = isPalmEraser
+                        var penCommittedForPalm = false
+                        var lastEraseWorld: Offset? = null
+                        var lastEraseScreen: Offset? = null
                         val inkPoints = ArrayList<Offset>(256)
                         val inkPressures = ArrayList<Float>(256)
                         inkPoints.add(downWorld)
@@ -1617,7 +1652,7 @@ fun CanvasScreen(
                             inkPressures.add(pressure)
                             liveInk.extend(world)
                         }
-                        fun eraseSample(world: Offset, screen: Offset, customRadius: Float? = null) {
+                        fun eraseSample(world: Offset, screen: Offset, customRadius: Float? = null, publish: Boolean = true) {
                             val latest = viewModel.state.value
                             if (!eraserSession.active) {
                                 eraserSession.active = true
@@ -1628,8 +1663,9 @@ fun CanvasScreen(
                             val baseRadius = latest.eraserSize / canvasScale.coerceAtLeast(0.001f)
                             val radius = customRadius ?: baseRadius
 
-                            val eraseModeToUse = if (isPalmEraser) EraserMode.SMART else latest.eraserMode
-                            val restrictSelection = latest.selectedStrokeIds.isNotEmpty()
+                            val eraseModeToUse = if (erasingByHand) EraserMode.STANDARD else latest.eraserMode
+                            val restrictSelection = latest.restrictEraserToSelection &&
+                                eraserSession.targetSelectedIds.isNotEmpty()
 
                             val (updated, newSelectedIds) = StrokeEraser.applySelection(
                                 strokes = eraserSession.strokes,
@@ -1644,18 +1680,51 @@ fun CanvasScreen(
                                 eraserSession.targetSelectedIds = newSelectedIds.toMutableSet()
                                 eraserSession.changed = true
                             }
+                            if (!publish) return
                             eraserSession.cursor = screen
-                            eraserTick.intValue = eraserTick.intValue + 1
                             boardStage?.showGestureStrokes(eraserSession.strokes)
+                            val cursorPx = if (customRadius != null) {
+                                customRadius * canvasScale.coerceAtLeast(0.001f)
+                            } else {
+                                latest.eraserSize
+                            }
+                            boardStage?.showEraserCursor(screen.x, screen.y, cursorPx)
                         }
-                        if (activeTool == WhiteboardTool.ERASER) {
-                            eraseSample(downWorld, down.position, customEraserRadius)
+                        fun eraseAlong(world: Offset, screen: Offset, customRadius: Float?) {
+                            val fromW = lastEraseWorld
+                            val fromS = lastEraseScreen
+                            if (fromW == null || fromS == null) {
+                                eraseSample(world, screen, customRadius)
+                            } else {
+                                val dx = world.x - fromW.x
+                                val dy = world.y - fromW.y
+                                val dist = hypot(dx, dy)
+                                val radius = customRadius ?: (viewModel.state.value.eraserSize / canvasScale.coerceAtLeast(0.001f))
+                                val step = (radius * 0.45f).coerceAtLeast(0.8f)
+                                val count = if (dist <= step) 1 else (dist / step).toInt().coerceIn(1, 24)
+                                for (i in 1..count) {
+                                    val t = i / count.toFloat()
+                                    eraseSample(
+                                        Offset(fromW.x + dx * t, fromW.y + dy * t),
+                                        Offset(fromS.x + (screen.x - fromS.x) * t, fromS.y + (screen.y - fromS.y) * t),
+                                        customRadius,
+                                        publish = i == count
+                                    )
+                                }
+                            }
+                            lastEraseWorld = world
+                            lastEraseScreen = screen
+                        }
+                        if (erasing) {
+                            eraseAlong(downWorld, down.position, customEraserRadius)
                         }
                         var isDraggingSelection = false
                         var selectingBox = false
                         var strokeHit = false
                         var resizeStrokeId: String? = null
                         var resizeHandle: ShapeHandleHit? = null
+                        var activeWebInteractId: String? = null
+                        var webGestureDownTime = 0L
                         val mathGesture = MathGesture()
                         val mathHit = hitTestPlacedTools(mathTools, down.position)
                         val straightedge = if (mathHit != null) {
@@ -1748,7 +1817,7 @@ fun CanvasScreen(
                             mathReadout = "Line: 0.0 cm" to readoutPos
                         }
 
-                        if (state.selectedStrokeIds.isNotEmpty() && activeTool != WhiteboardTool.SELECT) {
+                        if (state.selectedStrokeIds.isNotEmpty() && activeTool != WhiteboardTool.SELECT && activeTool != WhiteboardTool.LASSO && !erasing) {
                             viewModel.clearSelection()
                         }
 
@@ -1757,8 +1826,8 @@ fun CanvasScreen(
                                 // Hand pan mode
                             }
                             WhiteboardTool.SELECT -> {
-                                val handleSlop = 28f / canvasScale.coerceAtLeast(0.001f)
-                                val moveSlop = 36f / canvasScale.coerceAtLeast(0.001f)
+                                val handleSlop = 36f / canvasScale.coerceAtLeast(0.001f)
+                                val moveSlop = 24f / canvasScale.coerceAtLeast(0.001f)
                                 val selectedHandle = viewModel.state.value.strokes.firstNotNullOfOrNull { stroke ->
                                     if (stroke.id !in state.selectedStrokeIds) {
                                         null
@@ -1769,23 +1838,93 @@ fun CanvasScreen(
                                 if (selectedHandle != null) {
                                     resizeStrokeId = selectedHandle.first
                                     resizeHandle = selectedHandle.second
+                                    selectionToolbarDismissed = true
                                 } else {
-                                    val selectedStrokes = viewModel.state.value.strokes.filter { it.id in state.selectedStrokeIds }
-                                    val hitSelected = selectedStrokes.isNotEmpty() && selectedStrokes.any { stroke ->
-                                        val b = strokeSelectionBounds(stroke)
-                                        downWorld.x >= b.left - moveSlop && downWorld.x <= b.right + moveSlop &&
-                                        downWorld.y >= b.top - moveSlop && downWorld.y <= b.bottom + moveSlop
-                                    }
-                                    if (hitSelected) {
-                                        isDraggingSelection = true
+                                    val selectedWeb = viewModel.state.value.strokes.firstOrNull { it.id in state.selectedStrokeIds && it.strokeType == StrokeType.WEB_EMBED }
+                                    val headerH = 38f / canvasScale.coerceAtLeast(0.001f)
+                                    if (selectedWeb != null) {
+                                        val b = strokeSelectionBounds(selectedWeb)
+                                        val inBounds = downWorld.x >= b.left && downWorld.x <= b.right && downWorld.y >= b.top && downWorld.y <= b.bottom
+                                        if (inBounds) {
+                                            if (downWorld.y <= b.top + headerH) {
+                                                isDraggingSelection = true
+                                            } else {
+                                                activeWebInteractId = selectedWeb.id
+                                                webGestureDownTime = android.os.SystemClock.uptimeMillis()
+                                                boardStage?.dispatchTouchToMedia(
+                                                    selectedWeb.id,
+                                                    MotionEvent.ACTION_DOWN,
+                                                    down.position.x,
+                                                    down.position.y,
+                                                    webGestureDownTime,
+                                                    webGestureDownTime
+                                                )
+                                            }
+                                        } else {
+                                            val hit = viewModel.strokeAt(downWorld)
+                                            strokeHit = hit != null
+                                            if (hit != null) {
+                                                viewModel.selectStrokeAt(downWorld)
+                                                if (hit.strokeType == StrokeType.WEB_EMBED) {
+                                                    val hb = strokeSelectionBounds(hit)
+                                                    if (downWorld.y > hb.top + headerH) {
+                                                        activeWebInteractId = hit.id
+                                                        webGestureDownTime = android.os.SystemClock.uptimeMillis()
+                                                        boardStage?.dispatchTouchToMedia(
+                                                            hit.id,
+                                                            MotionEvent.ACTION_DOWN,
+                                                            down.position.x,
+                                                            down.position.y,
+                                                            webGestureDownTime,
+                                                            webGestureDownTime
+                                                        )
+                                                    } else {
+                                                        isDraggingSelection = true
+                                                    }
+                                                } else {
+                                                    isDraggingSelection = true
+                                                }
+                                            } else {
+                                                viewModel.clearSelection()
+                                                selectingBox = true
+                                            }
+                                        }
                                     } else {
-                                        val hit = viewModel.strokeAt(downWorld)
-                                        strokeHit = hit != null
-                                        if (hit != null) {
-                                            viewModel.selectStrokeAt(downWorld)
+                                        val selectedStrokes = viewModel.state.value.strokes.filter { it.id in state.selectedStrokeIds }
+                                        val hitSelected = selectedStrokes.isNotEmpty() && selectedStrokes.any { stroke ->
+                                            val b = strokeSelectionBounds(stroke)
+                                            downWorld.x >= b.left - moveSlop && downWorld.x <= b.right + moveSlop &&
+                                            downWorld.y >= b.top - moveSlop && downWorld.y <= b.bottom + moveSlop
+                                        }
+                                        if (hitSelected) {
                                             isDraggingSelection = true
                                         } else {
-                                            selectingBox = true
+                                            val hit = viewModel.strokeAt(downWorld)
+                                            strokeHit = hit != null
+                                            if (hit != null) {
+                                                viewModel.selectStrokeAt(downWorld)
+                                                if (hit.strokeType == StrokeType.WEB_EMBED) {
+                                                    val hb = strokeSelectionBounds(hit)
+                                                    if (downWorld.y > hb.top + headerH) {
+                                                        activeWebInteractId = hit.id
+                                                        webGestureDownTime = android.os.SystemClock.uptimeMillis()
+                                                        boardStage?.dispatchTouchToMedia(
+                                                            hit.id,
+                                                            MotionEvent.ACTION_DOWN,
+                                                            down.position.x,
+                                                            down.position.y,
+                                                            webGestureDownTime,
+                                                            webGestureDownTime
+                                                        )
+                                                    } else {
+                                                        isDraggingSelection = true
+                                                    }
+                                                } else {
+                                                    isDraggingSelection = true
+                                                }
+                                            } else {
+                                                selectingBox = true
+                                            }
                                         }
                                     }
                                 }
@@ -1794,7 +1933,63 @@ fun CanvasScreen(
                                 viewModel.bucketFillAt(downWorld, state.selectedColor)
                             }
                             WhiteboardTool.LASSO -> {
-                                lassoPoints = listOf(downWorld)
+                                if (state.selectedStrokeIds.isNotEmpty()) {
+                                    val handleSlop = 36f / canvasScale.coerceAtLeast(0.001f)
+                                    val moveSlop = 24f / canvasScale.coerceAtLeast(0.001f)
+                                    val selectedHandle = viewModel.state.value.strokes.firstNotNullOfOrNull { stroke ->
+                                        if (stroke.id !in state.selectedStrokeIds) {
+                                            null
+                                        } else {
+                                            hitShapeHandle(stroke, downWorld, handleSlop)?.let { stroke.id to it }
+                                        }
+                                    }
+                                    if (selectedHandle != null) {
+                                        resizeStrokeId = selectedHandle.first
+                                        resizeHandle = selectedHandle.second
+                                        selectionToolbarDismissed = true
+                                    } else {
+                                        val selectedWeb = viewModel.state.value.strokes.firstOrNull { it.id in state.selectedStrokeIds && it.strokeType == StrokeType.WEB_EMBED }
+                                        val headerH = 38f / canvasScale.coerceAtLeast(0.001f)
+                                        if (selectedWeb != null) {
+                                            val b = strokeSelectionBounds(selectedWeb)
+                                            val inBounds = downWorld.x >= b.left && downWorld.x <= b.right && downWorld.y >= b.top && downWorld.y <= b.bottom
+                                            if (inBounds) {
+                                                if (downWorld.y <= b.top + headerH) {
+                                                    isDraggingSelection = true
+                                                } else {
+                                                    activeWebInteractId = selectedWeb.id
+                                                    webGestureDownTime = android.os.SystemClock.uptimeMillis()
+                                                    boardStage?.dispatchTouchToMedia(
+                                                        selectedWeb.id,
+                                                        MotionEvent.ACTION_DOWN,
+                                                        down.position.x,
+                                                        down.position.y,
+                                                        webGestureDownTime,
+                                                        webGestureDownTime
+                                                    )
+                                                }
+                                            } else {
+                                                viewModel.clearSelection()
+                                                lassoPoints = listOf(downWorld)
+                                            }
+                                        } else {
+                                            val selectedStrokes = viewModel.state.value.strokes.filter { it.id in state.selectedStrokeIds }
+                                            val hitSelected = selectedStrokes.isNotEmpty() && selectedStrokes.any { stroke ->
+                                                val b = strokeSelectionBounds(stroke)
+                                                downWorld.x >= b.left - moveSlop && downWorld.x <= b.right + moveSlop &&
+                                                downWorld.y >= b.top - moveSlop && downWorld.y <= b.bottom + moveSlop
+                                            }
+                                            if (hitSelected) {
+                                                isDraggingSelection = true
+                                            } else {
+                                                viewModel.clearSelection()
+                                                lassoPoints = listOf(downWorld)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    lassoPoints = listOf(downWorld)
+                                }
                             }
                             WhiteboardTool.LASER -> {
                                 viewModel.addLaserPoint(downWorld)
@@ -1875,11 +2070,38 @@ fun CanvasScreen(
                             val pressed = event.changes.filter { it.pressed }
                             val anyStylusPressed = pressed.any { it.isStylusPointer() }
                             val realPressed = pressed.filter { change ->
-                                if (change.rejectedPalm(stylusDrawing = stylusDraw || anyStylusPressed)) {
+                                if (change.rejectedPalm(stylusDrawing = anyStylusPressed)) {
                                     change.consume()
                                     false
                                 } else {
                                     true
+                                }
+                            }
+                            if (!anyStylusPressed) {
+                                val hand = realPressed.firstOrNull { it.isHandEraser(latestState.currentTool) || (erasingByHand && !it.isStylusPointer() && !it.isMousePointer()) }
+                                if (hand != null && (latestState.currentTool in WRITING_TOOLS || latestState.currentTool == WhiteboardTool.ERASER || erasing)) {
+                                    if (!erasing && writingNow && !penCommittedForPalm) {
+                                        if (inkPoints.size >= 2 && inkTemplate != null) {
+                                            val finishedWidth = if (stylusDraw) {
+                                                stylusPressureWidth(state.strokeWidth, inkPressures.average().toFloat())
+                                            } else {
+                                                state.strokeWidth
+                                            }
+                                            viewModel.commitStroke(
+                                                inkTemplate.copy(
+                                                    points = ArrayList(inkPoints),
+                                                    pointPressures = ArrayList(inkPressures),
+                                                    strokeWidth = finishedWidth
+                                                )
+                                            )
+                                        }
+                                        liveInk.stroke = null
+                                        liveInk.predicted = null
+                                        boardStage?.setLiveInk(null)
+                                        penCommittedForPalm = true
+                                    }
+                                    erasing = true
+                                    erasingByHand = true
                                 }
                             }
                             fingerScratch.clear()
@@ -1889,7 +2111,8 @@ fun CanvasScreen(
                             if (fingerScratch.size > fingerPeak) fingerPeak = fingerScratch.size
                             val drawsImmediately = activeTool == WhiteboardTool.PENCIL ||
                                 activeTool == WhiteboardTool.MATH_PEN ||
-                                activeTool == WhiteboardTool.ERASER
+                                activeTool == WhiteboardTool.ERASER ||
+                                erasing
                             val multiFingers = !drawsImmediately &&
                                 !touchContacts.stylusActive &&
                                 fingerScratch.size >= 2
@@ -1973,7 +2196,10 @@ fun CanvasScreen(
                                     event.changes.forEach { it.consume() }
                                 }
                             } else {
-                                val change = if (drawsImmediately) {
+                                val change = if (erasingByHand) {
+                                    realPressed.firstOrNull { !it.isStylusPointer() && !it.isMousePointer() }
+                                        ?: realPressed.firstOrNull { it.id == down.id }
+                                } else if (drawsImmediately) {
                                     realPressed.firstOrNull { it.id == down.id }
                                 } else {
                                     realPressed.firstOrNull { pointer ->
@@ -2144,12 +2370,21 @@ fun CanvasScreen(
                                         canvasOffsetY += panY
                                         transformMoved = true
                                         boardStage?.setTransform(canvasScale, canvasOffsetX, canvasOffsetY)
+                                    } else if (activeWebInteractId != null) {
+                                        boardStage?.dispatchTouchToMedia(
+                                            activeWebInteractId,
+                                            MotionEvent.ACTION_MOVE,
+                                            change.position.x,
+                                            change.position.y,
+                                            webGestureDownTime,
+                                            android.os.SystemClock.uptimeMillis()
+                                        )
                                     } else if (resizeStrokeId != null && resizeHandle != null) {
                                         viewModel.beginSelectionMove()
                                         viewModel.resizeStroke(resizeStrokeId, resizeHandle, curWorld)
                                     } else if (activeTool == WhiteboardTool.SELECT && selectingBox) {
                                         boardStage?.setMarquee(downWorld, curWorld)
-                                    } else if (activeTool == WhiteboardTool.SELECT && isDraggingSelection) {
+                                    } else if ((activeTool == WhiteboardTool.SELECT || activeTool == WhiteboardTool.LASSO) && isDraggingSelection) {
                                         val prevWorld = CanvasTransform.screenToWorld(
                                             screenPoint = prevPosition,
                                             scale = canvasScale,
@@ -2160,16 +2395,29 @@ fun CanvasScreen(
                                         viewModel.moveSelectedStrokes(delta)
                                     } else if (activeTool == WhiteboardTool.LASER) {
                                         viewModel.addLaserPoint(curWorld)
-                                    } else if (activeTool == WhiteboardTool.LASSO) {
+                                    } else if (activeTool == WhiteboardTool.LASSO && !isDraggingSelection && resizeStrokeId == null) {
                                         lassoPoints = lassoPoints + curWorld
-                                    } else if (activeTool == WhiteboardTool.ERASER) {
-                                        val curPalmRadius = if (isPalmEraser) {
-                                            val curMajor = touchContacts.majorPx(change.id)
-                                            if (curMajor > 0f) (curMajor / 2f) / canvasScale.coerceAtLeast(0.001f) else customEraserRadius
+                                    } else if (erasing) {
+                                        val handPointer = change.isHandEraser(latestState.currentTool) || erasingByHand
+                                        val curPalmRadius = if (handPointer && !change.isStylusPointer()) {
+                                            handRadius(change.id)
                                         } else {
                                             customEraserRadius
                                         }
-                                        eraseSample(curWorld, change.position, curPalmRadius)
+                                        if (!change.isStylusPointer() && handPointer) erasingByHand = true
+                                        val samples = if (stylusDraw && !erasingByHand) {
+                                            change.historical.map { it.position } + change.position
+                                        } else {
+                                            change.pastPositions() + change.position
+                                        }
+                                        samples.forEach { sample ->
+                                            val sampleWorld = CanvasTransform.screenToWorld(
+                                                screenPoint = sample,
+                                                scale = canvasScale,
+                                                offset = Offset(canvasOffsetX, canvasOffsetY)
+                                            )
+                                            eraseAlong(sampleWorld, sample, curPalmRadius)
+                                        }
                                     } else if (activeTool == WhiteboardTool.SPOTLIGHT) {
                                         spotlightCenter = change.position
                                     } else if (activeTool == WhiteboardTool.SHADE) {
@@ -2244,6 +2492,18 @@ fun CanvasScreen(
                             (prevPosition.y - down.position.y).toDouble()
                         ).toFloat()
 
+                        if (activeWebInteractId != null) {
+                            boardStage?.dispatchTouchToMedia(
+                                activeWebInteractId,
+                                MotionEvent.ACTION_UP,
+                                prevPosition.x,
+                                prevPosition.y,
+                                webGestureDownTime,
+                                android.os.SystemClock.uptimeMillis()
+                            )
+                            activeWebInteractId = null
+                        }
+
                         if (selectingBox) {
                             boardStage?.setMarquee(null, null)
                             if (moved < 14f) {
@@ -2312,7 +2572,7 @@ fun CanvasScreen(
                             if (eraserSession.changed) {
                                 viewModel.commitErasedStrokes(eraserSession.strokes)
                                 val latest = viewModel.state.value
-                                if (latest.selectedStrokeIds.isNotEmpty()) {
+                                if (latest.restrictEraserToSelection && latest.selectedStrokeIds.isNotEmpty()) {
                                     viewModel.selectStrokes(eraserSession.targetSelectedIds)
                                 }
                             }
@@ -2320,7 +2580,7 @@ fun CanvasScreen(
                             eraserSession.changed = false
                             eraserSession.cursor = null
                             eraserSession.targetSelectedIds.clear()
-                            eraserTick.intValue = eraserTick.intValue + 1
+                            boardStage?.hideEraserCursor()
                         }
 
                         // Release Touch
@@ -2679,12 +2939,20 @@ fun CanvasScreen(
                                 if (next != latest.pageIndex) viewModel.selectPage(next)
                             }
                             if (activeTool == WhiteboardTool.LASSO) {
-                                viewModel.lassoSelect(lassoPoints)
-                                lassoPoints = emptyList()
-                                if (!state.isToolLocked) {
-                                    viewModel.setTool(WhiteboardTool.SELECT)
+                                if (lassoPoints.size >= 3) {
+                                    viewModel.lassoSelect(lassoPoints)
+                                } else if (!isDraggingSelection && resizeStrokeId == null && moved < 10f) {
+                                    viewModel.clearSelection()
                                 }
-                            } else if (writingNow && inkPoints.isNotEmpty()) {
+                                lassoPoints = emptyList()
+                                isDraggingSelection = false
+                                resizeStrokeId = null
+                                resizeHandle = null
+                                activeWebInteractId = null
+                                if (state.selectedStrokeIds.isNotEmpty()) {
+                                    selectionToolbarDismissed = false
+                                }
+                            } else if (writingNow && inkPoints.isNotEmpty() && !penCommittedForPalm) {
                                 val finishedWidth = if (isPenNib) {
                                     if (stylusDraw) {
                                         stylusPressureWidth(
@@ -2846,8 +3114,13 @@ fun CanvasScreen(
                         drawCircle(Color(0xFFFF2A2A), radius, center)
                     }
                     if (lassoPoints.size >= 2) {
+                        val lassoPath = lassoPoints.toSmoothedPath()
                         drawPath(
-                            path = lassoPoints.toSmoothedPath(),
+                            path = lassoPath,
+                            color = Color(0x206366F1)
+                        )
+                        drawPath(
+                            path = lassoPath,
                             color = Color(0xFF6366F1),
                             style = DrawStroke(
                                 width = 1.5f / canvasScale.coerceAtLeast(0.5f),
@@ -2855,15 +3128,6 @@ fun CanvasScreen(
                             )
                         )
                     }
-                }
-                val eraserCursor = eraserSession.cursor
-                if (state.currentTool == WhiteboardTool.ERASER && eraserCursor != null) {
-                    drawCircle(
-                        color = Color(0xAA374151),
-                        radius = state.eraserSize,
-                        center = eraserCursor,
-                        style = DrawStroke(width = 1.5f)
-                    )
                 }
                 val liveLine = rulerLivePreview
                 if (liveLine != null) {
@@ -3032,6 +3296,7 @@ fun CanvasScreen(
             },
             onHelp = { showHelpDialog = true },
             onClear = { showClearDialog = true },
+            onCleanAll = { showCleanAllDialog = true },
             onRename = { showEditTitleDialog = true },
             onSearchImages = { showImageSearch = true },
             onInsertVideo = { videoPickerLauncher.launch(arrayOf("video/*")) },
@@ -3909,182 +4174,223 @@ fun CanvasScreen(
                         .width(260.dp)
                         .fillMaxHeight()
                         .statusBarsPadding()
+                        .navigationBarsPadding()
                         .clickable(enabled = false) {}
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(12.dp)
-                            .verticalScroll(rememberScrollState())
                     ) {
-                        // Sidebar Header
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState())
                         ) {
-                            Column {
-                                Text(
-                                    "AvitriSphare",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1F2937)
-                                )
-                                Text(
-                                    stringResource(R.string.app_subtitle),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
-                                )
-                            }
-                            IconButton(
-                                onClick = { showSidebar = false },
-                                modifier = Modifier.size(28.dp)
+                            // Sidebar Header
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), tint = if (isDark) Color(0xFFCBD5E1) else Color(0xFF6B7280))
+                                Column {
+                                    Text(
+                                        "AvitriSphare",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1F2937)
+                                    )
+                                    Text(
+                                        stringResource(R.string.app_subtitle),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { showSidebar = false },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = stringResource(R.string.close),
+                                        tint = if (isDark) Color(0xFFCBD5E1) else Color(0xFF6B7280)
+                                    )
+                                }
                             }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // 0. Profile
+                            SidebarMenuItem(
+                                icon = Icons.Default.Person,
+                                label = stringResource(R.string.tool_profile),
+                                isDark = isDark,
+                                onClick = {
+                                    showSidebar = false
+                                    showProfileDialog = true
+                                }
+                            )
+
+                            // Rename board
+                            SidebarMenuItem(
+                                icon = Icons.Default.Edit,
+                                label = stringResource(R.string.menu_rename_board),
+                                isDark = isDark,
+                                onClick = {
+                                    showSidebar = false
+                                    showEditTitleDialog = true
+                                }
+                            )
+
+                            // 1. Open (Ctrl+O)
+                            SidebarMenuItem(
+                                icon = Icons.Default.FolderOpen,
+                                label = stringResource(R.string.menu_open),
+                                shortcut = "Ctrl+O",
+                                isDark = isDark,
+                                onClick = {
+                                    showSidebar = false
+                                    onNavigateBack()
+                                }
+                            )
+
+                            // 2. Export lesson (PDF, PNG ZIP, IWB)
+                            SidebarMenuItem(
+                                icon = Icons.Default.IosShare,
+                                label = stringResource(R.string.menu_export_lesson),
+                                shortcut = "Ctrl+Shift+E",
+                                isSelected = true,
+                                isDark = isDark,
+                                onClick = {
+                                    showSidebar = false
+                                    exportResult = null
+                                    showExportLessonDialog = true
+                                }
+                            )
+
+                            // 3. Open GYOASH Lesson (.iwb)...
+                            SidebarMenuItem(
+                                icon = Icons.Default.FolderOpen,
+                                label = stringResource(R.string.menu_open_iwb),
+                                isDark = isDark,
+                                onClick = {
+                                    showSidebar = false
+                                    iwbPickerLauncher.launch(arrayOf("*/*"))
+                                }
+                            )
+
+
+                            Divider(
+                                color = if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6),
+                                thickness = 1.dp,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+
+                            // 5. Command palette (Ctrl+/)
+                            SidebarMenuItem(
+                                icon = Icons.Default.Bolt,
+                                label = stringResource(R.string.menu_command_palette),
+                                shortcut = "Ctrl+/",
+                                isDark = isDark,
+                                onClick = {
+                                    showSidebar = false
+                                    showCommandPalette = true
+                                }
+                            )
+
+                            // 6. Find on canvas (Ctrl+F)
+                            SidebarMenuItem(
+                                icon = Icons.Default.Search,
+                                label = stringResource(R.string.menu_find_on_canvas),
+                                shortcut = "Ctrl+F",
+                                isDark = isDark,
+                                onClick = {
+                                    showSidebar = false
+                                    showCommandPalette = true
+                                }
+                            )
+
+                            // 7. Help (?)
+                            SidebarMenuItem(
+                                icon = Icons.Default.HelpOutline,
+                                label = stringResource(R.string.menu_help),
+                                shortcut = "?",
+                                isDark = isDark,
+                                onClick = {
+                                    showSidebar = false
+                                    showHelpDialog = true
+                                }
+                            )
+
+                            // Clean all (except pen)
+                            SidebarMenuItem(
+                                icon = Icons.Default.CleaningServices,
+                                label = stringResource(R.string.tool_clean_all),
+                                isDark = isDark,
+                                onClick = {
+                                    showSidebar = false
+                                    showCleanAllDialog = true
+                                }
+                            )
+
+                            // 8. Reset the canvas
+                            SidebarMenuItem(
+                                icon = Icons.Default.LayersClear,
+                                label = stringResource(R.string.menu_reset_canvas),
+                                isDark = isDark,
+                                onClick = {
+                                    showSidebar = false
+                                    showClearDialog = true
+                                }
+                            )
+
+                            Divider(
+                                color = if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6),
+                                thickness = 1.dp,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+
+                            // 9. Change Language (English, Hindi, Marathi)
+                            SidebarMenuItem(
+                                icon = Icons.Default.Language,
+                                label = stringResource(R.string.change_language),
+                                shortcut = currentLanguage.nativeName,
+                                isDark = isDark,
+                                onClick = {
+                                    showSidebar = false
+                                    showLanguageDialog = true
+                                }
+                            )
+
+                            // 10. Theme (Light / Dark)
+                            SidebarMenuItem(
+                                icon = if (isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                label = if (isDark) stringResource(R.string.theme_light) else stringResource(R.string.theme_dark),
+                                isDark = isDark,
+                                onClick = {
+                                    viewModel.toggleAppTheme()
+                                }
+                            )
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // 0. Profile
-                        SidebarMenuItem(
-                            icon = Icons.Default.Person,
-                            label = stringResource(R.string.tool_profile),
-                            isDark = isDark,
-                            onClick = {
-                                showSidebar = false
-                                showProfileDialog = true
-                            }
-                        )
-
-                        SidebarMenuItem(
-                            icon = Icons.Default.Edit,
-                            label = stringResource(R.string.menu_rename_board),
-                            isDark = isDark,
-                            onClick = {
-                                showSidebar = false
-                                showEditTitleDialog = true
-                            }
-                        )
-
-                        // 1. Open (Ctrl+O)
-                        SidebarMenuItem(
-                            icon = Icons.Default.FolderOpen,
-                            label = stringResource(R.string.menu_open),
-                            shortcut = "Ctrl+O",
-                            isDark = isDark,
-                            onClick = {
-                                showSidebar = false
-                                onNavigateBack()
-                            }
-                        )
-
-                        // 2. Export lesson (PDF, PNG ZIP, IWB)
-                        SidebarMenuItem(
-                            icon = Icons.Default.IosShare,
-                            label = stringResource(R.string.menu_export_lesson),
-                            shortcut = "Ctrl+Shift+E",
-                            isSelected = true,
-                            isDark = isDark,
-                            onClick = {
-                                showSidebar = false
-                                exportResult = null
-                                showExportLessonDialog = true
-                            }
-                        )
-
-                        // 3. Open GYOASH Lesson (.iwb)...
-                        SidebarMenuItem(
-                            icon = Icons.Default.FolderOpen,
-                            label = stringResource(R.string.menu_open_iwb),
-                            isDark = isDark,
-                            onClick = {
-                                showSidebar = false
-                                iwbPickerLauncher.launch(arrayOf("*/*"))
-                            }
-                        )
-
-                        Divider(
-                            color = if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6),
-                            thickness = 1.dp,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-
-                        // 5. Command palette (Ctrl+/)
-                        SidebarMenuItem(
-                            icon = Icons.Default.Bolt,
-                            label = stringResource(R.string.menu_command_palette),
-                            shortcut = "Ctrl+/",
-                            isDark = isDark,
-                            onClick = {
-                                showSidebar = false
-                                showCommandPalette = true
-                            }
-                        )
-
-                        // 6. Find on canvas (Ctrl+F)
-                        SidebarMenuItem(
-                            icon = Icons.Default.Search,
-                            label = stringResource(R.string.menu_find_on_canvas),
-                            shortcut = "Ctrl+F",
-                            isDark = isDark,
-                            onClick = {
-                                showSidebar = false
-                                showCommandPalette = true
-                            }
-                        )
-
-                        // 7. Help (?)
-                        SidebarMenuItem(
-                            icon = Icons.Default.HelpOutline,
-                            label = stringResource(R.string.menu_help),
-                            shortcut = "?",
-                            isDark = isDark,
-                            onClick = {
-                                showSidebar = false
-                                showHelpDialog = true
-                            }
-                        )
-
-                        // 8. Reset the canvas
-                        SidebarMenuItem(
-                            icon = Icons.Default.LayersClear,
-                            label = stringResource(R.string.menu_reset_canvas),
-                            isDark = isDark,
-                            onClick = {
-                                showSidebar = false
-                                showClearDialog = true
-                            }
-                        )
-
-                        Divider(
-                            color = if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6),
-                            thickness = 1.dp,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-
-                        // 9. Change Language (English, Hindi, Marathi)
-                        SidebarMenuItem(
-                            icon = Icons.Default.Language,
-                            label = stringResource(R.string.change_language),
-                            shortcut = currentLanguage.nativeName,
-                            isDark = isDark,
-                            onClick = {
-                                showSidebar = false
-                                showLanguageDialog = true
-                            }
-                        )
-
-                        // 10. Theme (Light / Dark)
-                        SidebarMenuItem(
-                            icon = if (isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
-                            label = if (isDark) stringResource(R.string.theme_light) else stringResource(R.string.theme_dark),
-                            isDark = isDark,
-                            onClick = {
-                                viewModel.toggleAppTheme()
-                            }
-                        )
+                        // Exit button on bottom left corner inside the main menu section
+                            Divider(
+                                color = if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6),
+                                thickness = 1.dp,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                            SidebarMenuItem(
+                                icon = Icons.Default.Logout,
+                                label = stringResource(R.string.tool_exit),
+                                iconTint = Color(0xFFEF4444),
+                                textColor = Color(0xFFEF4444),
+                                isDark = isDark,
+                                onClick = {
+                                    showSidebar = false
+                                    onNavigateBack()
+                                }
+                            )
                     }
                 }
             }
@@ -4151,6 +4457,7 @@ fun CanvasScreen(
                         "Graph paper" to { showCommandPalette = false; viewModel.toggleGraphPaper() },
                         "Standard eraser" to { showCommandPalette = false; viewModel.setEraserMode(EraserMode.STANDARD) },
                         "Smart eraser" to { showCommandPalette = false; viewModel.setEraserMode(EraserMode.SMART) },
+                        "Clean all (everything including pen)" to { showCommandPalette = false; showCleanAllDialog = true },
                         "Clear page" to { showCommandPalette = false; showClearDialog = true },
                         "Export as PNG" to { showCommandPalette = false; viewModel.exportAsPng(context) { exportedUri = it; showExportDialog = true } },
                         "Export lesson (PDF/ZIP/IWB)" to {
@@ -4595,11 +4902,28 @@ fun CanvasScreen(
             isDark = state.isDarkTheme,
             onConfirm = {
                 viewModel.clearCanvas()
+                removeAllMathTools()
                 showClearDialog = false
             },
             confirmDestructive = true
         ) {
             Text(stringResource(R.string.dialog_clear_msg), color = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF6B7280), fontSize = 14.sp)
+        }
+    }
+
+    if (showCleanAllDialog) {
+        BoardModal(
+            title = stringResource(R.string.dialog_clean_all_title),
+            onDismiss = { showCleanAllDialog = false },
+            confirmLabel = stringResource(R.string.tool_clean_all),
+            onConfirm = {
+                viewModel.clearCanvas()
+                removeAllMathTools()
+                showCleanAllDialog = false
+            },
+            confirmDestructive = true
+        ) {
+            Text(stringResource(R.string.dialog_clean_all_msg), color = Color(0xFF6B7280), fontSize = 14.sp)
         }
     }
 

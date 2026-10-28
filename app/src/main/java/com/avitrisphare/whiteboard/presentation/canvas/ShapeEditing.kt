@@ -85,7 +85,10 @@ val lockedAspect = setOf(
 fun isEditableShape(type: StrokeType): Boolean {
     return type in boxShapes ||
         type in lineShapes ||
-        type == StrokeType.TRIANGLE
+        type == StrokeType.TRIANGLE ||
+        type == StrokeType.WEB_EMBED ||
+        type == StrokeType.IMAGE ||
+        type == StrokeType.VIDEO
 }
 
 fun hitShapeHandle(stroke: Stroke, point: Offset, slop: Float): ShapeHandleHit? {
@@ -108,25 +111,30 @@ fun hitShapeHandle(stroke: Stroke, point: Offset, slop: Float): ShapeHandleHit? 
             } ?: return null
             if (near(stroke.points[index])) ShapeHandleHit(ShapeHandle.VERTEX, index) else null
         }
-        stroke.strokeType == StrokeType.SQUARE -> {
+        stroke.strokeType == StrokeType.SQUARE ||
+        stroke.strokeType == StrokeType.WEB_EMBED ||
+        stroke.strokeType == StrokeType.IMAGE ||
+        stroke.strokeType == StrokeType.VIDEO -> {
             if (stroke.points.size < 2) return null
             val b = strokeSelectionBounds(stroke)
+            val pad = 8f
             when {
-                near(Offset(b.left, b.top)) -> ShapeHandleHit(ShapeHandle.TOP_LEFT)
-                near(Offset(b.right, b.top)) -> ShapeHandleHit(ShapeHandle.TOP_RIGHT)
-                near(Offset(b.right, b.bottom)) -> ShapeHandleHit(ShapeHandle.BOTTOM_RIGHT)
-                near(Offset(b.left, b.bottom)) -> ShapeHandleHit(ShapeHandle.BOTTOM_LEFT)
+                near(Offset(b.left, b.top)) || near(Offset(b.left - pad, b.top - pad)) -> ShapeHandleHit(ShapeHandle.TOP_LEFT)
+                near(Offset(b.right, b.top)) || near(Offset(b.right + pad, b.top - pad)) -> ShapeHandleHit(ShapeHandle.TOP_RIGHT)
+                near(Offset(b.right, b.bottom)) || near(Offset(b.right + pad, b.bottom + pad)) -> ShapeHandleHit(ShapeHandle.BOTTOM_RIGHT)
+                near(Offset(b.left, b.bottom)) || near(Offset(b.left - pad, b.bottom + pad)) -> ShapeHandleHit(ShapeHandle.BOTTOM_LEFT)
                 else -> null
             }
         }
         else -> {
             if (stroke.points.size < 2) return null
             val box = normalizedBox(stroke.points.first(), stroke.points.last())
+            val pad = 8f
             when {
-                near(Offset(box.left, box.top)) -> ShapeHandleHit(ShapeHandle.TOP_LEFT)
-                near(Offset(box.right, box.top)) -> ShapeHandleHit(ShapeHandle.TOP_RIGHT)
-                near(Offset(box.right, box.bottom)) -> ShapeHandleHit(ShapeHandle.BOTTOM_RIGHT)
-                near(Offset(box.left, box.bottom)) -> ShapeHandleHit(ShapeHandle.BOTTOM_LEFT)
+                near(Offset(box.left, box.top)) || near(Offset(box.left - pad, box.top - pad)) -> ShapeHandleHit(ShapeHandle.TOP_LEFT)
+                near(Offset(box.right, box.top)) || near(Offset(box.right + pad, box.top - pad)) -> ShapeHandleHit(ShapeHandle.TOP_RIGHT)
+                near(Offset(box.right, box.bottom)) || near(Offset(box.right + pad, box.bottom + pad)) -> ShapeHandleHit(ShapeHandle.BOTTOM_RIGHT)
+                near(Offset(box.left, box.bottom)) || near(Offset(box.left - pad, box.bottom + pad)) -> ShapeHandleHit(ShapeHandle.BOTTOM_LEFT)
                 else -> null
             }
         }
@@ -150,7 +158,9 @@ fun resizeShape(stroke: Stroke, hit: ShapeHandleHit, point: Offset): Stroke {
         else -> {
             if (stroke.points.size < 2) return stroke
             val box = normalizedBox(stroke.points.first(), stroke.points.last())
-            val locked = resizeBox(box, hit.kind, point, stroke.strokeType in lockedAspect)
+            val minW = if (stroke.strokeType == StrokeType.WEB_EMBED) 260f else 12f
+            val minH = if (stroke.strokeType == StrokeType.WEB_EMBED) 180f else 12f
+            val locked = resizeBox(box, hit.kind, point, stroke.strokeType in lockedAspect, minW, minH)
             listOf(Offset(locked.left, locked.top), Offset(locked.right, locked.bottom))
         }
     }
@@ -163,7 +173,14 @@ private fun normalizedBox(a: Offset, b: Offset): Box {
     return Box(min(a.x, b.x), min(a.y, b.y), max(a.x, b.x), max(a.y, b.y))
 }
 
-private fun resizeBox(box: Box, handle: ShapeHandle, point: Offset, lockAspect: Boolean): Box {
+private fun resizeBox(
+    box: Box,
+    handle: ShapeHandle,
+    point: Offset,
+    lockAspect: Boolean,
+    minWidth: Float = 12f,
+    minHeight: Float = 12f
+): Box {
     val anchor = when (handle) {
         ShapeHandle.TOP_LEFT -> Offset(box.right, box.bottom)
         ShapeHandle.TOP_RIGHT -> Offset(box.left, box.bottom)
@@ -176,11 +193,11 @@ private fun resizeBox(box: Box, handle: ShapeHandle, point: Offset, lockAspect: 
     var top = min(anchor.y, dragged.y)
     var right = max(anchor.x, dragged.x)
     var bottom = max(anchor.y, dragged.y)
-    if (right - left < 12f) {
-        if (dragged.x >= anchor.x) right = left + 12f else left = right - 12f
+    if (right - left < minWidth) {
+        if (dragged.x >= anchor.x) right = left + minWidth else left = right - minWidth
     }
-    if (bottom - top < 12f) {
-        if (dragged.y >= anchor.y) bottom = top + 12f else top = bottom - 12f
+    if (bottom - top < minHeight) {
+        if (dragged.y >= anchor.y) bottom = top + minHeight else top = bottom - minHeight
     }
     return Box(left, top, right, bottom)
 }

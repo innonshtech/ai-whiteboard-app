@@ -33,11 +33,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.BorderColor
-import androidx.compose.material.icons.filled.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.filled.Brush as BrushToolIcon
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Functions
+import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Highlight
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
@@ -204,6 +207,18 @@ private fun inkLook(type: StrokeType): InkLook = when (type) {
 }
 
 @OptIn(ExperimentalLayoutApi::class)
+fun writingToolIcon(tool: WhiteboardTool): ImageVector = when (tool) {
+    WhiteboardTool.PEN -> Icons.Default.Draw
+    WhiteboardTool.MATH_PEN -> Icons.Default.Functions
+    WhiteboardTool.PENCIL -> Icons.Default.Edit
+    WhiteboardTool.MARKER -> Icons.Default.BorderColor
+    WhiteboardTool.HIGHLIGHTER -> Icons.Default.Highlight
+    WhiteboardTool.BRUSH -> Icons.Default.BrushToolIcon
+    WhiteboardTool.LASSO -> Icons.Default.Gesture
+    else -> Icons.Default.Draw
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun InkToolPanel(
     state: CanvasState,
@@ -248,8 +263,18 @@ fun InkToolPanel(
                             .border(1.dp, Color(0xFFD1D5DB), CircleShape)
                     )
                     Spacer(Modifier.width(8.dp))
+                    val activeToolLabel = when (state.inkTool) {
+                        WhiteboardTool.MATH_PEN -> "Math fx"
+                        WhiteboardTool.LASSO -> stringResource(R.string.util_lasso)
+                        else -> state.inkTool.label
+                    }
+                    val specText = if (state.inkTool == WhiteboardTool.LASSO) {
+                        "Select & Move"
+                    } else {
+                        "${state.strokeWidth.toInt()}px"
+                    }
                     Text(
-                        "${state.inkTool.label} · ${state.strokeWidth.toInt()}px",
+                        "$activeToolLabel · $specText",
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF1F2937),
                         fontSize = 14.sp
@@ -274,7 +299,7 @@ fun InkToolPanel(
 
             Spacer(Modifier.height(10.dp))
 
-            // Tool Icons: 6 tools with equal size, equal spacing, and sleek icons
+            // Tool Icons: 7 tools with equal size, equal spacing, and sleek icons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -285,9 +310,15 @@ fun InkToolPanel(
                     WhiteboardTool.PENCIL,
                     WhiteboardTool.MARKER,
                     WhiteboardTool.HIGHLIGHTER,
-                    WhiteboardTool.BRUSH
+                    WhiteboardTool.BRUSH,
+                    WhiteboardTool.LASSO
                 ).forEach { tool ->
-                    val selected = state.inkTool == tool
+                    val selected = state.inkTool == tool || (tool == WhiteboardTool.LASSO && state.currentTool == WhiteboardTool.LASSO)
+                    val label = when (tool) {
+                        WhiteboardTool.MATH_PEN -> "Math fx"
+                        WhiteboardTool.LASSO -> stringResource(R.string.util_lasso)
+                        else -> tool.label
+                    }
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -298,16 +329,8 @@ fun InkToolPanel(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = when (tool) {
-                                WhiteboardTool.PEN -> Icons.Default.Draw
-                                WhiteboardTool.MATH_PEN -> Icons.Default.Calculate
-                                WhiteboardTool.PENCIL -> Icons.Default.Edit
-                                WhiteboardTool.MARKER -> Icons.Default.BorderColor
-                                WhiteboardTool.HIGHLIGHTER -> Icons.Default.Highlight
-                                WhiteboardTool.BRUSH -> Icons.Default.Brush
-                                else -> Icons.Default.Draw
-                            },
-                            contentDescription = tool.label,
+                            imageVector = writingToolIcon(tool),
+                            contentDescription = label,
                             tint = if (selected) Color.White else Color(0xFF4B5563),
                             modifier = Modifier.size(20.dp)
                         )
@@ -332,31 +355,82 @@ fun InkToolPanel(
                         fontWeight = FontWeight.Medium
                     )
                 }
+            } else if (state.inkTool == WhiteboardTool.LASSO || state.currentTool == WhiteboardTool.LASSO) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFEEF2FF))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Lasso Tool active · Encircle any ink, shapes, text, or elements to select and manipulate them.",
+                        fontSize = 11.sp,
+                        color = Color(0xFF4338CA),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
 
             Spacer(Modifier.height(8.dp))
 
-            // Smart Write Banner
+            // Smart Write & Shape Recognition
             val language = smartWriteLanguage(state.smartWriteLanguageTag)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = if (state.smartWriteEnabled) {
+                        "Smart Write · ${language.label} · ${state.smartWriteIntervalMs / 1000f}s"
+                    } else {
+                        stringResource(R.string.smart_write)
+                    },
+                    color = if (state.smartWriteEnabled) Color.White else Color(0xFF1F2937),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (state.smartWriteEnabled) Color(0xFF2563EB) else Color(0xFFF3F4F6))
+                        .clickable { showSmartWrite = true }
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (state.isDrawToShapeEnabled) Color(0xFF2563EB) else Color(0xFFF3F4F6))
+                        .clickable { viewModel.toggleDrawToShape() }
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoFixHigh,
+                        contentDescription = stringResource(R.string.shape_recognition),
+                        tint = if (state.isDrawToShapeEnabled) Color.White else Color(0xFF1F2937),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = stringResource(R.string.shape_recognition),
+                        color = if (state.isDrawToShapeEnabled) Color.White else Color(0xFF1F2937),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+            val hintText = when {
+                state.smartWriteEnabled && state.isDrawToShapeEnabled -> stringResource(R.string.smart_write_tip)
+                state.smartWriteEnabled -> "Writes handwriting into editable text after you pause."
+                state.isDrawToShapeEnabled -> "Draw rough shapes to auto-convert them into clean shapes."
+                else -> "Turn on Smart Write for text or Shape Recognition for shapes."
+            }
             Text(
-                text = if (state.smartWriteEnabled) {
-                    "Smart Write · ${language.label} · ${state.smartWriteIntervalMs / 1000f}s"
-                } else {
-                    "Smart Write"
-                },
-                color = if (state.smartWriteEnabled) Color.White else Color(0xFF1F2937),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (state.smartWriteEnabled) Color(0xFF2563EB) else Color(0xFFF3F4F6))
-                    .clickable { showSmartWrite = true }
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
-            )
-            Text(
-                "Writes handwriting into editable text after you pause.",
+                text = hintText,
                 fontSize = 11.sp,
-                color = Color(0xFF6B7280),
+                color = if (state.smartWriteEnabled && state.isDrawToShapeEnabled) Color(0xFFD97706) else Color(0xFF6B7280),
                 modifier = Modifier.padding(top = 4.dp)
             )
 
@@ -369,48 +443,6 @@ fun InkToolPanel(
                     onDismiss = { showSmartWrite = false }
                 )
             }
-
-            Spacer(Modifier.height(8.dp))
-
-            // Magic Pen toggle
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (state.isDrawToShapeEnabled) Color(0xFF6366F1) else Color(0xFFF3F4F6))
-                    .clickable { viewModel.toggleDrawToShape() }
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.AutoFixHigh,
-                        contentDescription = "Magic pen",
-                        tint = if (state.isDrawToShapeEnabled) Color.White else Color(0xFF1F2937),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "Magic pen",
-                        color = if (state.isDrawToShapeEnabled) Color.White else Color(0xFF1F2937),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                Text(
-                    text = if (state.isDrawToShapeEnabled) "ON" else "OFF",
-                    color = if (state.isDrawToShapeEnabled) Color.White.copy(alpha = 0.9f) else Color(0xFF6B7280),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Text(
-                if (state.smartWriteEnabled) "Turn off Smart Write to use Magic pen." else "Recognizes rough circles, rectangles, lines, and shapes.",
-                fontSize = 11.sp,
-                color = Color(0xFF6B7280),
-                modifier = Modifier.padding(top = 4.dp)
-            )
 
             Spacer(Modifier.height(8.dp))
 
@@ -801,6 +833,7 @@ fun EraserToolPanel(
     state: CanvasState,
     viewModel: CanvasViewModel,
     onClearPage: () -> Unit,
+    onCleanAll: () -> Unit = {},
     onClose: () -> Unit = {}
 ) {
     Column(modifier = Modifier.width(260.dp)) {
@@ -867,16 +900,32 @@ fun EraserToolPanel(
                 activeTrackColor = Color(0xFF6366F1)
             )
         )
-        Text(
-            text = stringResource(R.string.clear_all),
-            color = Color(0xFFB91C1C),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onClearPage)
-                .padding(vertical = 8.dp)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.tool_clean_all),
+                color = Color(0xFFEA580C),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onCleanAll)
+                    .padding(vertical = 8.dp)
+            )
+            Text(
+                text = stringResource(R.string.clear_all),
+                color = Color(0xFFB91C1C),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onClearPage)
+                    .padding(vertical = 8.dp)
+            )
+        }
     }
 }
 

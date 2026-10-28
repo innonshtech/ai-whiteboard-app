@@ -408,12 +408,6 @@ fun GeometryToolPanel(
                     isDark = isDark,
                     onClick = { viewModel.setTool(WhiteboardTool.FRAME) }
                 ) { tint -> FrameIcon(tint) }
-                AidCard(
-                    name = stringResource(R.string.magic_pen),
-                    selected = state.isDrawToShapeEnabled,
-                    isDark = isDark,
-                    onClick = { viewModel.toggleDrawToShape() }
-                ) { tint -> MagicPenIcon(tint) }
             }
             if (state.smartWriteEnabled) {
                 Spacer(Modifier.height(8.dp))
@@ -769,20 +763,6 @@ private fun GraphPaperIcon(tint: Color) {
     }
 }
 
-@Composable
-private fun MagicPenIcon(tint: Color) {
-    Canvas(Modifier.size(28.dp)) {
-        val stroke = 1.7f.dp.toPx()
-        drawLine(
-            tint,
-            Offset(size.width * 0.28f, size.height * 0.72f),
-            Offset(size.width * 0.72f, size.height * 0.28f),
-            strokeWidth = stroke,
-            cap = StrokeCap.Round
-        )
-        drawCircle(tint, radius = 2.dp.toPx(), center = Offset(size.width * 0.78f, size.height * 0.22f))
-    }
-}
 
 @Composable
 private fun LineIcon(tint: Color) {

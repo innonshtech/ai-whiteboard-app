@@ -21,10 +21,8 @@ android {
         versionCode 1001
         versionName "1.0"
 
-        // Emulator alias for the host machine. A physical panel should set
-        // api.base.url=http://<pc-lan-ip>:3000 in bloom/local.properties
-        // (the webapi .env PORT, default 3000).
-        def apiBaseUrl = "http://10.0.2.2:3000"
+        // Default to deployed EC2 API. Can be overridden in bloom/local.properties via api.base.url.
+        def apiBaseUrl = "http://13.203.229.124:3000"
         def localPropsFile = rootProject.file("local.properties")
         if (localPropsFile.exists()) {
             def localProps = new Properties()

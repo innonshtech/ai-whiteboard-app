@@ -109,6 +109,9 @@ class TouchContacts(view: View) {
         private set
     var stylusActive: Boolean = false
         private set
+    /** True after a stylus has written on this board. A later hand contact can then erase. */
+    var sawStylus: Boolean = false
+        private set
     var activeCount: Int = 0
         private set
     var predictDx: Float = 0f
@@ -136,6 +139,7 @@ class TouchContacts(view: View) {
             activeContacts.add(ContactData(x, y, major, minor, size, tool))
             if (tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER) {
                 stylus = true
+                sawStylus = true
             }
             if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
                 lastDownMajor = major

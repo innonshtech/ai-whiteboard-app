@@ -62,11 +62,13 @@
     <string name="tool_exit">बाहर निकलें</string>
     <string name="tool_class">कक्षा</string>
     <string name="clear_all">सब साफ़ करें</string>
+    <string name="tool_clean_all">ऑब्जेक्ट्स साफ़ करें</string>
 
     <!-- Popover Menu Items -->
-    <string name="magic_pen">मैजिक पेन</string>
+    <string name="magic_pen">आकृति पहचान</string>
+    <string name="shape_recognition">आकृति पहचान</string>
     <string name="smart_write">स्मार्ट राइट</string>
-    <string name="smart_write_tip">मैजिक पेन का उपयोग करने के लिए स्मार्ट राइट बंद करें।</string>
+    <string name="smart_write_tip">आकृति पहचान का उपयोग करने के लिए स्मार्ट राइट बंद करें।</string>
     <string name="popover_background">पृष्ठभूमि</string>
     <string name="save_slides_pdf">स्लाइड्स सहेजें (PDF)</string>
     <string name="popover_zoom_in">ज़ूम इन</string>
@@ -121,6 +123,8 @@
     <!-- Dialogs -->
     <string name="dialog_clear_title">सब साफ़ करें</string>
     <string name="dialog_clear_msg">क्या आप इस पृष्ठ की सभी सामग्री मिटाना चाहते हैं? पूर्ववत (Undo) से इसे वापस लाया जा सकता है।</string>
+    <string name="dialog_clean_all_title">सब कुछ साफ़ करें</string>
+    <string name="dialog_clean_all_msg">क्या आप पेन सहित सभी चित्र, आकृतियाँ, ज्यामिति और ऑब्जेक्ट्स मिटाना चाहते हैं? पूर्ववत (Undo) से इसे वापस लाया जा सकता है।</string>
     <string name="dialog_rename_title">व्हाइटबोर्ड का नाम बदलें</string>
     <string name="dialog_edit_title">शीर्षक संपादित करें</string>
     <string name="dialog_delete_title">नोट हटाएं</string>
@@ -217,7 +221,7 @@
     <string name="geo_arm_other">भुजा %1$d° · अन्य %2$d°</string>
     <string name="geo_remove_board">बोर्ड से हटाएं</string>
     <string name="geo_place_board">बोर्ड पर रखें</string>
-    <string name="geo_aids_description">ग्राफ़ पेपर, सीधी रेखा, तीर, फ़्रेम और आकृति पहचान।</string>
+    <string name="geo_aids_description">ग्राफ़ पेपर, सीधी रेखा, तीर और फ़्रेम।</string>
     <string name="geo_aid_graph">ग्राफ़</string>
     <string name="geo_aid_line">रेखा</string>
     <string name="geo_aid_arrow">तीर</string>

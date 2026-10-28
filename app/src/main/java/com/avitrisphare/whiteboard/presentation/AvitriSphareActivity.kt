@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -15,7 +16,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -23,16 +26,19 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.avitrisphare.whiteboard.core.theme.LocalAvitriSphareColors
 import com.avitrisphare.whiteboard.core.theme.AvitriSphareTheme
+import com.avitrisphare.whiteboard.BuildConfig
+import com.avitrisphare.whiteboard.data.remote.ApiCall
 import com.avitrisphare.whiteboard.data.remote.ClassBriefing
 import com.avitrisphare.whiteboard.data.remote.PanelApi
 import com.avitrisphare.whiteboard.data.remote.PanelTeacher
-import com.avitrisphare.whiteboard.data.remote.VerifiedLicense
 import com.avitrisphare.whiteboard.domain.model.Note
 import com.avitrisphare.whiteboard.domain.repository.NoteRepository
 import com.avitrisphare.whiteboard.presentation.canvas.CanvasScreen
 import com.avitrisphare.whiteboard.presentation.dashboard.DashboardScreen
 import com.avitrisphare.whiteboard.presentation.entry.ClassHomeScreen
+import com.avitrisphare.whiteboard.presentation.entry.LicenseActivationScreen
 import com.avitrisphare.whiteboard.presentation.entry.PanelSessionStore
+import com.avitrisphare.whiteboard.presentation.entry.QrLoginScreen
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -107,38 +113,18 @@ class AvitriSphareActivity : ComponentActivity() {
                 }
             }
 
-            val defaultTeacher = remember {
-                PanelTeacher(
-                    id = "teacher_1",
-                    name = "Teacher",
-                    email = "teacher@school.local",
-                    subject = "Class",
-                    accessToken = "offline_token",
-                    refreshToken = null
-                )
-            }
-            var teacher by remember { mutableStateOf<PanelTeacher?>(defaultTeacher) }
-            var schoolName by remember { mutableStateOf("Smart Classroom") }
-            var classroomName by remember { mutableStateOf("Interactive Panel") }
-            var classroomId by remember { mutableStateOf<String?>("room_1") }
+            var teacher by remember { mutableStateOf<PanelTeacher?>(null) }
+            var schoolName by remember { mutableStateOf("School") }
+            var classroomName by remember { mutableStateOf("Classroom") }
+            var classroomId by remember { mutableStateOf<String?>(null) }
             var isDarkMode by remember { mutableStateOf(true) }
             var start by remember { mutableStateOf<String?>(null) }
+            var pendingImport by remember { mutableStateOf(intent?.data?.toString()) }
+            val scope = rememberCoroutineScope()
 
             LaunchedEffect(Unit) {
-                val stored = session.snapshot()
-                teacher = stored.teacher
-                schoolName = stored.schoolName
-                classroomName = stored.classroomName
-                classroomId = stored.classroomId
-                val incomingUri = intent?.data
-                if (incomingUri != null) {
-                    val note = Note(
-                        id = UUID.randomUUID().toString(),
-                        title = "Imported Lesson"
-                    )
-                    withContext(Dispatchers.IO) { noteRepository.insertNote(note) }
-                    start = "canvas/${note.id}?importUri=${android.net.Uri.encode(incomingUri.toString())}"
-                } else {
+                val incoming = pendingImport
+                if (BuildConfig.DEMO_MODE && incoming == null) {
                     val savedId = session.demoNoteId()
                     val noteId = if (savedId != null) {
                         val existing = withContext(Dispatchers.IO) { noteRepository.getNoteById(savedId) }
@@ -154,6 +140,35 @@ class AvitriSphareActivity : ComponentActivity() {
                         note.id
                     }
                     start = "canvas/$resolvedId"
+                    return@LaunchedEffect
+                }
+                val panelId = session.panelId()
+                val stored = session.snapshot()
+                val key = stored.licenseKey
+                if (key != null) {
+                    when (val checked = panelApi.verifyLicense(key, panelId)) {
+                        is ApiCall.Ok -> session.saveLicense(key, checked.value)
+                        is ApiCall.Err -> if (checked.licenseRejected) session.clearLicense()
+                    }
+                }
+                val fresh = session.snapshot()
+                teacher = fresh.teacher
+                schoolName = fresh.schoolName
+                classroomName = fresh.classroomName
+                classroomId = fresh.classroomId
+                start = when {
+                    !fresh.isLicensed -> "license"
+                    fresh.teacher == null -> "qr"
+                    incoming != null -> {
+                        pendingImport = null
+                        val note = Note(
+                            id = UUID.randomUUID().toString(),
+                            title = "Imported Lesson"
+                        )
+                        withContext(Dispatchers.IO) { noteRepository.insertNote(note) }
+                        "canvas/${note.id}?importUri=${android.net.Uri.encode(incoming)}"
+                    }
+                    else -> "classhome"
                 }
             }
             
@@ -171,16 +186,72 @@ class AvitriSphareActivity : ComponentActivity() {
                 ) {
                     val destination = start
                     if (destination == null) {
-                        Box(Modifier.fillMaxSize())
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                "Checking this panel with the school server…",
+                                color = Color(0xFF8B95A8)
+                            )
+                        }
                     } else NavHost(
                         navController = navController,
                         startDestination = destination
                     ) {
+                        composable("license") {
+                            LicenseActivationScreen(
+                                panelApi = panelApi,
+                                panelId = session.panelId()
+                            ) { key, license ->
+                                session.saveLicense(key, license)
+                                schoolName = license.schoolName
+                                classroomName = license.classroomName
+                                classroomId = license.classroomId
+                                navController.navigate("qr") {
+                                    popUpTo("license") { inclusive = true }
+                                }
+                            }
+                        }
+                        composable("qr") {
+                            QrLoginScreen(
+                                panelApi = panelApi,
+                                schoolName = schoolName,
+                                onLoggedIn = { signedIn ->
+                                    session.login(signedIn)
+                                    teacher = signedIn
+                                    val import = pendingImport
+                                    if (import != null) {
+                                        pendingImport = null
+                                        scope.launch {
+                                            val note = Note(
+                                                id = UUID.randomUUID().toString(),
+                                                title = "Imported Lesson"
+                                            )
+                                            noteRepository.insertNote(note)
+                                            navController.navigate(
+                                                "canvas/${note.id}?importUri=${android.net.Uri.encode(import)}"
+                                            ) {
+                                                popUpTo("qr") { inclusive = true }
+                                            }
+                                        }
+                                    } else {
+                                        navController.navigate("classhome") {
+                                            popUpTo("qr") { inclusive = true }
+                                        }
+                                    }
+                                },
+                                onChangeLicense = {
+                                    session.clearLicense()
+                                    teacher = null
+                                    navController.navigate("license") {
+                                        popUpTo(0) { inclusive = true }
+                                    }
+                                }
+                            )
+                        }
                         composable("classhome") {
                             val signedIn = teacher
                             if (signedIn == null) {
                                 LaunchedEffect(Unit) {
-                                    if (!navController.popBackStack()) finish()
+                                    navController.navigate("qr") { popUpTo(0) }
                                 }
                             } else {
                                 val notes by noteRepository.getAllNotes().collectAsState(initial = emptyList())
@@ -234,9 +305,13 @@ class AvitriSphareActivity : ComponentActivity() {
                                     },
                                     onOpenBoards = { navController.navigate("dashboard") },
                                     onLogout = {
+                                        val token = signedIn.accessToken
+                                        scope.launch { panelApi.logout(token) }
                                         session.logout()
                                         teacher = null
-                                        if (!navController.popBackStack()) finish()
+                                        navController.navigate("qr") {
+                                            popUpTo(0) { inclusive = true }
+                                        }
                                     }
                                 )
                             }
@@ -303,9 +378,17 @@ class AvitriSphareActivity : ComponentActivity() {
                                 noteId = noteId,
                                 noteTitle = "",
                                 onNavigateBack = {
-                                    if (!navController.popBackStack()) finish()
+                                    if (!navController.popBackStack()) {
+                                        if (BuildConfig.DEMO_MODE) {
+                                            finish()
+                                        } else {
+                                            navController.navigate("classhome") {
+                                                popUpTo(0) { inclusive = true }
+                                            }
+                                        }
+                                    }
                                 },
-                                demoMode = true,
+                                demoMode = BuildConfig.DEMO_MODE,
                                 panelSession = session,
                                 initialImportUri = importUriStr?.let { android.net.Uri.parse(it) },
                                 currentLanguage = currentLanguage,

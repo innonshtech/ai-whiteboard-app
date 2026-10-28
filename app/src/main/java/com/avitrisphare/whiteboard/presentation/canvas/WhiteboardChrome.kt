@@ -60,6 +60,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -188,6 +189,7 @@ val LocalDarkTheme = androidx.compose.runtime.compositionLocalOf { false }
 fun localizedToolLabel(tool: WhiteboardTool): String = when (tool) {
     WhiteboardTool.SELECT -> stringResource(R.string.tool_select)
     WhiteboardTool.PEN -> stringResource(R.string.tool_pen)
+    WhiteboardTool.MATH_PEN -> "Math fx"
     WhiteboardTool.PENCIL -> stringResource(R.string.tool_pencil)
     WhiteboardTool.MARKER -> stringResource(R.string.tool_marker)
     WhiteboardTool.HIGHLIGHTER -> stringResource(R.string.tool_highlighter)
@@ -195,6 +197,7 @@ fun localizedToolLabel(tool: WhiteboardTool): String = when (tool) {
     WhiteboardTool.ERASER -> stringResource(R.string.tool_eraser)
     WhiteboardTool.LASER -> stringResource(R.string.tool_laser)
     WhiteboardTool.SHAPE -> stringResource(R.string.tool_shapes)
+    WhiteboardTool.LASSO -> stringResource(R.string.util_lasso)
     else -> tool.label
 }
 
@@ -307,6 +310,7 @@ fun AvitriSphareWhiteboardChrome(
     onOpenIwb: () -> Unit = {},
     onHelp: () -> Unit,
     onClear: () -> Unit,
+    onCleanAll: () -> Unit = {},
     onRename: () -> Unit,
     onWebEmbed: () -> Unit,
     onSearchImages: () -> Unit,
@@ -1215,21 +1219,6 @@ fun AvitriSphareWhiteboardChrome(
                         label = stringResource(R.string.tool_main_menu),
                         tint = Color(0xFF2563EB)
                     ) { panel = null; onOpenMenu() }
-
-                    // Divider between Main Menu and Exit
-                    Box(
-                        modifier = Modifier
-                            .height(28.dp)
-                            .padding(horizontal = 4.dp)
-                            .width(1.dp)
-                            .background(Color(0x3394A3B8))
-                    )
-
-                    DockItem(
-                        icon = Icons.Default.Logout,
-                        label = stringResource(R.string.tool_exit),
-                        tint = Color(0xFFEF4444)
-                    ) { panel = null; onExit() }
                 }
 
                 // 2) Center Bar: Main Tools
@@ -1273,7 +1262,7 @@ fun AvitriSphareWhiteboardChrome(
                             panel == "eraser" -> ActiveDockTool.ERASER
                             panel == "geometry" -> ActiveDockTool.GEOMETRY
                             panel == "utilities" || panel == "background" -> ActiveDockTool.TOOLS
-                            state.currentTool in WRITING_TOOLS -> ActiveDockTool.PEN
+                            state.currentTool in WRITING_TOOLS || state.currentTool == WhiteboardTool.LASSO -> ActiveDockTool.PEN
                             state.currentTool == WhiteboardTool.RULER ||
                                 state.currentTool == WhiteboardTool.COMPASS ||
                                 state.currentTool == WhiteboardTool.PROTRACTOR ||
@@ -2039,7 +2028,7 @@ fun AvitriSphareWhiteboardChrome(
                             viewModel.setTool(state.inkTool)
                             panel = "ink"
                         }
-                        PopoverRow(Icons.Default.AutoFixHigh, stringResource(R.string.magic_pen), state.isDrawToShapeEnabled) {
+                        PopoverRow(Icons.Default.AutoFixHigh, stringResource(R.string.shape_recognition), state.isDrawToShapeEnabled) {
                             viewModel.toggleDrawToShape()
                         }
                         if (state.smartWriteEnabled) {
@@ -2057,6 +2046,7 @@ fun AvitriSphareWhiteboardChrome(
                         PopoverRow(Icons.Default.Timer, stringResource(R.string.util_stopwatch), isStopwatchVisible) { panel = null; onToggleStopwatch() }
                         PopoverRow(Icons.Default.Calculate, stringResource(R.string.util_calculator), isCalculatorVisible) { panel = null; onToggleCalculator() }
                         PopoverRow(Icons.Default.Science, stringResource(R.string.util_periodic), isPeriodicTableVisible) { panel = null; onTogglePeriodicTable() }
+                        PopoverRow(Icons.Default.CleaningServices, stringResource(R.string.tool_clean_all)) { panel = null; onCleanAll() }
                         PopoverRow(Icons.Default.LayersClear, stringResource(R.string.clear_all)) { panel = null; onClear() }
                         PopoverRow(Icons.Default.Save, stringResource(R.string.tool_save)) { panel = null; onSave() }
                         PopoverRow(Icons.Default.Description, stringResource(R.string.save_slides_pdf)) { panel = null; onSaveSlides() }
@@ -2248,7 +2238,7 @@ fun AvitriSphareWhiteboardChrome(
                                     viewModel.setTool(state.inkTool)
                                     panel = "ink"
                                 },
-                                ToolTile(Icons.Default.AutoFixHigh, stringResource(R.string.magic_pen), Color(0xFFEC4899), state.isDrawToShapeEnabled) {
+                                ToolTile(Icons.Default.AutoFixHigh, stringResource(R.string.shape_recognition), Color(0xFFEC4899), state.isDrawToShapeEnabled) {
                                     viewModel.toggleDrawToShape()
                                 },
                                 ToolTile(Icons.Default.GridOn, stringResource(R.string.popover_background), Color(0xFF10B981)) { panel = "background" },
@@ -2289,12 +2279,6 @@ fun AvitriSphareWhiteboardChrome(
                                 ToolTile(Icons.Default.Science, stringResource(R.string.util_periodic), Color(0xFF10B981), isPeriodicTableVisible) {
                                     panel = null; onTogglePeriodicTable()
                                 },
-                                ToolTile(Icons.Default.CenterFocusStrong, stringResource(R.string.util_spotlight), Color(0xFFF59E0B), state.currentTool == WhiteboardTool.SPOTLIGHT) {
-                                    viewModel.setTool(WhiteboardTool.SPOTLIGHT)
-                                },
-                                ToolTile(Icons.Default.VisibilityOff, stringResource(R.string.util_shade), Color(0xFF1F2937), state.currentTool == WhiteboardTool.SHADE) {
-                                    viewModel.setTool(WhiteboardTool.SHADE)
-                                },
                                 ToolTile(Icons.Default.ZoomIn, stringResource(R.string.util_magnifier), Color(0xFF6366F1), state.currentTool == WhiteboardTool.MAGNIFIER) {
                                     viewModel.setTool(WhiteboardTool.MAGNIFIER); panel = null
                                 },
@@ -2306,7 +2290,6 @@ fun AvitriSphareWhiteboardChrome(
                                 ToolTile(Icons.Default.FolderOpen, "GYOASH", Color(0xFF2563EB)) { panel = null; onOpenIwb() },
                                 ToolTile(Icons.Default.IosShare, stringResource(R.string.menu_export_lesson), Color(0xFF2563EB)) { panel = null; onExport() },
                                 ToolTile(Icons.Default.Description, stringResource(R.string.save_slides_pdf), Color(0xFFEF4444)) { panel = null; onSaveSlides() },
-                                ToolTile(Icons.Default.LayersClear, stringResource(R.string.clear_all), Color(0xFFEF4444)) { panel = null; onClear() },
                                 ToolTile(Icons.Default.HelpOutline, stringResource(R.string.menu_help), Color(0xFF6B7280)) { panel = null; onHelp() }
                             )
                             else -> buildList {
@@ -2355,23 +2338,6 @@ fun AvitriSphareWhiteboardChrome(
                                 color = Color(0xFF6B7280)
                             )
                         }
-                        if (toolTab == 2 && state.currentTool == WhiteboardTool.SHADE) {
-                            Spacer(Modifier.height(4.dp))
-                            PopoverRow(
-                                Icons.Default.SwapVert,
-                                if (shadeFromTop) "Shade from top" else "Shade from bottom"
-                            ) { onToggleShadeSide() }
-                        }
-                        if (toolTab == 2 && state.currentTool == WhiteboardTool.SPOTLIGHT) {
-                            Spacer(Modifier.height(4.dp))
-                            Text("Spotlight size", fontSize = 12.sp, color = Color(0xFF6B7280))
-                            Slider(
-                                value = spotlightRadius.coerceIn(60f, 360f),
-                                onValueChange = onSpotlightRadius,
-                                valueRange = 60f..360f,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
                         if (toolTab == 4) {
                             Spacer(Modifier.height(4.dp))
                             Text(
@@ -2388,6 +2354,10 @@ fun AvitriSphareWhiteboardChrome(
                             onClearPage = {
                                 panel = null
                                 onClear()
+                            },
+                            onCleanAll = {
+                                panel = null
+                                onCleanAll()
                             },
                             onClose = { panel = null }
                         )
@@ -2756,6 +2726,7 @@ private fun DockItem(
 
 @Composable
 private fun PenSplitDockItem(
+    icon: ImageVector = Icons.Default.Draw,
     label: String,
     active: Boolean,
     modifier: Modifier = Modifier,
@@ -2763,16 +2734,18 @@ private fun PenSplitDockItem(
     onPenClick: () -> Unit,
     onDropdownClick: () -> Unit
 ) {
-    val activeColor = Color(0xFF00BCD4)
     val activeContentColor = Color.White
     val inactiveIconColor = Color(0xFF2563EB)
     val inactiveTextColor = if (isDark) Color(0xFFCBD5E1) else DockLabel
 
     Row(
         modifier = modifier
-            .height(48.dp)
+            .height(44.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(if (active) activeColor else Color.Transparent),
+            .background(
+                if (active) Brush.horizontalGradient(ButtonGradient)
+                else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Left: Pen Tool Button (Activates Pen when tapped)
@@ -2780,7 +2753,7 @@ private fun PenSplitDockItem(
             modifier = Modifier
                 .fillMaxHeight()
                 .clickable(onClick = onPenClick)
-                .padding(horizontal = 8.dp, vertical = 2.dp),
+                .padding(start = 7.dp, end = 5.dp, top = 2.dp, bottom = 2.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -2788,17 +2761,17 @@ private fun PenSplitDockItem(
                 verticalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.Draw,
+                    imageVector = icon,
                     contentDescription = label,
                     tint = if (active) activeContentColor else inactiveIconColor,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(17.dp)
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = label,
                     color = if (active) activeContentColor else inactiveTextColor,
                     fontSize = 9.sp,
-                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
                     maxLines = 1
                 )
             }
@@ -2807,28 +2780,28 @@ private fun PenSplitDockItem(
         // Middle: Vertical Divider Line
         Box(
             modifier = Modifier
-                .fillMaxHeight()
-                .padding(vertical = 4.dp)
+                .height(18.dp)
                 .width(1.dp)
                 .background(
-                    if (active) Color.White.copy(alpha = 0.5f)
+                    if (active) Color.White.copy(alpha = 0.45f)
                     else (if (isDark) Color(0x33CBD5E1) else Color(0x3394A3B8))
                 )
         )
 
         // Right: Dropdown Arrow (Opens/toggles the Settings panel when tapped)
+        // Kept very short with a small arrow icon to save space
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .clickable(onClick = onDropdownClick)
-                .padding(horizontal = 6.dp),
+                .padding(start = 2.dp, end = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.ArrowDropDown,
                 contentDescription = "Pen settings",
                 tint = if (active) activeContentColor else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF64748B)),
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(13.dp)
             )
         }
     }

@@ -9,15 +9,21 @@ import android.graphics.SurfaceTexture
 import android.os.Build
 import android.media.MediaPlayer
 import android.net.Uri
+import android.text.TextUtils
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.graphics.drawable.GradientDrawable
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Canvas
@@ -100,6 +106,31 @@ class BoardStageView(context: Context) : FrameLayout(context) {
             canvas.drawRoundRect(left, top, right, bottom, 16f, 16f, marqueePaint)
         }
     }
+    private var eraserCursorX = 0f
+    private var eraserCursorY = 0f
+    private var eraserCursorRadius = 0f
+    private var eraserCursorVisible = false
+    private val eraserCursorPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xAA374151.toInt()
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = 2.5f * density.density
+    }
+    private val eraserCursorFill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x14374151
+        style = android.graphics.Paint.Style.FILL
+    }
+    private val eraserCursorOverlay = object : View(context) {
+        init {
+            setWillNotDraw(false)
+            isClickable = false
+        }
+
+        override fun onDraw(canvas: android.graphics.Canvas) {
+            if (!eraserCursorVisible || eraserCursorRadius <= 0f) return
+            canvas.drawCircle(eraserCursorX, eraserCursorY, eraserCursorRadius, eraserCursorFill)
+            canvas.drawCircle(eraserCursorX, eraserCursorY, eraserCursorRadius, eraserCursorPaint)
+        }
+    }
 
     init {
         setBackgroundColor(android.graphics.Color.WHITE)
@@ -112,10 +143,12 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         addView(ink, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(blurredInk, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(live, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(eraserCursorOverlay, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         grid.isClickable = false
         ink.isClickable = false
         blurredInk.isClickable = false
         live.isClickable = false
+        eraserCursorOverlay.isClickable = false
         blurredInk.setBackgroundColor(android.graphics.Color.TRANSPARENT)
         live.setBackgroundColor(android.graphics.Color.TRANSPARENT)
         isClickable = false
@@ -143,7 +176,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         return true
     }
 
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean = false
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean = super.dispatchTouchEvent(ev)
 
     private var currentPageIndex = -1
 
@@ -319,6 +352,21 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         live.invalidate()
     }
 
+    /** Screen-space eraser ring. Invalidates only this overlay, so the ring tracks the pointer. */
+    fun showEraserCursor(x: Float, y: Float, radiusPx: Float) {
+        eraserCursorX = x
+        eraserCursorY = y
+        eraserCursorRadius = radiusPx.coerceAtLeast(4f)
+        eraserCursorVisible = true
+        eraserCursorOverlay.invalidate()
+    }
+
+    fun hideEraserCursor() {
+        if (!eraserCursorVisible) return
+        eraserCursorVisible = false
+        eraserCursorOverlay.invalidate()
+    }
+
     fun showGestureStrokes(strokes: List<Stroke>) {
         gestureStrokes = strokes
         this.strokes = strokes
@@ -456,13 +504,14 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         params.leftMargin = left
         params.topMargin = top
         view.layoutParams = params
+        view.requestLayout()
     }
 
     private fun createMedia(stroke: Stroke): View {
         return when (stroke.strokeType) {
             StrokeType.IMAGE -> imageView(stroke)
-            StrokeType.VIDEO -> if (stroke.imageUri.isNotEmpty()) videoView(stroke) else webView(stroke.text)
-            StrokeType.WEB_EMBED -> webView(stroke.text)
+            StrokeType.VIDEO -> if (stroke.imageUri.isNotEmpty()) videoView(stroke) else webEmbedView(stroke)
+            StrokeType.WEB_EMBED -> webEmbedView(stroke)
             else -> View(context)
         }
     }
@@ -540,19 +589,126 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         return host
     }
 
-    private fun webView(url: String): WebView {
-        val web = WebView(context)
-        web.setBackgroundColor(android.graphics.Color.WHITE)
-        web.settings.javaScriptEnabled = true
-        web.settings.domStorageEnabled = true
-        web.settings.mediaPlaybackRequiresUserGesture = false
-        web.settings.userAgentString =
-            "Mozilla/5.0 (Linux; Android 13; Tablet) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        web.webChromeClient = WebChromeClient()
-        web.webViewClient = WebViewClient()
-        val headers = mapOf("Referer" to "https://www.youtube.com")
-        web.loadUrl(url, headers)
-        return web
+    private fun webEmbedView(stroke: Stroke): View {
+        val d = context.resources.displayMetrics.density
+        val headerHeight = (36f * d).toInt()
+
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            tag = stroke.id
+            val outline = GradientDrawable().apply {
+                setColor(android.graphics.Color.WHITE)
+                setStroke((1.5f * d).toInt(), android.graphics.Color.parseColor("#94A3B8"))
+                cornerRadius = 10f * d
+            }
+            background = outline
+            elevation = 6f * d
+            clipToOutline = true
+        }
+
+        val header = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((10f * d).toInt(), 0, (8f * d).toInt(), 0)
+            setBackgroundColor(android.graphics.Color.parseColor("#E2E8F0"))
+        }
+
+        val icon = ImageView(context).apply {
+            setImageResource(android.R.drawable.ic_menu_compass)
+            setColorFilter(android.graphics.Color.parseColor("#475569"))
+            layoutParams = LinearLayout.LayoutParams((18f * d).toInt(), (18f * d).toInt()).apply {
+                marginEnd = (6f * d).toInt()
+            }
+        }
+        header.addView(icon)
+
+        val titleText = try {
+            Uri.parse(stroke.text).host ?: stroke.text
+        } catch (_: Exception) {
+            stroke.text
+        }.ifBlank { "Website" }
+
+        val titleView = TextView(context).apply {
+            text = titleText
+            textSize = 12f
+            setTextColor(android.graphics.Color.parseColor("#1E293B"))
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        header.addView(titleView)
+
+        val web = WebView(context).apply {
+            setBackgroundColor(android.graphics.Color.WHITE)
+            isVerticalScrollBarEnabled = true
+            isHorizontalScrollBarEnabled = true
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.databaseEnabled = true
+            settings.mediaPlaybackRequiresUserGesture = false
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            settings.setSupportZoom(true)
+            settings.builtInZoomControls = true
+            settings.displayZoomControls = false
+            settings.userAgentString =
+                "Mozilla/5.0 (Linux; Android 13; Tablet) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            webChromeClient = WebChromeClient()
+            webViewClient = WebViewClient()
+            val headers = mapOf("Referer" to "https://www.youtube.com")
+            loadUrl(stroke.text, headers)
+        }
+
+        val reloadBtn = ImageView(context).apply {
+            setImageResource(android.R.drawable.ic_popup_sync)
+            setColorFilter(android.graphics.Color.parseColor("#475569"))
+            val pad = (4f * d).toInt()
+            setPadding(pad, pad, pad, pad)
+            layoutParams = LinearLayout.LayoutParams((24f * d).toInt(), (24f * d).toInt())
+            setOnClickListener { web.reload() }
+        }
+        header.addView(reloadBtn)
+
+        container.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, headerHeight))
+        container.addView(web, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        return container
+    }
+
+    fun dispatchTouchToMedia(
+        strokeId: String,
+        action: Int,
+        screenX: Float,
+        screenY: Float,
+        downTime: Long,
+        eventTime: Long
+    ): Boolean {
+        val container = mediaViews[strokeId] ?: return false
+        val web = findWebView(container) ?: return false
+
+        val stageLoc = IntArray(2)
+        getLocationOnScreen(stageLoc)
+        val webLoc = IntArray(2)
+        web.getLocationOnScreen(webLoc)
+
+        val localX = screenX - (webLoc[0] - stageLoc[0])
+        val localY = screenY - (webLoc[1] - stageLoc[1])
+
+        val event = MotionEvent.obtain(downTime, eventTime, action, localX, localY, 0)
+        val handled = web.dispatchTouchEvent(event)
+        event.recycle()
+        return handled
+    }
+
+    private fun findWebView(root: View): WebView? {
+        if (root is WebView) return root
+        if (root is ViewGroup) {
+            for (i in 0 until root.childCount) {
+                val child = root.getChildAt(i)
+                findWebView(child)?.let { return it }
+            }
+        }
+        return null
     }
 
     private inner class LayerView(context: Context) : View(context) {

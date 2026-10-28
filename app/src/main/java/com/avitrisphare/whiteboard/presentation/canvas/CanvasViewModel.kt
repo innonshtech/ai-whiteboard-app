@@ -246,6 +246,16 @@ val WRITING_TOOLS = setOf(
     WhiteboardTool.BRUSH
 )
 
+val PEN_PANEL_TOOLS = setOf(
+    WhiteboardTool.PEN,
+    WhiteboardTool.MATH_PEN,
+    WhiteboardTool.PENCIL,
+    WhiteboardTool.MARKER,
+    WhiteboardTool.HIGHLIGHTER,
+    WhiteboardTool.BRUSH,
+    WhiteboardTool.LASSO
+)
+
 fun WhiteboardTool.toStrokeType(): StrokeType = when (this) {
     WhiteboardTool.PENCIL -> StrokeType.PENCIL
     WhiteboardTool.MARKER -> StrokeType.MARKER
@@ -312,7 +322,7 @@ class CanvasViewModel @Inject constructor(
     val pageBitmap: StateFlow<Bitmap?> = _pageBitmap.asStateFlow()
 
     sealed interface CanvasUndoEntry {
-        data class StrokeState(val strokes: List<Stroke>) : CanvasUndoEntry
+        data class StrokeState(val strokes: List<Stroke>, val mathTools: List<PlacedMathTool> = emptyList()) : CanvasUndoEntry
         data class DeletedPage(
             val index: Int,
             val strokes: List<Stroke>,
@@ -416,7 +426,7 @@ class CanvasViewModel @Inject constructor(
             }
             it.copy(
                 currentTool = tool,
-                inkTool = if (tool in WRITING_TOOLS) tool else it.inkTool,
+                inkTool = if (tool in PEN_PANEL_TOOLS) tool else it.inkTool,
                 strokeWidth = width ?: it.strokeWidth,
                 isEraser = tool == WhiteboardTool.ERASER,
                 isHighlighter = tool == WhiteboardTool.HIGHLIGHTER,
@@ -1463,8 +1473,35 @@ class CanvasViewModel @Inject constructor(
             if (p.y > maxY) maxY = p.y
         }
         val lassoRect = Rect(minX, minY, maxX, maxY)
+
+        fun pointInPolygon(pt: Offset): Boolean {
+            var inside = false
+            var j = lassoPoints.size - 1
+            for (i in lassoPoints.indices) {
+                val pi = lassoPoints[i]
+                val pj = lassoPoints[j]
+                if ((pi.y > pt.y) != (pj.y > pt.y) &&
+                    pt.x < (pj.x - pi.x) * (pt.y - pi.y) / (pj.y - pi.y) + pi.x
+                ) {
+                    inside = !inside
+                }
+                j = i
+            }
+            return inside
+        }
+
         val selected = _state.value.strokes.filter { stroke ->
-            lassoRect.overlaps(stroke.bounds)
+            val b = strokeSelectionBounds(stroke)
+            if (!lassoRect.overlaps(b)) {
+                false
+            } else if (pointInPolygon(b.center)) {
+                true
+            } else if (stroke.points.any { pointInPolygon(it) }) {
+                true
+            } else {
+                pointInPolygon(b.topLeft) || pointInPolygon(b.topRight) ||
+                pointInPolygon(b.bottomLeft) || pointInPolygon(b.bottomRight)
+            }
         }.map { it.id }.toSet()
 
         _state.update { it.copy(selectedStrokeIds = selected) }
@@ -3044,18 +3081,23 @@ class CanvasViewModel @Inject constructor(
         val action = undoActionStack.removeLastOrNull() ?: return
         when (action) {
             is CanvasUndoEntry.StrokeState -> {
-                redoActionStack.add(CanvasUndoEntry.StrokeState(currentStrokes))
+                redoActionStack.add(CanvasUndoEntry.StrokeState(currentStrokes, _state.value.mathTools))
                 if (redoActionStack.size > MAX_UNDO) redoActionStack.removeAt(0)
                 textEditUndoCaptured = false
                 _state.update { s ->
                     s.copy(
                         strokes = action.strokes,
+                        mathTools = action.mathTools,
                         canUndo = undoActionStack.isNotEmpty(),
                         canRedo = true,
                         smartWriteOffer = null,
                         smartWriteWarning = null,
                         editingTextId = null
                     )
+                }
+                while (pageMathTools.size <= activePage) pageMathTools.add(emptyList())
+                if (activePage in pageMathTools.indices) {
+                    pageMathTools[activePage] = action.mathTools
                 }
                 pages[activePage] = action.strokes
                 scheduleSave()
@@ -3107,18 +3149,23 @@ class CanvasViewModel @Inject constructor(
         val action = redoActionStack.removeLastOrNull() ?: return
         when (action) {
             is CanvasUndoEntry.StrokeState -> {
-                undoActionStack.add(CanvasUndoEntry.StrokeState(currentStrokes))
+                undoActionStack.add(CanvasUndoEntry.StrokeState(currentStrokes, _state.value.mathTools))
                 if (undoActionStack.size > MAX_UNDO) undoActionStack.removeAt(0)
                 textEditUndoCaptured = false
                 _state.update { s ->
                     s.copy(
                         strokes = action.strokes,
+                        mathTools = action.mathTools,
                         canUndo = true,
                         canRedo = redoActionStack.isNotEmpty(),
                         smartWriteOffer = null,
                         smartWriteWarning = null,
                         editingTextId = null
                     )
+                }
+                while (pageMathTools.size <= activePage) pageMathTools.add(emptyList())
+                if (activePage in pageMathTools.indices) {
+                    pageMathTools[activePage] = action.mathTools
                 }
                 pages[activePage] = action.strokes
                 scheduleSave()
@@ -3164,21 +3211,33 @@ class CanvasViewModel @Inject constructor(
             setPaneStrokes(index, emptyList())
             return
         }
-        if (_state.value.strokes.isEmpty()) return
+        if (_state.value.strokes.isEmpty() && _state.value.mathTools.isEmpty()) return
         saveToUndoStack()
         _state.update { s ->
             s.copy(
                 strokes = emptyList(),
                 currentStroke = null,
                 selectedStrokeIds = emptySet(),
+                mathTools = emptyList(),
                 canUndo = true,
                 canRedo = false
             )
+        }
+        while (pageMathTools.size <= activePage) pageMathTools.add(emptyList())
+        if (activePage in pageMathTools.indices) {
+            pageMathTools[activePage] = emptyList()
         }
         mathPenJob?.cancel()
         mathPenSessionStrokeIds.clear()
         redoStack.clear()
         scheduleSave()
+    }
+
+    /**
+     * Cleans everything across the active canvas (drawings, pen strokes, shapes, geometry tools, images, etc.).
+     */
+    fun cleanCanvasExceptPen() {
+        clearCanvas()
     }
 
     /**
@@ -3234,7 +3293,7 @@ class CanvasViewModel @Inject constructor(
     }
 
     private fun saveToUndoStack() {
-        undoActionStack.add(CanvasUndoEntry.StrokeState(_state.value.strokes))
+        undoActionStack.add(CanvasUndoEntry.StrokeState(_state.value.strokes, _state.value.mathTools))
         if (undoActionStack.size > MAX_UNDO) undoActionStack.removeAt(0)
         undoStack.add(_state.value.strokes)
         if (undoStack.size > MAX_UNDO) undoStack.removeAt(0)
