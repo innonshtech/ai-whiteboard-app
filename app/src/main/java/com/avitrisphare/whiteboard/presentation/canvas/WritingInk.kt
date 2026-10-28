@@ -226,7 +226,7 @@ fun InkToolPanel(
     onClose: () -> Unit = {}
 ) {
     var showSmartWrite by remember { mutableStateOf(false) }
-    var editingSecondary by remember { mutableStateOf(false) }
+    var editingSecondary by remember(state.useSecondaryPenColor) { mutableStateOf(state.useSecondaryPenColor) }
     var showColorWheel by remember { mutableStateOf(false) }
     val currentColor = if (editingSecondary) state.secondaryColor else state.selectedColor
 
@@ -263,18 +263,21 @@ fun InkToolPanel(
                             .border(1.dp, Color(0xFFD1D5DB), CircleShape)
                     )
                     Spacer(Modifier.width(8.dp))
-                    val activeToolLabel = when (state.inkTool) {
+                    val currentTipTool = if (editingSecondary) state.secondaryInkTool else state.inkTool
+                    val activeToolLabel = when (currentTipTool) {
                         WhiteboardTool.MATH_PEN -> "Math fx"
                         WhiteboardTool.LASSO -> stringResource(R.string.util_lasso)
-                        else -> state.inkTool.label
+                        else -> currentTipTool.label
                     }
-                    val specText = if (state.inkTool == WhiteboardTool.LASSO) {
+                    val currentWidth = if (editingSecondary) state.secondaryStrokeWidth else state.strokeWidth
+                    val specText = if (currentTipTool == WhiteboardTool.LASSO) {
                         "Select & Move"
                     } else {
-                        "${state.strokeWidth.toInt()}px"
+                        "${currentWidth.toInt()}px"
                     }
+                    val tipPrefix = if (editingSecondary) "Tip 2: " else "Tip 1: "
                     Text(
-                        "$activeToolLabel · $specText",
+                        "$tipPrefix$activeToolLabel · $specText",
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF1F2937),
                         fontSize = 14.sp
@@ -313,7 +316,8 @@ fun InkToolPanel(
                     WhiteboardTool.BRUSH,
                     WhiteboardTool.LASSO
                 ).forEach { tool ->
-                    val selected = state.inkTool == tool || (tool == WhiteboardTool.LASSO && state.currentTool == WhiteboardTool.LASSO)
+                    val currentTipTool = if (editingSecondary) state.secondaryInkTool else state.inkTool
+                    val selected = currentTipTool == tool || (tool == WhiteboardTool.LASSO && state.currentTool == WhiteboardTool.LASSO)
                     val label = when (tool) {
                         WhiteboardTool.MATH_PEN -> "Math fx"
                         WhiteboardTool.LASSO -> stringResource(R.string.util_lasso)
@@ -325,7 +329,13 @@ fun InkToolPanel(
                             .height(40.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (selected) Color(0xFF4F46E5) else Color(0xFFF3F4F6))
-                            .clickable { viewModel.setTool(tool) },
+                            .clickable {
+                                if (editingSecondary) {
+                                    viewModel.setSecondaryInkTool(tool)
+                                } else {
+                                    viewModel.setTool(tool)
+                                }
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -447,19 +457,49 @@ fun InkToolPanel(
             Spacer(Modifier.height(8.dp))
 
             // Stroke Size Slider
-            Text("Size", fontSize = 12.sp, color = Color(0xFF6B7280))
+            val currentTipTool = if (editingSecondary) state.secondaryInkTool else state.inkTool
+            val currentWidth = if (editingSecondary) state.secondaryStrokeWidth else state.strokeWidth
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (editingSecondary) "Tip 2 Size (${currentTipTool.label}): ${currentWidth.toInt()}px" else "Tip 1 Size (${currentTipTool.label}): ${currentWidth.toInt()}px",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF4F46E5)
+                )
+                Text(
+                    text = if (editingSecondary) "Editing Tip 2" else "Editing Tip 1",
+                    fontSize = 11.sp,
+                    color = Color(0xFF6B7280)
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "−",
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable { viewModel.nudgeStrokeWidth(-2f) }
+                        .clickable {
+                            if (editingSecondary) {
+                                viewModel.setSecondaryStrokeWidth((state.secondaryStrokeWidth - 2f).coerceAtLeast(1f))
+                            } else {
+                                viewModel.nudgeStrokeWidth(-2f)
+                            }
+                        }
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                     fontWeight = FontWeight.Bold
                 )
                 Slider(
-                    value = state.strokeWidth.coerceIn(1f, 50f),
-                    onValueChange = { viewModel.setStrokeWidth(it) },
+                    value = currentWidth.coerceIn(1f, 50f),
+                    onValueChange = {
+                        if (editingSecondary) {
+                            viewModel.setSecondaryStrokeWidth(it)
+                        } else {
+                            viewModel.setStrokeWidth(it)
+                        }
+                    },
                     valueRange = 1f..50f,
                     modifier = Modifier.weight(1f),
                     colors = SliderDefaults.colors(
@@ -471,7 +511,13 @@ fun InkToolPanel(
                     "+",
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable { viewModel.nudgeStrokeWidth(2f) }
+                        .clickable {
+                            if (editingSecondary) {
+                                viewModel.setSecondaryStrokeWidth((state.secondaryStrokeWidth + 2f).coerceAtMost(50f))
+                            } else {
+                                viewModel.nudgeStrokeWidth(2f)
+                            }
+                        }
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                     fontWeight = FontWeight.Bold
                 )
@@ -483,62 +529,107 @@ fun InkToolPanel(
             Text(stringResource(R.string.pen_two_colour), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF374151))
             Spacer(Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                // Primary Swatch
+                // Tip 1 Swatch
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(if (!editingSecondary) Color(0xFFEEF2FF) else Color(0xFFF9FAFB))
-                        .clickable { editingSecondary = false }
-                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                        .border(
+                            width = if (!editingSecondary) 1.5.dp else 1.dp,
+                            color = if (!editingSecondary) Color(0xFF6366F1) else Color(0xFFE5E7EB),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .clickable {
+                            editingSecondary = false
+                            viewModel.setActivePenSlot(1)
+                        }
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
                 ) {
                     Box(
                         Modifier
-                            .size(30.dp)
+                            .size(28.dp)
                             .clip(CircleShape)
                             .background(Color(state.selectedColor))
-                            .then(
-                                if (!editingSecondary) Modifier.border(2.5.dp, Color(0xFF6366F1), CircleShape)
-                                else Modifier.border(1.dp, Color(0xFFD1D5DB), CircleShape)
-                            )
+                            .border(1.5.dp, Color.White, CircleShape)
                     )
-                    Text(stringResource(R.string.pen_primary_active), fontSize = 10.sp, fontWeight = if (!editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (!editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        if (!editingSecondary) "Tip 1 (Active)" else "Tip 1 (Thin)",
+                        fontSize = 11.sp,
+                        fontWeight = if (!editingSecondary) FontWeight.Bold else FontWeight.Medium,
+                        color = if (!editingSecondary) Color(0xFF4F46E5) else Color(0xFF4B5563)
+                    )
+                    Text(
+                        "${state.inkTool.label} · ${state.strokeWidth.toInt()}px",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (!editingSecondary) Color(0xFF6366F1) else Color(0xFF9CA3AF)
+                    )
                 }
 
                 // Swap Button
-                Row(
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
                         .background(Color(0xFFEEF2FF))
                         .clickable { viewModel.swapPenColors() }
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        .padding(horizontal = 8.dp, vertical = 8.dp)
                 ) {
-                    Icon(Icons.Default.SwapHoriz, contentDescription = stringResource(R.string.pen_swap), tint = Color(0xFF4F46E5), modifier = Modifier.size(16.dp))
-                    Text(stringResource(R.string.pen_swap), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4F46E5))
+                    Icon(
+                        Icons.Default.SwapHoriz,
+                        contentDescription = stringResource(R.string.pen_swap),
+                        tint = Color(0xFF4F46E5),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        stringResource(R.string.pen_swap),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF4F46E5)
+                    )
                 }
 
-                // Secondary Swatch
+                // Tip 2 Swatch
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(if (editingSecondary) Color(0xFFEEF2FF) else Color(0xFFF9FAFB))
-                        .clickable { editingSecondary = true }
-                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                        .border(
+                            width = if (editingSecondary) 1.5.dp else 1.dp,
+                            color = if (editingSecondary) Color(0xFF6366F1) else Color(0xFFE5E7EB),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .clickable {
+                            editingSecondary = true
+                            viewModel.setActivePenSlot(2)
+                        }
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
                 ) {
                     Box(
                         Modifier
-                            .size(30.dp)
+                            .size(28.dp)
                             .clip(CircleShape)
                             .background(Color(state.secondaryColor))
-                            .then(
-                                if (editingSecondary) Modifier.border(2.5.dp, Color(0xFF6366F1), CircleShape)
-                                else Modifier.border(1.dp, Color(0xFFD1D5DB), CircleShape)
-                            )
+                            .border(1.5.dp, Color.White, CircleShape)
                     )
-                    Text(stringResource(R.string.pen_secondary), fontSize = 10.sp, fontWeight = if (editingSecondary) FontWeight.Bold else FontWeight.Normal, color = if (editingSecondary) Color(0xFF4F46E5) else Color(0xFF6B7280))
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        if (editingSecondary) "Tip 2 (Active)" else "Tip 2 (Thick)",
+                        fontSize = 11.sp,
+                        fontWeight = if (editingSecondary) FontWeight.Bold else FontWeight.Medium,
+                        color = if (editingSecondary) Color(0xFF4F46E5) else Color(0xFF4B5563)
+                    )
+                    Text(
+                        "${state.secondaryInkTool.label} · ${state.secondaryStrokeWidth.toInt()}px",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (editingSecondary) Color(0xFF6366F1) else Color(0xFF9CA3AF)
+                    )
                 }
             }
 
@@ -832,8 +923,6 @@ private fun SmartWriteLanguageDialog(
 fun EraserToolPanel(
     state: CanvasState,
     viewModel: CanvasViewModel,
-    onClearPage: () -> Unit,
-    onCleanAll: () -> Unit = {},
     onClose: () -> Unit = {}
 ) {
     Column(modifier = Modifier.width(260.dp)) {
@@ -900,32 +989,6 @@ fun EraserToolPanel(
                 activeTrackColor = Color(0xFF6366F1)
             )
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(R.string.tool_clean_all),
-                color = Color(0xFFEA580C),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onCleanAll)
-                    .padding(vertical = 8.dp)
-            )
-            Text(
-                text = stringResource(R.string.clear_all),
-                color = Color(0xFFB91C1C),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onClearPage)
-                    .padding(vertical = 8.dp)
-            )
-        }
     }
 }
 

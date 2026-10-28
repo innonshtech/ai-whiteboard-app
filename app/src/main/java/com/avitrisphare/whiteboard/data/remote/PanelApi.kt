@@ -17,11 +17,21 @@ class PanelApi(
     private val baseUrl: String,
     private val gson: Gson = Gson()
 ) {
-    suspend fun verifyLicense(licenseKey: String, panelId: String): ApiCall<VerifiedLicense> {
+    suspend fun checkLicense(licenseKey: String, panelId: String): LicenseCheckResult {
         val body = gson.toJson(mapOf("licenseKey" to licenseKey, "panelId" to panelId))
         return when (val http = post("/api/v1/licenses/verify", body)) {
-            is HttpResult.Failed -> ApiCall.Err(http.message)
-            is HttpResult.Body -> parseVerifyResponse(http.json)
+            is HttpResult.Failed -> LicenseCheckResult.NetworkError(http.message)
+            is HttpResult.Body -> parseVerifyLicenseResult(http.json)
+        }
+    }
+
+    suspend fun verifyLicense(licenseKey: String, panelId: String): ApiCall<VerifiedLicense> {
+        return when (val res = checkLicense(licenseKey, panelId)) {
+            is LicenseCheckResult.Valid -> ApiCall.Ok(res.license)
+            is LicenseCheckResult.Expired -> ApiCall.Err(res.message, licenseRejected = false, licenseExpired = true)
+            is LicenseCheckResult.SchoolInactive -> ApiCall.Err(res.message, licenseRejected = false)
+            is LicenseCheckResult.Invalid -> ApiCall.Err(res.message, licenseRejected = true)
+            is LicenseCheckResult.NetworkError -> ApiCall.Err(res.message)
         }
     }
 

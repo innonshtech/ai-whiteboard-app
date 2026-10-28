@@ -167,6 +167,9 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.drawscope.Stroke as ThumbStroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.key
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.platform.LocalDensity
@@ -182,6 +185,12 @@ import androidx.compose.ui.unit.sp
 import com.avitrisphare.whiteboard.domain.model.CanvasBackground
 import com.avitrisphare.whiteboard.domain.model.Stroke
 import com.avitrisphare.whiteboard.domain.model.StrokeType
+
+private val KNOWN_TOOLBAR_TOOLS = setOf(
+    "select", "pen", "flowchart", "stickers", "shapes", "eraser",
+    "laser", "geometry", "tools", "text", "image", "clear", "background",
+    "undo", "redo", "save"
+)
 
 val LocalDarkTheme = androidx.compose.runtime.compositionLocalOf { false }
 
@@ -361,7 +370,6 @@ fun AvitriSphareWhiteboardChrome(
     var selectionToolbarOffset by remember { mutableStateOf(Offset.Zero) }
     var pageMenuIndex by remember { mutableStateOf<Int?>(null) }
     var pageToDeleteIndex by remember { mutableStateOf<Int?>(null) }
-    var renamePageTitle by remember { mutableStateOf("") }
     var selectionColorTarget by remember { mutableStateOf("border") }
 
     val toolIconBounds = remember { mutableStateMapOf<String, Rect>() }
@@ -1332,104 +1340,127 @@ fun AvitriSphareWhiteboardChrome(
                         }
 
                         val visibleTools = remember(state.toolbarToolOrder, state.hiddenToolbarTools) {
-                            state.toolbarToolOrder.filter { it !in state.hiddenToolbarTools }
+                            state.toolbarToolOrder.filter { it !in state.hiddenToolbarTools && it in KNOWN_TOOLBAR_TOOLS }
                         }
                         val density = androidx.compose.ui.platform.LocalDensity.current
-                        val itemWidthPx = with(density) { 46.dp.toPx() }
+                        val defaultItemWidthPx = with(density) { 42.dp.toPx() }
                         val swipeUpThresholdPx = with(density) { 36.dp.toPx() }
+                        val toolItemWidths = remember { mutableStateMapOf<String, Float>() }
+
+                        val currentVisibleTools by rememberUpdatedState(visibleTools)
+                        val currentToolOrder by rememberUpdatedState(state.toolbarToolOrder)
 
                         visibleTools.forEach { toolId ->
-                            val isDraggingThis = draggedToolId == toolId
-                            val isAboveNavbar = isDraggingThis && draggedOffset.y < -swipeUpThresholdPx
-                            val itemOffset = if (isDraggingThis) draggedOffset else Offset.Zero
+                            key(toolId) {
+                                val isDraggingThis = draggedToolId == toolId
+                                val isAboveNavbar = isDraggingThis && draggedOffset.y < -swipeUpThresholdPx
+                                val itemOffset = if (isDraggingThis) draggedOffset else Offset.Zero
 
-                            Box(
-                                modifier = Modifier
-                                    .zIndex(if (isDraggingThis) 100f else 1f)
-                                    .offset { IntOffset(itemOffset.x.roundToInt(), itemOffset.y.roundToInt()) }
-                                    .graphicsLayer {
-                                        if (isDraggingThis) {
-                                            scaleX = 1.14f
-                                            scaleY = 1.14f
-                                            shadowElevation = 12f
+                                Box(
+                                    modifier = Modifier
+                                        .zIndex(if (isDraggingThis) 100f else 1f)
+                                        .offset { IntOffset(itemOffset.x.roundToInt(), itemOffset.y.roundToInt()) }
+                                        .graphicsLayer {
+                                            if (isDraggingThis) {
+                                                scaleX = 1.08f
+                                                scaleY = 1.08f
+                                                shadowElevation = 8f
+                                                alpha = 0.92f
+                                            }
                                         }
-                                    }
-                                    .pointerInput(toolId, visibleTools) {
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart = {
-                                                draggedToolId = toolId
-                                                draggedOffset = Offset.Zero
-                                            },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                draggedOffset += dragAmount
-                                                val currentIdx = visibleTools.indexOf(toolId)
-                                                val draggingAbove = draggedOffset.y < -swipeUpThresholdPx
-                                                if (!draggingAbove && currentIdx != -1) {
-                                                    if (draggedOffset.x > itemWidthPx && currentIdx < visibleTools.size - 1) {
-                                                        val targetTool = visibleTools[currentIdx + 1]
-                                                        val orderFrom = state.toolbarToolOrder.indexOf(toolId)
-                                                        val orderTo = state.toolbarToolOrder.indexOf(targetTool)
-                                                        if (orderFrom != -1 && orderTo != -1) {
-                                                            viewModel.moveToolbarTool(orderFrom, orderTo)
-                                                            draggedOffset = Offset(draggedOffset.x - itemWidthPx, draggedOffset.y)
+                                        .onSizeChanged { size ->
+                                            if (size.width > 0) {
+                                                toolItemWidths[toolId] = size.width.toFloat()
+                                            }
+                                        }
+                                        .pointerInput(toolId) {
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart = {
+                                                    draggedToolId = toolId
+                                                    draggedOffset = Offset.Zero
+                                                },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    draggedOffset += dragAmount
+                                                    val tools = currentVisibleTools
+                                                    val currentIdx = tools.indexOf(toolId)
+                                                    val draggingAbove = draggedOffset.y < -swipeUpThresholdPx
+                                                    if (!draggingAbove && currentIdx != -1) {
+                                                        // Dragging right: swap when dragged offset exceeds half neighbor width
+                                                        if (draggedOffset.x > 0 && currentIdx < tools.size - 1) {
+                                                            val nextToolId = tools[currentIdx + 1]
+                                                            val nextWidth = toolItemWidths[nextToolId] ?: defaultItemWidthPx
+                                                            if (draggedOffset.x > nextWidth * 0.5f) {
+                                                                val order = currentToolOrder
+                                                                val orderFrom = order.indexOf(toolId)
+                                                                val orderTo = order.indexOf(nextToolId)
+                                                                if (orderFrom != -1 && orderTo != -1) {
+                                                                    viewModel.moveToolbarTool(orderFrom, orderTo)
+                                                                    draggedOffset = Offset(draggedOffset.x - nextWidth, draggedOffset.y)
+                                                                }
+                                                            }
                                                         }
-                                                    } else if (draggedOffset.x < -itemWidthPx && currentIdx > 0) {
-                                                        val targetTool = visibleTools[currentIdx - 1]
-                                                        val orderFrom = state.toolbarToolOrder.indexOf(toolId)
-                                                        val orderTo = state.toolbarToolOrder.indexOf(targetTool)
-                                                        if (orderFrom != -1 && orderTo != -1) {
-                                                            viewModel.moveToolbarTool(orderFrom, orderTo)
-                                                            draggedOffset = Offset(draggedOffset.x + itemWidthPx, draggedOffset.y)
+                                                        // Dragging left: swap when dragged offset exceeds half neighbor width
+                                                        else if (draggedOffset.x < 0 && currentIdx > 0) {
+                                                            val prevToolId = tools[currentIdx - 1]
+                                                            val prevWidth = toolItemWidths[prevToolId] ?: defaultItemWidthPx
+                                                            if (draggedOffset.x < -prevWidth * 0.5f) {
+                                                                val order = currentToolOrder
+                                                                val orderFrom = order.indexOf(toolId)
+                                                                val orderTo = order.indexOf(prevToolId)
+                                                                if (orderFrom != -1 && orderTo != -1) {
+                                                                    viewModel.moveToolbarTool(orderFrom, orderTo)
+                                                                    draggedOffset = Offset(draggedOffset.x + prevWidth, draggedOffset.y)
+                                                                }
+                                                            }
                                                         }
                                                     }
+                                                },
+                                                onDragEnd = {
+                                                    if (draggedOffset.y < -swipeUpThresholdPx) {
+                                                        viewModel.hideToolbarTool(toolId)
+                                                        val toolName = getToolName(context, toolId)
+                                                        Toast.makeText(context, context.getString(R.string.toast_moved_to_more, toolName), Toast.LENGTH_SHORT).show()
+                                                    }
+                                                    draggedToolId = null
+                                                    draggedOffset = Offset.Zero
+                                                },
+                                                onDragCancel = {
+                                                    draggedToolId = null
+                                                    draggedOffset = Offset.Zero
                                                 }
-                                            },
-                                            onDragEnd = {
-                                                if (draggedOffset.y < -swipeUpThresholdPx) {
-                                                    viewModel.hideToolbarTool(toolId)
-                                                    val toolName = getToolName(context, toolId)
-                                                    Toast.makeText(context, context.getString(R.string.toast_moved_to_more, toolName), Toast.LENGTH_SHORT).show()
-                                                }
-                                                draggedToolId = null
-                                                draggedOffset = Offset.Zero
-                                            },
-                                            onDragCancel = {
-                                                draggedToolId = null
-                                                draggedOffset = Offset.Zero
-                                            }
-                                        )
-                                    }
-                            ) {
-                                if (isAboveNavbar) {
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = Color(0xFFEF4444),
-                                        shadowElevation = 8.dp,
-                                        modifier = Modifier
-                                            .align(Alignment.TopCenter)
-                                            .offset(y = (-32).dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                Icons.Default.ArrowUpward,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                            Spacer(Modifier.width(3.dp))
-                                            Text(
-                                                text = stringResource(R.string.release_to_move_more),
-                                                color = Color.White,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold
                                             )
                                         }
+                                ) {
+                                    if (isAboveNavbar) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = Color(0xFFEF4444),
+                                            shadowElevation = 6.dp,
+                                            modifier = Modifier
+                                                .align(Alignment.TopCenter)
+                                                .offset(y = (-28).dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.ArrowUpward,
+                                                    contentDescription = null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(11.dp)
+                                                )
+                                                Spacer(Modifier.width(2.dp))
+                                                Text(
+                                                    text = stringResource(R.string.release_to_move_more),
+                                                    color = Color.White,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
                                     }
-                                }
 
                                 when (toolId) {
                                     "select" -> {
@@ -1445,30 +1476,26 @@ fun AvitriSphareWhiteboardChrome(
                                         }
                                     }
                                     "pen" -> {
+                                        val activePenTool = if (state.useSecondaryPenColor) state.secondaryInkTool else state.inkTool
                                         PenSplitDockItem(
-                                            label = localizedToolLabel(state.inkTool),
+                                            icon = writingToolIcon(activePenTool),
+                                            label = localizedToolLabel(activePenTool),
                                             active = activeDockTool == ActiveDockTool.PEN,
                                             modifier = Modifier.onGloballyPositioned { toolIconBounds["ink"] = it.boundsInRoot() },
                                             onPenClick = {
-                                                viewModel.setTool(state.inkTool)
+                                                if (state.useSecondaryPenColor) {
+                                                    viewModel.setSecondaryInkTool(state.secondaryInkTool)
+                                                } else {
+                                                    viewModel.setTool(state.inkTool)
+                                                }
                                                 panel = null
                                             },
                                             onDropdownClick = {
-                                                viewModel.setTool(state.inkTool)
                                                 toggle("ink")
                                             }
                                         )
                                     }
-                                    "color_swap" -> {
-                                        TwoColorPenQuickSwap(
-                                            primaryColor = state.selectedColor,
-                                            secondaryColor = state.secondaryColor,
-                                            onSwap = {
-                                                viewModel.swapPenColors()
-                                                Toast.makeText(context, context.getString(R.string.toast_color_swapped), Toast.LENGTH_SHORT).show()
-                                            }
-                                        )
-                                    }
+
                                     "flowchart" -> {
                                         DockItem(
                                             icon = Icons.Default.Hub,
@@ -1629,9 +1656,9 @@ fun AvitriSphareWhiteboardChrome(
                                         }
                                     }
                                 }
-
                             }
                         }
+                    }
 
                         // More item (three dots)
                         DockItem(
@@ -1922,9 +1949,9 @@ fun AvitriSphareWhiteboardChrome(
                     }
                     "shapes" -> Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = Color.White,
+                        color = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
                         shadowElevation = 14.dp,
-                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        border = BorderStroke(1.dp, if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFE2E8F0)),
                         modifier = Modifier.widthIn(min = 200.dp, max = 340.dp)
                     ) {
                         ShapeToolPanel(
@@ -2033,13 +2060,6 @@ fun AvitriSphareWhiteboardChrome(
                         PopoverRow(Icons.Default.FormatColorFill, stringResource(R.string.util_bucket_fill), state.currentTool == WhiteboardTool.BUCKET_FILL) {
                             viewModel.setTool(WhiteboardTool.BUCKET_FILL); panel = null
                         }
-                        PopoverRow(Icons.Default.Edit, stringResource(R.string.util_stroke_colour)) {
-                            viewModel.setTool(state.inkTool)
-                            panel = "ink"
-                        }
-                        PopoverRow(Icons.Default.AutoFixHigh, stringResource(R.string.shape_recognition), state.isDrawToShapeEnabled) {
-                            viewModel.toggleDrawToShape()
-                        }
                         if (state.smartWriteEnabled) {
                             Text(
                                 stringResource(R.string.smart_write_tip),
@@ -2120,7 +2140,6 @@ fun AvitriSphareWhiteboardChrome(
                                                     when (toolId) {
                                                         "select" -> viewModel.setTool(WhiteboardTool.SELECT)
                                                         "pen" -> viewModel.setTool(state.inkTool)
-                                                        "color_swap" -> viewModel.swapPenColors()
                                                         "flowchart" -> toggle("flowchart")
                                                         "stickers" -> onOpenStickerEmoji()
                                                         "shapes" -> { panel = "shapes"; viewModel.setTool(WhiteboardTool.SHAPE) }
@@ -2243,13 +2262,6 @@ fun AvitriSphareWhiteboardChrome(
                                 ToolTile(Icons.Default.FormatColorFill, stringResource(R.string.util_bucket_fill), Color(0xFF8B5CF6), state.currentTool == WhiteboardTool.BUCKET_FILL) {
                                     viewModel.setTool(WhiteboardTool.BUCKET_FILL); panel = null
                                 },
-                                ToolTile(Icons.Default.Edit, stringResource(R.string.util_stroke_colour), Color(0xFF2563EB)) {
-                                    viewModel.setTool(state.inkTool)
-                                    panel = "ink"
-                                },
-                                ToolTile(Icons.Default.AutoFixHigh, stringResource(R.string.shape_recognition), Color(0xFFEC4899), state.isDrawToShapeEnabled) {
-                                    viewModel.toggleDrawToShape()
-                                },
                                 ToolTile(Icons.Default.GridOn, stringResource(R.string.popover_background), Color(0xFF10B981)) { panel = "background" },
                                 ToolTile(
                                     if (state.isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
@@ -2360,19 +2372,13 @@ fun AvitriSphareWhiteboardChrome(
                         EraserToolPanel(
                             state = state,
                             viewModel = viewModel,
-                            onClearPage = {
-                                panel = null
-                                onClear()
-                            },
-                            onCleanAll = {
-                                panel = null
-                                onCleanAll()
-                            },
                             onClose = { panel = null }
                         )
                     }
                     "ink" -> DockPopover(maxWidth = 560.dp, scrollable = false) {
-                        InkToolPanel(state = state, viewModel = viewModel, onClose = { panel = null })
+                        InkToolPanel(state = state, viewModel = viewModel, onClose = {
+                            panel = null
+                        })
                     }
                     "color" -> DockPopover(title = "Stroke & Width", onClose = { panel = null }) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2557,34 +2563,7 @@ fun AvitriSphareWhiteboardChrome(
             }
         }
 
-        if (panel == "shapes") {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 96.dp)
-                    .offset { IntOffset((shapesWindowOffset.x + centerBarOffset.x).roundToInt(), (shapesWindowOffset.y + centerBarOffset.y).roundToInt()) }
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
-                    shadowElevation = 14.dp,
-                    border = BorderStroke(1.dp, if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFE2E8F0)),
-                    modifier = Modifier.widthIn(min = 200.dp, max = 460.dp)
-                ) {
-                    ShapeToolPanel(
-                        state = state,
-                        viewModel = viewModel,
-                        onClose = { panel = null },
-                        onDrag = { dragAmount ->
-                            shapesWindowOffset = Offset(
-                                (shapesWindowOffset.x + dragAmount.x).coerceIn(-1800f, 1800f),
-                                (shapesWindowOffset.y + dragAmount.y).coerceIn(-1800f, 60f)
-                            )
-                        }
-                    )
-                }
-            }
-        }
+
     }
 }
 }
@@ -2601,7 +2580,7 @@ fun getToolDisplayInfo(id: String): ToolDisplayInfo {
     return when (id) {
         "select" -> ToolDisplayInfo(id, stringResource(R.string.tool_select), Icons.Default.NearMe, Color(0xFF0EA5E9))
         "pen" -> ToolDisplayInfo(id, stringResource(R.string.tool_pen), Icons.Default.Edit, Color(0xFF3B82F6))
-        "color_swap" -> ToolDisplayInfo(id, stringResource(R.string.tool_color_swap), Icons.Default.SwapHoriz, Color(0xFF6366F1))
+
         "flowchart" -> ToolDisplayInfo(id, stringResource(R.string.tool_flowchart), Icons.Default.Hub, Color(0xFF2563EB))
         "stickers" -> ToolDisplayInfo(id, stringResource(R.string.tool_stickers), Icons.Default.Star, Color(0xFFF59E0B))
         "shapes" -> ToolDisplayInfo(id, stringResource(R.string.tool_shapes), Icons.Default.Category, Color(0xFF8B5CF6))
@@ -2624,7 +2603,7 @@ fun getToolName(context: android.content.Context, id: String): String {
     return when (id) {
         "select" -> context.getString(R.string.tool_select)
         "pen" -> context.getString(R.string.tool_pen)
-        "color_swap" -> context.getString(R.string.tool_color_swap)
+
         "flowchart" -> context.getString(R.string.tool_flowchart)
         "stickers" -> context.getString(R.string.tool_stickers)
         "shapes" -> context.getString(R.string.tool_shapes)
@@ -2670,7 +2649,6 @@ private fun DockBar(
     }
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun DockItem(
     icon: ImageVector,
@@ -2681,18 +2659,16 @@ private fun DockItem(
     swatch: Int? = null,
     modifier: Modifier = Modifier,
     isDark: Boolean = LocalDarkTheme.current,
-    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .combinedClickable(
+            .clickable(
                 enabled = enabled,
-                onClick = onClick,
-                onLongClick = onLongClick
+                onClick = onClick
             )
-            .padding(horizontal = 6.dp, vertical = 2.dp),
+            .padding(horizontal = 4.dp, vertical = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
@@ -2707,7 +2683,7 @@ private fun DockItem(
         ) {
             Icon(
                 icon,
-                contentDescription = label,
+                contentDescription = null,
                 tint = if (active) Color.White else if (enabled) tint else (if (isDark) Color(0xFF64748B) else Color(0xFF94A3B8)),
                 modifier = Modifier.size(16.dp)
             )
@@ -2762,7 +2738,7 @@ private fun PenSplitDockItem(
             modifier = Modifier
                 .fillMaxHeight()
                 .clickable(onClick = onPenClick)
-                .padding(start = 7.dp, end = 5.dp, top = 2.dp, bottom = 2.dp),
+                .padding(start = 6.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -2771,7 +2747,7 @@ private fun PenSplitDockItem(
             ) {
                 Icon(
                     imageVector = icon,
-                    contentDescription = label,
+                    contentDescription = null,
                     tint = if (active) activeContentColor else inactiveIconColor,
                     modifier = Modifier.size(17.dp)
                 )
@@ -2798,7 +2774,6 @@ private fun PenSplitDockItem(
         )
 
         // Right: Dropdown Arrow (Opens/toggles the Settings panel when tapped)
-        // Kept very short with a small arrow icon to save space
         Box(
             modifier = Modifier
                 .fillMaxHeight()
@@ -2808,7 +2783,7 @@ private fun PenSplitDockItem(
         ) {
             Icon(
                 imageVector = Icons.Default.ArrowDropDown,
-                contentDescription = "Pen settings",
+                contentDescription = null,
                 tint = if (active) activeContentColor else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF64748B)),
                 modifier = Modifier.size(13.dp)
             )
@@ -2816,64 +2791,7 @@ private fun PenSplitDockItem(
     }
 }
 
-@Composable
-private fun TwoColorPenQuickSwap(
-    primaryColor: Int,
-    secondaryColor: Int,
-    onSwap: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onSwap)
-            .padding(horizontal = 4.dp, vertical = 2.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .height(30.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(Color(0xFF232938))
-                .padding(horizontal = 4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                // Active Swatch (larger, with white border)
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(Color(primaryColor))
-                        .border(1.5.dp, Color.White, CircleShape)
-                )
-                // Swap Arrow Icon
-                Icon(
-                    imageVector = Icons.Default.SwapHoriz,
-                    contentDescription = "Swap colors",
-                    tint = Color(0xFFA5B4FC),
-                    modifier = Modifier.size(13.dp)
-                )
-                // Standby Swatch
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .clip(CircleShape)
-                        .background(Color(secondaryColor))
-                        .border(1.dp, Color(0x66FFFFFF), CircleShape)
-                )
-            }
-        }
-        Text(
-            text = "Swap",
-            color = Color(0xFFA5B4FC),
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
+
 
 @Composable
 private fun DockPopover(

@@ -64,16 +64,7 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-private enum class GeometryCategory {
-    INSTRUMENTS,
-    AIDS
-}
 
-@Composable
-private fun localizedGeoCategory(cat: GeometryCategory): String = when (cat) {
-    GeometryCategory.INSTRUMENTS -> stringResource(R.string.geo_instruments)
-    GeometryCategory.AIDS -> stringResource(R.string.geo_board)
-}
 
 @Composable
 private fun localizedInstrumentName(kind: MathToolKind): String = when (kind) {
@@ -177,7 +168,7 @@ fun GeometryToolPanel(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var category by remember { mutableStateOf(GeometryCategory.INSTRUMENTS) }
+
     var pinned by remember { mutableStateOf(instrumentForTool(state.currentTool, placed) ?: MathToolKind.RULER) }
     val selectedKind = instrumentForTool(state.currentTool, placed) ?: pinned
     val selected = INSTRUMENTS.first { it.kind == selectedKind }
@@ -259,34 +250,7 @@ fun GeometryToolPanel(
 
         Spacer(Modifier.height(8.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            GeometryCategory.entries.forEach { cat ->
-                val on = cat == category
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (on) Blue else chipBg)
-                        .clickable { category = cat }
-                        .padding(vertical = 6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        localizedGeoCategory(cat),
-                        fontSize = 11.5.sp,
-                        fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
-                        color = if (on) Color.White else (if (isDark) Color(0xFFCBD5E1) else Ink)
-                    )
-                }
-            }
-        }
 
-        Spacer(Modifier.height(10.dp))
-
-        if (category == GeometryCategory.INSTRUMENTS) {
             Text(
                 stringResource(R.string.geo_instructions),
                 fontSize = 12.sp,
@@ -371,49 +335,6 @@ fun GeometryToolPanel(
                     color = if (onBoard) (if (isDark) Color(0xFF93C5FD) else Blue) else inkColor
                 )
             }
-        } else {
-            Text(
-                stringResource(R.string.geo_aids_description),
-                fontSize = 12.sp,
-                color = mutedColor
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                AidCard(
-                    name = stringResource(R.string.geo_aid_graph),
-                    selected = state.canvasBackground == CanvasBackground.GRAPH,
-                    isDark = isDark,
-                    onClick = { viewModel.toggleGraphPaper() }
-                ) { tint -> GraphPaperIcon(tint) }
-                AidCard(
-                    name = stringResource(R.string.geo_aid_line),
-                    selected = state.currentTool == WhiteboardTool.LINE,
-                    isDark = isDark,
-                    onClick = { viewModel.setTool(WhiteboardTool.LINE) }
-                ) { tint -> LineIcon(tint) }
-                AidCard(
-                    name = stringResource(R.string.geo_aid_arrow),
-                    selected = state.currentTool == WhiteboardTool.ARROW,
-                    isDark = isDark,
-                    onClick = { viewModel.setTool(WhiteboardTool.ARROW) }
-                ) { tint -> ArrowIcon(tint) }
-                AidCard(
-                    name = stringResource(R.string.geo_aid_frame),
-                    selected = state.currentTool == WhiteboardTool.FRAME,
-                    isDark = isDark,
-                    onClick = { viewModel.setTool(WhiteboardTool.FRAME) }
-                ) { tint -> FrameIcon(tint) }
-            }
-            if (state.smartWriteEnabled) {
-                Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.smart_write_tip), fontSize = 11.sp, color = mutedColor)
-            }
-        }
 
         Spacer(Modifier.height(12.dp))
         MeasureSlider(
@@ -512,45 +433,7 @@ private fun InstrumentCard(
     }
 }
 
-@Composable
-private fun AidCard(
-    name: String,
-    selected: Boolean,
-    isDark: Boolean = false,
-    onClick: () -> Unit,
-    icon: @Composable (Color) -> Unit
-) {
-    val cardBg = if (selected) {
-        if (isDark) Color(0xFF1E3A8A) else BlueSoft
-    } else {
-        if (isDark) Color(0xFF0F172A) else Color(0xFFF9FAFB)
-    }
-    val cardBorder = if (selected) Blue else (if (isDark) Color(0xFF334155) else Line)
 
-    Column(
-        modifier = Modifier
-            .size(width = 54.dp, height = 58.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(cardBg)
-            .border(if (selected) 2.dp else 1.dp, cardBorder, RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 2.dp, vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        icon(if (selected) Blue else (if (isDark) Color(0xFFCBD5E1) else Ink))
-        Spacer(Modifier.height(2.dp))
-        Text(
-            name,
-            fontSize = 9.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) (if (isDark) Color(0xFF93C5FD) else Color(0xFF1D4ED8)) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563)),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center
-        )
-    }
-}
 
 @Composable
 private fun MeasureSlider(
@@ -747,56 +630,7 @@ private fun InstrumentIcon(kind: MathToolKind, tint: Color) {
     }
 }
 
-@Composable
-private fun GraphPaperIcon(tint: Color) {
-    Canvas(Modifier.size(28.dp)) {
-        val pad = 4.dp.toPx()
-        val box = Rect(pad, pad, size.width - pad, size.height - pad)
-        val stroke = 1.2f.dp.toPx()
-        drawRect(tint, topLeft = box.topLeft, size = box.size, style = DrawStroke(stroke))
-        val stepX = box.width / 3f
-        val stepY = box.height / 3f
-        for (i in 1..2) {
-            drawLine(tint, Offset(box.left + stepX * i, box.top), Offset(box.left + stepX * i, box.bottom), stroke)
-            drawLine(tint, Offset(box.left, box.top + stepY * i), Offset(box.right, box.top + stepY * i), stroke)
-        }
-    }
-}
 
-
-@Composable
-private fun LineIcon(tint: Color) {
-    Canvas(Modifier.size(28.dp)) {
-        drawLine(
-            tint,
-            Offset(size.width * 0.18f, size.height * 0.72f),
-            Offset(size.width * 0.82f, size.height * 0.28f),
-            strokeWidth = 1.7f.dp.toPx(),
-            cap = StrokeCap.Round
-        )
-    }
-}
-
-@Composable
-private fun ArrowIcon(tint: Color) {
-    Canvas(Modifier.size(28.dp)) {
-        val start = Offset(size.width * 0.18f, size.height * 0.72f)
-        val end = Offset(size.width * 0.78f, size.height * 0.28f)
-        drawLine(tint, start, end, strokeWidth = 1.7f.dp.toPx(), cap = StrokeCap.Round)
-        val back = Offset(end.x - 7.dp.toPx(), end.y + 1.dp.toPx())
-        drawLine(tint, end, Offset(back.x, end.y + 5.dp.toPx()), strokeWidth = 1.7f.dp.toPx(), cap = StrokeCap.Round)
-        drawLine(tint, end, Offset(end.x - 2.dp.toPx(), end.y + 8.dp.toPx()), strokeWidth = 1.7f.dp.toPx(), cap = StrokeCap.Round)
-    }
-}
-
-@Composable
-private fun FrameIcon(tint: Color) {
-    Canvas(Modifier.size(28.dp)) {
-        val pad = 5.dp.toPx()
-        val box = Rect(pad, pad, size.width - pad, size.height - pad)
-        drawRect(tint, topLeft = box.topLeft, size = box.size, style = DrawStroke(1.7f.dp.toPx(), cap = StrokeCap.Round))
-    }
-}
 
 private fun instrumentForTool(tool: WhiteboardTool, placed: List<PlacedMathTool>): MathToolKind? = when (tool) {
     WhiteboardTool.RULER -> MathToolKind.RULER

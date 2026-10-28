@@ -6,9 +6,29 @@ import com.google.gson.JsonParser
 data class VerifiedLicense(
     val schoolName: String,
     val schoolId: String?,
+    val schoolCode: String? = null,
+    val schoolEmail: String? = null,
+    val schoolPhone: String? = null,
     val classroomName: String,
-    val classroomId: String?
+    val classroomId: String?,
+    val expiresAt: String? = null,
+    val status: String = "VALID"
 )
+
+sealed class LicenseCheckResult {
+    data class Valid(val license: VerifiedLicense) : LicenseCheckResult()
+    data class Expired(
+        val schoolName: String,
+        val classroomName: String,
+        val expiresAt: String?,
+        val schoolEmail: String?,
+        val schoolPhone: String?,
+        val message: String
+    ) : LicenseCheckResult()
+    data class SchoolInactive(val message: String) : LicenseCheckResult()
+    data class Invalid(val message: String) : LicenseCheckResult()
+    data class NetworkError(val message: String) : LicenseCheckResult()
+}
 
 data class PanelTeacher(
     val id: String?,
@@ -35,7 +55,7 @@ data class ClassBriefing(
 
 sealed class ApiCall<out T> {
     data class Ok<T>(val value: T) : ApiCall<T>()
-    data class Err(val message: String, val licenseRejected: Boolean = false) : ApiCall<Nothing>()
+    data class Err(val message: String, val licenseRejected: Boolean = false, val licenseExpired: Boolean = false) : ApiCall<Nothing>()
 }
 
 sealed class QrPoll {
@@ -44,21 +64,53 @@ sealed class QrPoll {
     data class Expired(val message: String) : QrPoll()
 }
 
-fun parseVerifyResponse(json: String): ApiCall<VerifiedLicense> {
+fun parseVerifyLicenseResult(json: String): LicenseCheckResult {
     val root = JsonParser.parseString(json).asJsonObject
-    val valid = root.get("valid")?.asBoolean == true
-    val message = root.get("message")?.asString ?: "License check failed"
-    if (!valid) return ApiCall.Err(message, licenseRejected = true)
+    val status = root.str("status") ?: if (root.get("valid")?.asBoolean == true) "VALID" else "INVALID"
+    val message = root.str("message") ?: "License check failed"
     val school = root.obj("school")
     val classroom = root.obj("classroom")
-    return ApiCall.Ok(
-        VerifiedLicense(
-            schoolName = school?.str("name") ?: "School",
-            schoolId = school?.str("id"),
-            classroomName = classroom?.str("name") ?: "Classroom",
-            classroomId = classroom?.str("id")
+    val expiresAt = root.str("expiresAt")
+    val schoolName = school?.str("name") ?: "School"
+    val classroomName = classroom?.str("name") ?: "Classroom"
+    val schoolEmail = school?.str("contactEmail")
+    val schoolPhone = school?.str("contactPhone")
+
+    return when (status.uppercase()) {
+        "VALID" -> LicenseCheckResult.Valid(
+            VerifiedLicense(
+                schoolName = schoolName,
+                schoolId = school?.str("id"),
+                schoolCode = school?.str("code"),
+                schoolEmail = schoolEmail,
+                schoolPhone = schoolPhone,
+                classroomName = classroomName,
+                classroomId = classroom?.str("id"),
+                expiresAt = expiresAt,
+                status = "VALID"
+            )
         )
-    )
+        "EXPIRED" -> LicenseCheckResult.Expired(
+            schoolName = schoolName,
+            classroomName = classroomName,
+            expiresAt = expiresAt,
+            schoolEmail = schoolEmail,
+            schoolPhone = schoolPhone,
+            message = message
+        )
+        "SCHOOL_INACTIVE" -> LicenseCheckResult.SchoolInactive(message)
+        else -> LicenseCheckResult.Invalid(message)
+    }
+}
+
+fun parseVerifyResponse(json: String): ApiCall<VerifiedLicense> {
+    return when (val res = parseVerifyLicenseResult(json)) {
+        is LicenseCheckResult.Valid -> ApiCall.Ok(res.license)
+        is LicenseCheckResult.Expired -> ApiCall.Err(res.message, licenseRejected = false, licenseExpired = true)
+        is LicenseCheckResult.SchoolInactive -> ApiCall.Err(res.message, licenseRejected = false)
+        is LicenseCheckResult.Invalid -> ApiCall.Err(res.message, licenseRejected = true)
+        is LicenseCheckResult.NetworkError -> ApiCall.Err(res.message)
+    }
 }
 
 fun parseQrSession(json: String): ApiCall<QrNonce> {

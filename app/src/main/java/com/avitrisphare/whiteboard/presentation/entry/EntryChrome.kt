@@ -21,22 +21,32 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal val EntryBg = Color(0xFF070B16)
-internal val EntryCard = Color(0xFF1B2233)
-internal val EntryKey = Color(0xFF232B3E)
-internal val EntryMuted = Color(0xFF8B95A8)
-internal val EntryText = Color(0xFFF4F7FB)
-internal val EntryCyan = Color(0xFF22D3EE)
-internal val EntryPurple = Color(0xFFA855F7)
-internal val EntryBlue = Color(0xFF3B82F6)
+internal val EntryBg = Color(0xFFFFFFFF)
+internal val EntryCard = Color(0xFFFFFFFF)
+internal val EntryCardBorder = Color(0xFFE2E8F0)
+internal val EntryKey = Color(0xFFFFFFFF)
+internal val EntryKeyBorder = Color(0xFFE2E8F0)
+internal val EntryMuted = Color(0xFF64748B)
+internal val EntryText = Color(0xFF0F172A)
+internal val EntryPlaceholder = Color(0xFF94A3B8)
 
-internal val EntryGradient = Brush.horizontalGradient(listOf(EntryCyan, EntryBlue, EntryPurple))
+internal val EntryCyan = Color(0xFF00C6FF)
+internal val EntryBlue = Color(0xFF2563EB)
+internal val EntryPurple = Color(0xFF8B5CF6)
+
+internal val EntryGradient = Brush.horizontalGradient(
+    listOf(Color(0xFF00B4D8), Color(0xFF3B82F6), Color(0xFF8B5CF6))
+)
+
+internal val EntryActiveBorder = Brush.horizontalGradient(
+    listOf(Color(0xFF00C6FF), Color(0xFF8B5CF6))
+)
 
 @Composable
 internal fun GyoashMark(
     schoolName: String? = null,
-    markSize: Dp = 28.dp,
-    labelSize: TextUnit = if (schoolName == null) 13.sp else 14.sp,
+    markSize: Dp = 32.dp,
+    labelSize: TextUnit = if (schoolName == null) 16.sp else 15.sp,
     showLabel: Boolean = true
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -44,23 +54,36 @@ internal fun GyoashMark(
             modifier = Modifier
                 .size(markSize)
                 .clip(RoundedCornerShape(markSize * 0.28f))
-                .background(Brush.linearGradient(listOf(Color(0xFF60A5FA), Color(0xFF7C3AED)))),
+                .background(
+                    Brush.linearGradient(
+                        listOf(Color(0xFF00C6FF), Color(0xFF0072FF), Color(0xFF7F00FF))
+                    )
+                ),
             contentAlignment = Alignment.Center
         ) {
-            Text("G", color = Color.White, fontWeight = FontWeight.Bold, fontSize = labelSize)
+            Text(
+                "G",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = (labelSize.value * 1.15f).sp
+            )
         }
         if (showLabel) {
-            Spacer(Modifier.width(markSize * 0.28f))
+            Spacer(Modifier.width(markSize * 0.35f))
             Text(
                 text = schoolName ?: "GYOASH",
                 color = EntryText,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = labelSize
+                fontWeight = FontWeight.Bold,
+                fontSize = labelSize,
+                letterSpacing = if (schoolName == null) 1.sp else 0.sp
             )
         }
     }
 }
 
-internal fun Modifier.gradientBorder(shape: RoundedCornerShape = RoundedCornerShape(12.dp)): Modifier {
-    return this.border(width = 1.5.dp, brush = EntryGradient, shape = shape)
+internal fun Modifier.gradientBorder(
+    shape: RoundedCornerShape = RoundedCornerShape(12.dp),
+    width: Dp = 2.dp
+): Modifier {
+    return this.border(width = width, brush = EntryActiveBorder, shape = shape)
 }
