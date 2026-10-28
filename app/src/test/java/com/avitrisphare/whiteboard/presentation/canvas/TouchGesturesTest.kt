@@ -265,6 +265,40 @@ class TouchGesturesTest {
         assertTrue(isPenNibContact(isEraser = false, isStylus = false, majorPx = 1.373291f, minorPx = 1.373291f, xdpi = xdpi))
         // Back of pen / Finger is ~3.20 -> MUST NOT be pen nib (Secondary)
         org.junit.Assert.assertFalse(isPenNibContact(isEraser = false, isStylus = false, majorPx = 3.2043457f, minorPx = 3.2043457f, xdpi = xdpi))
+
+        // 8. Dual-tip IFP passive stylus: even if firmware reports isStylus = true for both tips,
+        // Tip 1 (1.37) must be pen nib (Primary thin), while Tip 2 (3.20) must be secondary (Thick)
+        assertTrue(isPenNibContact(isEraser = false, isStylus = true, majorPx = 1.373291f, minorPx = 1.373291f, xdpi = xdpi))
+        org.junit.Assert.assertFalse(isPenNibContact(isEraser = false, isStylus = true, majorPx = 3.2043457f, minorPx = 3.2043457f, xdpi = xdpi))
+    }
+
+    @Test
+    fun `dual tip hardware resolution does not flip when Tip 2 is selected in menu`() {
+        val xdpi = 77f
+        val fineTipMajor = 1.373291f
+        val thickTipMajor = 3.2043457f
+
+        val fineIsNib = isPenNibContact(isEraser = false, isStylus = false, majorPx = fineTipMajor, minorPx = fineTipMajor, xdpi = xdpi)
+        val thickIsNib = isPenNibContact(isEraser = false, isStylus = false, majorPx = thickTipMajor, minorPx = thickTipMajor, xdpi = xdpi)
+
+        assertTrue(fineIsNib)
+        org.junit.Assert.assertFalse(thickIsNib)
+
+        // When user is editing Tip 1 (useSecondaryPenColor = false):
+        // Physical Fine Tip -> Tip 1 (isSecondaryPen = false)
+        // Physical Thick Tip -> Tip 2 (isSecondaryPen = true)
+        val tip1WithMenuTip1 = if (fineTipMajor in 0.1f..5.0f) !fineIsNib else false
+        val tip2WithMenuTip1 = if (thickTipMajor in 0.1f..5.0f) !thickIsNib else false
+        org.junit.Assert.assertFalse("Fine tip must draw with Tip 1 when menu is on Tip 1", tip1WithMenuTip1)
+        assertTrue("Thick tip must draw with Tip 2 when menu is on Tip 1", tip2WithMenuTip1)
+
+        // When user opens menu, selects Tip 2 (useSecondaryPenColor = true) and touches board without moving back:
+        // Physical Fine Tip MUST STILL draw with Tip 1 (isSecondaryPen = false)
+        // Physical Thick Tip MUST STILL draw with Tip 2 (isSecondaryPen = true)
+        val tip1WithMenuTip2 = if (fineTipMajor in 0.1f..5.0f) !fineIsNib else true
+        val tip2WithMenuTip2 = if (thickTipMajor in 0.1f..5.0f) !thickIsNib else true
+        org.junit.Assert.assertFalse("Fine tip must NEVER draw with Tip 2 even if user selected Tip 2 in menu", tip1WithMenuTip2)
+        assertTrue("Thick tip must draw with Tip 2 even if user selected Tip 2 in menu", tip2WithMenuTip2)
     }
 }
 

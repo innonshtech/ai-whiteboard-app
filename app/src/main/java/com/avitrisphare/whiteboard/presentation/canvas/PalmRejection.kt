@@ -58,15 +58,16 @@ fun isPenNibContact(
     xdpi: Float
 ): Boolean {
     if (isEraser) return false
-    if (isStylus) return true
 
     // On interactive whiteboard panels with normalized IR touch scale:
-    // Telemetry from SmartSchool IFP:
-    // Pen nib: major ≈ 1.37
-    // Back of pen / Finger: major ≈ 3.20
+    // Telemetry from SmartSchool / MAXHUB IFP:
+    // Pen nib (Tip 1): major ≈ 1.37
+    // Back of pen / Finger (Tip 2): major ≈ 3.20
     if (majorPx in 0.1f..5.0f) {
         return majorPx <= 2.25f
     }
+
+    if (isStylus) return true
 
     val contactSizePx = if (majorPx > 0f) {
         if (minorPx > 0f) (majorPx + minorPx) / 2f else majorPx

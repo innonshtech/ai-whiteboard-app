@@ -112,7 +112,6 @@ const val TOOLBAR_HIDDEN_KEY = "toolbar_hidden_tools"
 val DEFAULT_TOOLBAR_TOOLS: List<String> = listOf(
     "select",
     "pen",
-    "color_swap",
     "flowchart",
     "stickers",
     "shapes",
@@ -128,7 +127,6 @@ val DEFAULT_TOOLBAR_TOOLS: List<String> = listOf(
 val ALL_CUSTOMIZABLE_TOOLS: List<String> = listOf(
     "select",
     "pen",
-    "color_swap",
     "flowchart",
     "stickers",
     "shapes",
@@ -206,6 +204,8 @@ data class CanvasState(
     val connectedCollaborators: List<String> = emptyList(),
     val errorMessage: String? = null,
     val secondaryColor: Int = 0xFF3B82F6.toInt(),
+    val secondaryStrokeWidth: Float = 12f,
+    val secondaryInkTool: WhiteboardTool = WhiteboardTool.PEN,
     val useSecondaryPenColor: Boolean = false,
     val inkSampleGapMm: Float = DEFAULT_INK_SAMPLE_GAP_MM,
     val palmEraserEnabled: Boolean = false,
@@ -380,9 +380,13 @@ class CanvasViewModel @Inject constructor(
         val interval = prefs.getLong(SMART_WRITE_INTERVAL_KEY, 500L).let { if (it < 400L) 500L else it }
         val savedOrderStr = prefs.getString(TOOLBAR_ORDER_KEY, null)
         val savedOrder = if (!savedOrderStr.isNullOrBlank()) {
-            val list = savedOrderStr.split(",").filter { it.isNotBlank() }
+            val list = savedOrderStr.split(",").filter { it.isNotBlank() && it != "color_swap" && it in ALL_CUSTOMIZABLE_TOOLS }
             val missing = DEFAULT_TOOLBAR_TOOLS.filter { it !in list }
-            list + missing
+            val sanitized = list + missing
+            if (savedOrderStr.contains("color_swap")) {
+                prefs.edit().putString(TOOLBAR_ORDER_KEY, sanitized.joinToString(",")).apply()
+            }
+            sanitized
         } else {
             DEFAULT_TOOLBAR_TOOLS
         }
@@ -2212,16 +2216,52 @@ class CanvasViewModel @Inject constructor(
 
     fun swapPenColors() {
         _state.update { s ->
+            val newInkTool = s.secondaryInkTool
+            val newSecondaryInkTool = s.inkTool
             s.copy(
                 selectedColor = s.secondaryColor,
                 secondaryColor = s.selectedColor,
-                useSecondaryPenColor = !s.useSecondaryPenColor
+                strokeWidth = s.secondaryStrokeWidth,
+                secondaryStrokeWidth = s.strokeWidth,
+                inkTool = newInkTool,
+                secondaryInkTool = newSecondaryInkTool,
+                currentTool = if (s.useSecondaryPenColor) newSecondaryInkTool else newInkTool
+            )
+        }
+        scheduleSave()
+    }
+
+    fun setSecondaryInkTool(tool: WhiteboardTool) {
+        val width = toolWidths[tool]
+        _state.update {
+            it.copy(
+                secondaryInkTool = tool,
+                secondaryStrokeWidth = width ?: it.secondaryStrokeWidth,
+                currentTool = if (it.useSecondaryPenColor) tool else it.currentTool
+            )
+        }
+        scheduleSave()
+    }
+
+    fun setActivePenSlot(slot: Int) {
+        val useSecondary = slot == 2
+        _state.update {
+            it.copy(
+                useSecondaryPenColor = useSecondary,
+                currentTool = if (useSecondary) it.secondaryInkTool else it.inkTool
             )
         }
     }
 
+    fun setSecondaryStrokeWidth(width: Float) {
+        val clamped = width.coerceIn(1f, 50f)
+        _state.update { it.copy(secondaryStrokeWidth = clamped) }
+        scheduleSave()
+    }
+
     fun setSecondaryColor(color: Int) {
         _state.update { it.copy(secondaryColor = color) }
+        scheduleSave()
     }
 
     fun setInkSampleGapMm(mm: Float) {
@@ -3440,6 +3480,7 @@ class CanvasViewModel @Inject constructor(
                     pageCustomBackgroundUris = pageCustomBackgroundUris.toList(),
                     inkSampleGapMm = loaded.inkSampleGapMm ?: DEFAULT_INK_SAMPLE_GAP_MM,
                     secondaryColor = loaded.secondaryColor ?: 0xFF3B82F6.toInt(),
+                    secondaryStrokeWidth = loaded.secondaryStrokeWidth ?: 12f,
                     pdfOcrDocument = ocrDoc,
                     documentFrameX = loaded.documentFrameX ?: 0f,
                     documentFrameY = loaded.documentFrameY ?: 0f,
@@ -3997,6 +4038,7 @@ class CanvasViewModel @Inject constructor(
             pageTitles = pageTitles.toList(),
             inkSampleGapMm = _state.value.inkSampleGapMm,
             secondaryColor = _state.value.secondaryColor,
+            secondaryStrokeWidth = _state.value.secondaryStrokeWidth,
             pdfOcrJson = _state.value.pdfOcrDocument?.let { gson.toJson(it) },
             documentFrameX = _state.value.documentFrameX,
             documentFrameY = _state.value.documentFrameY,
@@ -4596,6 +4638,7 @@ private data class BoardSnapshot(
     val pageTitles: List<String>? = null,
     val inkSampleGapMm: Float? = null,
     val secondaryColor: Int? = null,
+    val secondaryStrokeWidth: Float? = null,
     val pdfOcrJson: String? = null,
     val documentFrameX: Float? = null,
     val documentFrameY: Float? = null,
