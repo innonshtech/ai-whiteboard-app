@@ -5499,6 +5499,14 @@ fun CanvasScreen(
 
                         }
 
+                        if (resizeStrokeId != null) {
+
+                            resizeStrokeId = null
+
+                            resizeHandle = null
+
+                        }
+
                         viewModel.endSelectionMove()
 
 

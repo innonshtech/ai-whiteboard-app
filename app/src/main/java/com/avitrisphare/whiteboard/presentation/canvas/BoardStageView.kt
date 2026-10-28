@@ -145,6 +145,8 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         addView(live, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(eraserCursorOverlay, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         grid.isClickable = false
+        media.isClickable = false
+        media.isFocusable = false
         ink.isClickable = false
         blurredInk.isClickable = false
         live.isClickable = false
@@ -518,6 +520,8 @@ class BoardStageView(context: Context) : FrameLayout(context) {
 
     private fun imageView(stroke: Stroke): ImageView {
         val view = ImageView(context)
+        view.isClickable = false
+        view.isFocusable = false
         view.scaleType = ImageView.ScaleType.FIT_XY
         view.tag = stroke.id
         val ready = images[stroke.id]
