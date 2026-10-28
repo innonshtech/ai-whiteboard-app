@@ -356,6 +356,7 @@ class CanvasViewModel @Inject constructor(
     private var pdfOcrJob: Job? = null
     private var viewportWidth = 0f
     private var viewportHeight = 0f
+    var targetMindmapBoxId: String? = null
     private val paneUndo = Array(6) { ArrayDeque<List<Stroke>>() }
     private val paneRedo = Array(6) { ArrayDeque<List<Stroke>>() }
     private val toolWidths = mutableMapOf(
@@ -1397,14 +1398,19 @@ class CanvasViewModel @Inject constructor(
 
     fun strokeAt(worldPoint: Offset): Stroke? {
         return _state.value.strokes.lastOrNull { stroke ->
+            if (stroke.strokeType == StrokeType.STICKER) return@lastOrNull false
             if (stroke.isPlacedMedia() ||
+                isMindMapNode(stroke) ||
                 isFillableShape(stroke.strokeType) ||
+                stroke.fillColor != 0 ||
                 stroke.strokeType in listOf(
                     StrokeType.STICKY_NOTE,
                     StrokeType.TEXT,
                     StrokeType.FRAME,
                     StrokeType.EQUATION,
                     StrokeType.RECTANGLE,
+                    StrokeType.ROUND_RECT,
+                    StrokeType.ROUNDED_RECTANGLE,
                     StrokeType.SQUARE,
                     StrokeType.CIRCLE,
                     StrokeType.ELLIPSE,
@@ -1412,7 +1418,6 @@ class CanvasViewModel @Inject constructor(
                     StrokeType.DIAMOND,
                     StrokeType.STAR,
                     StrokeType.HEXAGON,
-                    StrokeType.ROUND_RECT,
                     StrokeType.CUBE,
                     StrokeType.CYLINDER,
                     StrokeType.CONE,
@@ -1455,6 +1460,7 @@ class CanvasViewModel @Inject constructor(
     fun selectInRect(rect: Rect) {
         if (rect.width < 8f && rect.height < 8f) return
         val selected = _state.value.strokes.filter { stroke ->
+            stroke.strokeType != StrokeType.STICKER &&
             rect.overlaps(strokeSelectionBounds(stroke))
         }.map { it.id }.toSet()
         _state.update { it.copy(selectedStrokeIds = selected) }
@@ -1474,14 +1480,14 @@ class CanvasViewModel @Inject constructor(
         }
         val lassoRect = Rect(minX, minY, maxX, maxY)
 
-        fun pointInPolygon(pt: Offset): Boolean {
+        fun pointInLasso(pt: Offset): Boolean {
             var inside = false
             var j = lassoPoints.size - 1
             for (i in lassoPoints.indices) {
                 val pi = lassoPoints[i]
                 val pj = lassoPoints[j]
                 if ((pi.y > pt.y) != (pj.y > pt.y) &&
-                    pt.x < (pj.x - pi.x) * (pt.y - pi.y) / (pj.y - pi.y) + pi.x
+                    pt.x < (pj.x - pi.x) * (pt.y - pi.y) / (pj.y - pi.y + 0.00001f) + pi.x
                 ) {
                     inside = !inside
                 }
@@ -1494,13 +1500,13 @@ class CanvasViewModel @Inject constructor(
             val b = strokeSelectionBounds(stroke)
             if (!lassoRect.overlaps(b)) {
                 false
-            } else if (pointInPolygon(b.center)) {
+            } else if (pointInLasso(b.center)) {
                 true
-            } else if (stroke.points.any { pointInPolygon(it) }) {
+            } else if (stroke.points.any { pointInLasso(it) }) {
                 true
             } else {
-                pointInPolygon(b.topLeft) || pointInPolygon(b.topRight) ||
-                pointInPolygon(b.bottomLeft) || pointInPolygon(b.bottomRight)
+                pointInLasso(b.topLeft) || pointInLasso(b.topRight) ||
+                pointInLasso(b.bottomLeft) || pointInLasso(b.bottomRight)
             }
         }.map { it.id }.toSet()
 
@@ -1529,21 +1535,211 @@ class CanvasViewModel @Inject constructor(
         _state.update { it.copy(selectedStrokeIds = emptySet()) }
     }
 
+    private var scaleSnapshot: List<Stroke>? = null
+
+    fun beginSelectionScale() {
+        if (!selectionUndoCaptured) {
+            saveToUndoStack()
+            selectionUndoCaptured = true
+        }
+        val sel = _state.value.selectedStrokeIds
+        scaleSnapshot = _state.value.strokes.filter {
+            it.id in sel || it.linkToId in sel ||
+                (it.strokeType == StrokeType.CONNECTOR && (it.linkFromId in sel || it.linkToId in sel))
+        }
+    }
+
+    fun endSelectionScale() {
+        scaleSnapshot = null
+        selectionUndoCaptured = false
+        scheduleSave()
+    }
+
+    fun scaleSelectedStrokes(initialBounds: Rect, handle: ShapeHandle, currentPoint: Offset) {
+        val snapshot = scaleSnapshot ?: return
+        if (snapshot.isEmpty()) return
+
+        val origW = initialBounds.width.coerceAtLeast(20f)
+        val origH = initialBounds.height.coerceAtLeast(20f)
+
+        val (anchor, newW, newH) = when (handle) {
+            ShapeHandle.BOTTOM_RIGHT -> Triple(
+                Offset(initialBounds.left, initialBounds.top),
+                (currentPoint.x - initialBounds.left).coerceAtLeast(20f),
+                (currentPoint.y - initialBounds.top).coerceAtLeast(20f)
+            )
+            ShapeHandle.TOP_LEFT -> Triple(
+                Offset(initialBounds.right, initialBounds.bottom),
+                (initialBounds.right - currentPoint.x).coerceAtLeast(20f),
+                (initialBounds.bottom - currentPoint.y).coerceAtLeast(20f)
+            )
+            ShapeHandle.TOP_RIGHT -> Triple(
+                Offset(initialBounds.left, initialBounds.bottom),
+                (currentPoint.x - initialBounds.left).coerceAtLeast(20f),
+                (initialBounds.bottom - currentPoint.y).coerceAtLeast(20f)
+            )
+            ShapeHandle.BOTTOM_LEFT -> Triple(
+                Offset(initialBounds.right, initialBounds.top),
+                (initialBounds.right - currentPoint.x).coerceAtLeast(20f),
+                (currentPoint.y - initialBounds.top).coerceAtLeast(20f)
+            )
+            else -> Triple(
+                Offset(initialBounds.left, initialBounds.top),
+                (currentPoint.x - initialBounds.left).coerceAtLeast(20f),
+                (currentPoint.y - initialBounds.top).coerceAtLeast(20f)
+            )
+        }
+
+        val scaleX = (newW / origW).coerceIn(0.1f, 15f)
+        val scaleY = (newH / origH).coerceIn(0.1f, 15f)
+        val avgScale = (scaleX + scaleY) / 2f
+
+        val scaledStrokes = snapshot.map { stroke ->
+            if (stroke.stickerKind.contains(":locked")) return@map stroke
+            val newPoints = stroke.points.map { pt ->
+                Offset(
+                    anchor.x + (pt.x - anchor.x) * scaleX,
+                    anchor.y + (pt.y - anchor.y) * scaleY
+                )
+            }
+            val newWidth = (stroke.strokeWidth * avgScale).coerceIn(1f, 60f)
+            stroke.copy(points = newPoints, strokeWidth = newWidth)
+        }
+
+        val scaledMap = scaledStrokes.associateBy { it.id }
+        val fullyUpdated = scaledStrokes.map { stroke ->
+            if (stroke.strokeType == StrokeType.CONNECTOR) {
+                val from = scaledMap[stroke.linkFromId] ?: _state.value.strokes.find { it.id == stroke.linkFromId }
+                val to = scaledMap[stroke.linkToId] ?: _state.value.strokes.find { it.id == stroke.linkToId }
+                if (from != null && to != null) {
+                    val (p1, p2) = if (stroke.stickerKind == "straight") {
+                        MindmapEngine.calculateStraightAnchors(from.bounds, to.bounds)
+                    } else if (from.stickerKind.startsWith("flow:") || to.stickerKind.startsWith("flow:") || stroke.stickerKind.isEmpty()) {
+                        from.bounds.center to to.bounds.center
+                    } else {
+                        MindmapEngine.calculateAnchors(from.bounds, to.bounds)
+                    }
+                    stroke.copy(points = listOf(p1, p2))
+                } else stroke
+            } else stroke
+        }
+
+        val updatedMap = fullyUpdated.associateBy { it.id }
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes.map { stroke ->
+                    updatedMap[stroke.id] ?: stroke
+                }
+            )
+        }
+    }
+
+    fun selectConnectedMindmap(nodeId: String, addToExisting: Boolean = true) {
+        val strokes = _state.value.strokes
+        val newConnected = mutableSetOf(nodeId)
+        var changed = true
+        while (changed) {
+            val sizeBefore = newConnected.size
+            for (s in strokes) {
+                if (s.strokeType == StrokeType.CONNECTOR) {
+                    if (s.linkFromId in newConnected || s.linkToId in newConnected) {
+                        newConnected.add(s.id)
+                        if (s.linkFromId.isNotEmpty()) newConnected.add(s.linkFromId)
+                        if (s.linkToId.isNotEmpty()) newConnected.add(s.linkToId)
+                    }
+                } else if (s.linkToId in newConnected || s.linkFromId in newConnected) {
+                    newConnected.add(s.id)
+                }
+            }
+            changed = newConnected.size > sizeBefore
+        }
+        val current = _state.value.selectedStrokeIds
+        val isCurrentMindmap = current.isNotEmpty() && strokes.any { it.id in current && (isMindMapNode(it) || it.strokeType == StrokeType.CONNECTOR) }
+        val finalSelection = if (addToExisting && isCurrentMindmap) current + newConnected else newConnected
+        _state.update { it.copy(selectedStrokeIds = finalSelection) }
+    }
+
+    fun applyMindmapLayout(nodeId: String, isHorizontal: Boolean) {
+        saveToUndoStack()
+        val updated = MindmapEngine.layoutTree(nodeId, _state.value.strokes, isHorizontal)
+        _state.update {
+            it.copy(
+                strokes = updated,
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun toggleLockSelection(nodeId: String? = null) {
+        val targetIds = if (nodeId != null) setOf(nodeId) else _state.value.selectedStrokeIds
+        if (targetIds.isEmpty()) return
+        saveToUndoStack()
+        _state.update { s ->
+            val anyUnlocked = s.strokes.any { it.id in targetIds && !it.stickerKind.contains(":locked") }
+            s.copy(
+                strokes = s.strokes.map { stroke ->
+                    if (stroke.id in targetIds) {
+                        val newKind = if (anyUnlocked) {
+                            if (!stroke.stickerKind.contains(":locked")) stroke.stickerKind + ":locked" else stroke.stickerKind
+                        } else {
+                            stroke.stickerKind.replace(":locked", "")
+                        }
+                        stroke.copy(stickerKind = newKind)
+                    } else stroke
+                },
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        scheduleSave()
+    }
+
     fun moveSelectedStrokes(delta: Offset) {
         if (delta == Offset.Zero || _state.value.selectedStrokeIds.isEmpty()) return
         val selectedIds = _state.value.selectedStrokeIds
         _state.update { s ->
-            val updated = s.strokes.map { stroke ->
-                if (stroke.id in selectedIds) {
+            val movedStrokes = s.strokes.map { stroke ->
+                if (stroke.id in selectedIds && !stroke.stickerKind.contains(":locked")) {
                     val newPoints = stroke.points.map { Offset(it.x + delta.x, it.y + delta.y) }
                     stroke.copy(points = newPoints)
                 } else {
                     stroke
                 }
             }
-            s.copy(strokes = updated)
+            val strokeMap = movedStrokes.associateBy { it.id }
+            val fullyUpdated = movedStrokes.map { stroke ->
+                if (stroke.strokeType == StrokeType.CONNECTOR) {
+                    val from = strokeMap[stroke.linkFromId]
+                    val to = strokeMap[stroke.linkToId]
+                    if (from != null && to != null && (from.id in selectedIds || to.id in selectedIds)) {
+                        if (stroke.stickerKind.isEmpty() || stroke.stickerKind.startsWith("flow:")) {
+                            stroke.copy(points = listOf(from.bounds.center, to.bounds.center))
+                        } else {
+                            val obstacles = strokeMap.values
+                                .filter { it.id != from.id && it.id != to.id && (isMindMapNode(it) || it.isPlacedMedia()) }
+                                .map { it.bounds }
+                            val parallelCount = movedStrokes.count {
+                                it.strokeType == StrokeType.CONNECTOR && it.id != stroke.id &&
+                                    (it.linkFromId == from.id || it.linkToId == from.id || it.linkFromId == to.id || it.linkToId == to.id)
+                            }
+                            val laneOffset = if (parallelCount > 0) ((parallelCount + 1) / 2) * 14f * if (parallelCount % 2 == 1) 1f else -1f else 0f
+                            val newPoints = MindmapEngine.calculateCollisionFreeRoute(
+                                from = from.bounds,
+                                to = to.bounds,
+                                obstacles = obstacles,
+                                wireStyle = stroke.stickerKind,
+                                laneOffset = laneOffset
+                            )
+                            stroke.copy(points = newPoints)
+                        }
+                    } else stroke
+                } else stroke
+            }
+            s.copy(strokes = fullyUpdated)
         }
-        moveLinkedConnectors(selectedIds)
         scheduleSave()
     }
 
@@ -1554,8 +1750,10 @@ class CanvasViewModel @Inject constructor(
         _state.update { s ->
             s.copy(
                 strokes = s.strokes.filterNot { stroke ->
-                    stroke.id in selectedIds ||
-                        (stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId in selectedIds || stroke.linkToId in selectedIds))
+                    (stroke.id in selectedIds ||
+                        stroke.linkToId in selectedIds ||
+                        (stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId in selectedIds || stroke.linkToId in selectedIds)))
+                        && !stroke.stickerKind.contains(":locked")
                 },
                 selectedStrokeIds = emptySet(),
                 canUndo = true,
@@ -1595,8 +1793,23 @@ class CanvasViewModel @Inject constructor(
 
     fun addImage(uriString: String, worldPoint: Offset) {
         if (uriString.isBlank()) return
+        val targetBoxId = targetMindmapBoxId
+        targetMindmapBoxId = null
         viewModelScope.launch {
-            val stored = withContext(Dispatchers.IO) { storeImage(uriString) } ?: return@launch
+            val stored = withContext(Dispatchers.IO) { storeImage(uriString) } ?: uriString
+            if (targetBoxId != null) {
+                val targetBox = _state.value.strokes.firstOrNull { it.id == targetBoxId }
+                if (targetBox != null) {
+                    saveToUndoStack()
+                    val updated = _state.value.strokes.map {
+                        if (it.id == targetBoxId) it.copy(imageUri = stored) else it
+                    }
+                    _state.update { it.copy(strokes = updated, selectedStrokeIds = setOf(targetBoxId)) }
+                    redoStack.clear()
+                    scheduleSave()
+                    return@launch
+                }
+            }
             placeMedia(StrokeType.IMAGE, worldPoint, 520f, 360f, imageUri = stored)
         }
     }
@@ -1631,9 +1844,22 @@ class CanvasViewModel @Inject constructor(
         imageUri: String = "",
         text: String = ""
     ) {
+        val targetBox = targetMindmapBoxId?.let { id -> _state.value.strokes.firstOrNull { it.id == id } }
+        targetMindmapBoxId = null
+
+        val (placedPoint, placedW, placedH) = if (targetBox != null && type == StrokeType.IMAGE) {
+            val b = strokeSelectionBounds(targetBox)
+            val pad = 12f
+            val w = (b.width - pad * 2f).coerceAtLeast(60f)
+            val h = (b.height - pad * 2f).coerceAtLeast(40f)
+            Triple(Offset(b.left + pad, b.top + pad), w, h)
+        } else {
+            Triple(worldPoint, width, height)
+        }
+
         saveToUndoStack()
         val newStroke = Stroke(
-            points = listOf(worldPoint, Offset(worldPoint.x + width, worldPoint.y + height)),
+            points = listOf(placedPoint, Offset(placedPoint.x + placedW, placedPoint.y + placedH)),
             strokeType = type,
             imageUri = imageUri,
             text = text,
@@ -1829,10 +2055,10 @@ class CanvasViewModel @Inject constructor(
         pageTitles.add("Page ${pages.size + 1}")
         val newBgKey = if (_state.value.isDarkCanvas) CanvasBackground.DARK.key else CanvasBackground.DOTTED.key
         pageBackgroundKeys.add(newBgKey)
-        pageCustomBackgroundUris.add("")
         pageMathTools.add(emptyList())
         renumberDefaultPageTitles()
-        switchTo(pages.lastIndex)
+        syncPageMetadataLists()
+        switchTo(pages.lastIndex, resetTransform = true)
         scheduleSave()
     }
 
@@ -1899,7 +2125,19 @@ class CanvasViewModel @Inject constructor(
         }
         if (index !in pages.indices || pages.size >= MAX_PAGES) return
         commitActivePage()
-        val copy = pages[index].map { it.copy(id = UUID.randomUUID().toString()) }
+        val originalStrokes = pages[index]
+        val idMap = mutableMapOf<String, String>()
+        originalStrokes.forEach { idMap[it.id] = UUID.randomUUID().toString() }
+        val copy = originalStrokes.map { s ->
+            val newId = idMap[s.id] ?: UUID.randomUUID().toString()
+            if (s.strokeType == StrokeType.CONNECTOR) {
+                val newFrom = idMap[s.linkFromId] ?: s.linkFromId
+                val newTo = idMap[s.linkToId] ?: s.linkToId
+                s.copy(id = newId, linkFromId = newFrom, linkToId = newTo)
+            } else {
+                s.copy(id = newId)
+            }
+        }
         pages.add(index + 1, copy)
         pageTitles.add(index + 1, "${pageTitles.getOrElse(index) { "Page" }} copy")
         pageBackgroundKeys.add(index + 1, pageBackgroundKeys.getOrElse(index) { CanvasBackground.DOTTED.key })
@@ -1922,9 +2160,7 @@ class CanvasViewModel @Inject constructor(
         }
         val selected = _state.value.selectedStrokeIds
         if (selected.isEmpty()) return
-        strokeClipboard = _state.value.strokes.filter { it.id in selected }.map {
-            it.copy(id = UUID.randomUUID().toString())
-        }
+        strokeClipboard = _state.value.strokes.filter { it.id in selected }
         _state.update { it.copy(hasStrokeClipboard = strokeClipboard.isNotEmpty()) }
     }
 
@@ -1940,11 +2176,26 @@ class CanvasViewModel @Inject constructor(
         if (strokeClipboard.isEmpty()) return
         saveToUndoStack()
         val offset = Offset(36f, 36f)
+        val idMap = mutableMapOf<String, String>()
+        strokeClipboard.forEach { idMap[it.id] = UUID.randomUUID().toString() }
         val pasted = strokeClipboard.map { stroke ->
-            stroke.copy(
-                id = UUID.randomUUID().toString(),
-                points = stroke.points.map { Offset(it.x + offset.x, it.y + offset.y) }
-            )
+            val newId = idMap[stroke.id] ?: UUID.randomUUID().toString()
+            val newPoints = stroke.points.map { Offset(it.x + offset.x, it.y + offset.y) }
+            if (stroke.strokeType == StrokeType.CONNECTOR) {
+                val newFrom = idMap[stroke.linkFromId] ?: stroke.linkFromId
+                val newTo = idMap[stroke.linkToId] ?: stroke.linkToId
+                stroke.copy(
+                    id = newId,
+                    points = newPoints,
+                    linkFromId = newFrom,
+                    linkToId = newTo
+                )
+            } else {
+                stroke.copy(
+                    id = newId,
+                    points = newPoints
+                )
+            }
         }
         _state.update { s ->
             s.copy(
@@ -2174,8 +2425,16 @@ class CanvasViewModel @Inject constructor(
 
     fun insertSticker(kind: String, world: Offset, text: String = "") {
         val s = _state.value
+        val targetNode = targetMindmapBoxId?.let { id -> s.strokes.firstOrNull { it.id == id && (it.stickerKind.startsWith("mindmap:") || it.stickerKind.startsWith("flow:")) } }
+        targetMindmapBoxId = null
+        val (origin, stickerSize) = if (targetNode != null) {
+            val b = strokeSelectionBounds(targetNode)
+            Offset(b.right - 36f, b.top - 18f) to 52f
+        } else {
+            world to 96f
+        }
         val stroke = Stroke(
-            points = listOf(world, Offset(world.x + 96f, world.y + 96f)),
+            points = listOf(origin, Offset(origin.x + stickerSize, origin.y + stickerSize)),
             colorValue = s.selectedColor,
             strokeWidth = s.strokeWidth.coerceAtLeast(4f),
             strokeType = StrokeType.STICKER,
@@ -2191,7 +2450,7 @@ class CanvasViewModel @Inject constructor(
             _state.update {
                 it.copy(
                     splitPanes = currentPanes,
-                    selectedStrokeIds = setOf(stroke.id),
+                    selectedStrokeIds = emptySet(),
                     canUndo = true,
                     canRedo = false
                 )
@@ -2218,8 +2477,15 @@ class CanvasViewModel @Inject constructor(
             else -> StrokeType.RECTANGLE
         }
         saveToUndoStack()
+        var targetWorld = world
+        val existingFlowNodes = _state.value.strokes.filter {
+            it.stickerKind.startsWith("flow:") || isMindMapNode(it)
+        }
+        while (existingFlowNodes.any { (it.bounds.topLeft - targetWorld).getDistance() < 50f }) {
+            targetWorld = Offset(targetWorld.x + 40f, targetWorld.y + 110f)
+        }
         val stroke = Stroke(
-            points = listOf(world, Offset(world.x + 180f, world.y + 100f)),
+            points = listOf(targetWorld, Offset(targetWorld.x + 180f, targetWorld.y + 100f)),
             colorValue = _state.value.selectedColor,
             strokeWidth = _state.value.strokeWidth.coerceAtLeast(3f),
             strokeType = type,
@@ -2310,33 +2576,391 @@ class CanvasViewModel @Inject constructor(
         scheduleSave()
     }
 
-    fun addMindMapCenter(world: Offset) {
-        addFlowchartNode("process", world)
-        _state.update { s ->
-            val id = s.strokes.lastOrNull()?.id
-            s.copy(mindMapCenterId = id)
-        }
-    }
-
-    fun addMindMapBranch(parentId: String, world: Offset) {
-        addFlowchartNode("process", world)
-        val childId = _state.value.strokes.lastOrNull()?.id ?: return
+    fun createMindMapTemplate(
+        kind: MindmapTemplateKind,
+        center: Offset,
+        viewportWidth: Float = 0f,
+        viewportHeight: Float = 0f
+    ) {
         saveToUndoStack()
-        val parent = _state.value.strokes.find { it.id == parentId } ?: return
-        val from = parent.bounds.center
-        val connector = Stroke(
-            points = listOf(from, world),
-            colorValue = _state.value.selectedColor,
-            strokeWidth = 3f,
-            strokeType = StrokeType.CONNECTOR,
-            linkFromId = parentId,
-            linkToId = childId
-        )
+
+        // Position within visible viewport: If another root node exists at this exact center, cascade slightly
+        val existingRoots = _state.value.strokes.filter {
+            it.stickerKind == "mindmap:root" || (isMindMapNode(it) && it.strokeType == StrokeType.ROUND_RECT)
+        }
+        var effectiveCenter = center
+        val overlapping = existingRoots.filter {
+            kotlin.math.abs(it.bounds.center.x - effectiveCenter.x) < 50f &&
+                kotlin.math.abs(it.bounds.center.y - effectiveCenter.y) < 50f
+        }
+        if (overlapping.isNotEmpty()) {
+            val offsetStep = (overlapping.size * 48f)
+            effectiveCenter = Offset(center.x + offsetStep, center.y + offsetStep)
+        }
+
+        val templateStrokes = MindmapEngine.generateTemplate(kind, effectiveCenter)
+        val rootNode = templateStrokes.firstOrNull { it.stickerKind == "mindmap:root" } ?: templateStrokes.firstOrNull()
+
         _state.update { s ->
-            s.copy(strokes = s.strokes + connector, canUndo = true, canRedo = false)
+            s.copy(
+                strokes = s.strokes + templateStrokes,
+                selectedStrokeIds = rootNode?.let { setOf(it.id) } ?: emptySet(),
+                currentTool = WhiteboardTool.SELECT,
+                canUndo = true,
+                canRedo = false
+            )
         }
         redoStack.clear()
         scheduleSave()
+    }
+
+    fun addMindMapBranchDirection(parentId: String, direction: String) {
+        val parent = _state.value.strokes.find { it.id == parentId } ?: return
+        saveToUndoStack()
+        val branchIndex = _state.value.strokes.count { it.strokeType == StrokeType.CONNECTOR && it.linkFromId == parentId }
+        val (childNode, connector) = MindmapEngine.createBranchInDirection(parent, direction, branchIndex)
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes + listOf(childNode, connector),
+                selectedStrokeIds = setOf(childNode.id),
+                currentTool = WhiteboardTool.SELECT,
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun setNodeFillColor(nodeId: String, fillColor: Int) {
+        saveToUndoStack()
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes.map {
+                    if (it.id == nodeId) it.copy(fillColor = fillColor) else it
+                },
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun setNodeOutlineColor(nodeId: String, outlineColor: Int) {
+        saveToUndoStack()
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes.map {
+                    if (it.id == nodeId) it.copy(colorValue = outlineColor) else it
+                },
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun setNodeOutlineWidth(nodeId: String, width: Float) {
+        saveToUndoStack()
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes.map {
+                    if (it.id == nodeId) it.copy(strokeWidth = width) else it
+                },
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun setNodeShape(nodeId: String, shapeType: StrokeType) {
+        saveToUndoStack()
+        _state.update { s ->
+            val updatedNodes = s.strokes.map {
+                if (it.id == nodeId) it.copy(strokeType = shapeType) else it
+            }
+            val strokeMap = updatedNodes.associateBy { it.id }
+            val fullyUpdated = updatedNodes.map { stroke ->
+                if (stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId == nodeId || stroke.linkToId == nodeId)) {
+                    val from = strokeMap[stroke.linkFromId]
+                    val to = strokeMap[stroke.linkToId]
+                    if (from != null && to != null) {
+                        val (p1, p2) = if (from.stickerKind.startsWith("flow:") || to.stickerKind.startsWith("flow:") || stroke.stickerKind.isEmpty()) {
+                            from.bounds.center to to.bounds.center
+                        } else {
+                            MindmapEngine.calculateAnchors(from.bounds, to.bounds)
+                        }
+                        stroke.copy(points = listOf(p1, p2))
+                    } else stroke
+                } else stroke
+            }
+            s.copy(
+                strokes = fullyUpdated,
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun setNodeText(nodeId: String, text: String) {
+        saveToUndoStack()
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes.map {
+                    if (it.id == nodeId) it.copy(text = text) else it
+                },
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun connectMindmapBoxes(boxAId: String, boxBId: String) {
+        if (boxAId == boxBId) return
+        val strokes = _state.value.strokes
+        val boxA = strokes.find { it.id == boxAId } ?: return
+        val boxB = strokes.find { it.id == boxBId } ?: return
+
+        val existing = strokes.find {
+            it.strokeType == StrokeType.CONNECTOR &&
+                ((it.linkFromId == boxAId && it.linkToId == boxBId) || (it.linkFromId == boxBId && it.linkToId == boxAId))
+        }
+        if (existing != null) {
+            _state.update { it.copy(selectedStrokeIds = setOf(existing.id)) }
+            return
+        }
+
+        val obstacles = strokes
+            .filter { it.id != boxAId && it.id != boxBId && (isMindMapNode(it) || it.isPlacedMedia()) }
+            .map { it.bounds }
+        val parallelConnectors = strokes.filter {
+            it.strokeType == StrokeType.CONNECTOR &&
+                ((it.linkFromId == boxAId && it.linkToId == boxBId) || (it.linkFromId == boxBId && it.linkToId == boxAId) ||
+                 (it.linkFromId == boxAId || it.linkToId == boxAId || it.linkFromId == boxBId || it.linkToId == boxBId))
+        }
+        val laneIndex = parallelConnectors.size
+        val laneOffset = if (laneIndex > 0) ((laneIndex + 1) / 2) * 16f * if (laneIndex % 2 == 1) 1f else -1f else 0f
+
+        val routePoints = MindmapEngine.calculateCollisionFreeRoute(
+            from = boxA.bounds,
+            to = boxB.bounds,
+            obstacles = obstacles,
+            wireStyle = "orthogonal",
+            laneOffset = laneOffset
+        )
+        val connector = Stroke(
+            points = routePoints,
+            colorValue = boxA.colorValue,
+            strokeWidth = 3.5f,
+            strokeType = StrokeType.CONNECTOR,
+            linkFromId = boxAId,
+            linkToId = boxBId,
+            stickerKind = "orthogonal"
+        )
+
+        saveToUndoStack()
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes + connector,
+                selectedStrokeIds = setOf(connector.id),
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun toggleConnectorWireStyle(nodeOrConnectorId: String) {
+        saveToUndoStack()
+        _state.update { s ->
+            val strokeMap = s.strokes.associateBy { it.id }
+            s.copy(
+                strokes = s.strokes.map { stroke ->
+                    val matches = stroke.id == nodeOrConnectorId ||
+                        (stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId == nodeOrConnectorId || stroke.linkToId == nodeOrConnectorId))
+                    if (matches && stroke.strokeType == StrokeType.CONNECTOR) {
+                        val nextStyle = when (stroke.stickerKind) {
+                            "orthogonal" -> "curved"
+                            "curved" -> "straight"
+                            else -> "orthogonal"
+                        }
+                        val from = strokeMap[stroke.linkFromId]
+                        val to = strokeMap[stroke.linkToId]
+                        val newPoints = if (from != null && to != null) {
+                            val obstacles = strokeMap.values
+                                .filter { it.id != from.id && it.id != to.id && (isMindMapNode(it) || it.isPlacedMedia()) }
+                                .map { it.bounds }
+                            MindmapEngine.calculateCollisionFreeRoute(
+                                from = from.bounds,
+                                to = to.bounds,
+                                obstacles = obstacles,
+                                wireStyle = nextStyle
+                            )
+                        } else stroke.points
+                        stroke.copy(stickerKind = nextStyle, points = newPoints)
+                    } else stroke
+                },
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun toggleSingleConnectorStyle(connectorId: String) {
+        saveToUndoStack()
+        _state.update { s ->
+            val strokeMap = s.strokes.associateBy { it.id }
+            s.copy(
+                strokes = s.strokes.map {
+                    if (it.id == connectorId && it.strokeType == StrokeType.CONNECTOR) {
+                        val nextStyle = when (it.stickerKind) {
+                            "orthogonal" -> "curved"
+                            "curved" -> "straight"
+                            else -> "orthogonal"
+                        }
+                        val from = strokeMap[it.linkFromId]
+                        val to = strokeMap[it.linkToId]
+                        val newPoints = if (from != null && to != null) {
+                            val obstacles = strokeMap.values
+                                .filter { obs -> obs.id != from.id && obs.id != to.id && (isMindMapNode(obs) || obs.isPlacedMedia()) }
+                                .map { obs -> obs.bounds }
+                            MindmapEngine.calculateCollisionFreeRoute(
+                                from = from.bounds,
+                                to = to.bounds,
+                                obstacles = obstacles,
+                                wireStyle = nextStyle
+                            )
+                        } else it.points
+                        it.copy(stickerKind = nextStyle, points = newPoints)
+                    } else it
+                },
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun setConnectorColor(connectorId: String, color: Int) {
+        saveToUndoStack()
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes.map {
+                    if (it.id == connectorId && it.strokeType == StrokeType.CONNECTOR) {
+                        it.copy(colorValue = color)
+                    } else it
+                },
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun setConnectorWidth(connectorId: String, width: Float) {
+        saveToUndoStack()
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes.map {
+                    if (it.id == connectorId && it.strokeType == StrokeType.CONNECTOR) {
+                        it.copy(strokeWidth = width)
+                    } else it
+                },
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun deleteSingleConnector(connectorId: String) {
+        saveToUndoStack()
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes.filterNot { it.id == connectorId },
+                selectedStrokeIds = emptySet(),
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    fun reorderNodeLayer(nodeId: String, action: String) {
+        val strokes = _state.value.strokes
+        val index = strokes.indexOfFirst { it.id == nodeId }
+        if (index == -1) return
+        val node = strokes[index]
+        val list = strokes.toMutableList()
+        saveToUndoStack()
+        when (action) {
+            "top" -> {
+                list.removeAt(index)
+                list.add(node)
+            }
+            "bottom" -> {
+                list.removeAt(index)
+                list.add(0, node)
+            }
+            "up" -> {
+                if (index < list.size - 1) {
+                    list.removeAt(index)
+                    list.add(index + 1, node)
+                }
+            }
+            "down" -> {
+                if (index > 0) {
+                    list.removeAt(index)
+                    list.add(index - 1, node)
+                }
+            }
+        }
+        _state.update { it.copy(strokes = list, canUndo = true, canRedo = false) }
+        redoStack.clear()
+        scheduleSave()
+    }
+
+    var activeWritingNodeId: String? = null
+        private set
+
+    fun startNodeWriting(nodeId: String) {
+        activeWritingNodeId = nodeId
+        _state.update { it.copy(currentTool = WhiteboardTool.PEN) }
+    }
+
+    fun stopNodeWriting() {
+        activeWritingNodeId = null
+    }
+
+    fun findContainerNodeForStroke(stroke: Stroke): Stroke? {
+        val b = stroke.bounds
+        if (b.width <= 0f || b.height <= 0f) return null
+        return _state.value.strokes.lastOrNull { node ->
+            isMindMapNode(node) && node.bounds.contains(b.center)
+        }
+    }
+
+    fun addMindMapCenter(world: Offset) {
+        createMindMapTemplate(MindmapTemplateKind.BLANK, world)
+    }
+
+    fun addMindMapBranch(parentId: String, world: Offset) {
+        addMindMapBranchDirection(parentId, "right")
     }
 
     fun moveLinkedConnectors(movedIds: Set<String>) {
@@ -2348,7 +2972,12 @@ class CanvasViewModel @Inject constructor(
                     val from = s.strokes.find { it.id == stroke.linkFromId }
                     val to = s.strokes.find { it.id == stroke.linkToId }
                     if (from != null && to != null && (from.id in movedIds || to.id in movedIds)) {
-                        stroke.copy(points = listOf(from.bounds.center, to.bounds.center))
+                        val (p1, p2) = if (isMindMapNode(from) || isMindMapNode(to) || stroke.stickerKind in listOf("orthogonal", "curved") || from.stickerKind.startsWith("flow:") || to.stickerKind.startsWith("flow:")) {
+                            MindmapEngine.calculateAnchors(from.bounds, to.bounds)
+                        } else {
+                            from.bounds.center to to.bounds.center
+                        }
+                        stroke.copy(points = listOf(p1, p2))
                     } else stroke
                 }
             })
@@ -2647,7 +3276,7 @@ class CanvasViewModel @Inject constructor(
         selectionUndoCaptured = false
     }
 
-    private fun switchTo(index: Int, clearPageUndo: Boolean = true) {
+    private fun switchTo(index: Int, clearPageUndo: Boolean = true, resetTransform: Boolean = false) {
         activePage = index
         if (clearPageUndo) {
             undoActionStack.removeAll { it is CanvasUndoEntry.StrokeState }
@@ -2683,7 +3312,7 @@ class CanvasViewModel @Inject constructor(
             }
             if (currentTools.any { it.kind == matchingKind }) curTool else _state.value.inkTool
         } else curTool
-
+        val shouldReset = resetTransform || pages.getOrNull(index)?.isEmpty() == true
         _state.update {
             it.copy(
                 strokes = pages[index],
@@ -2702,7 +3331,10 @@ class CanvasViewModel @Inject constructor(
                 isDarkCanvas = isDark,
                 pageEpoch = it.pageEpoch + 1,
                 canUndo = undoActionStack.isNotEmpty(),
-                canRedo = redoActionStack.isNotEmpty()
+                canRedo = redoActionStack.isNotEmpty(),
+                scale = if (shouldReset) 1f else it.scale,
+                offsetX = if (shouldReset) 0f else it.offsetX,
+                offsetY = if (shouldReset) 0f else it.offsetY
             )
         }
     }
@@ -2902,9 +3534,17 @@ class CanvasViewModel @Inject constructor(
     fun commitStroke(stroke: Stroke) {
         if (stroke.points.isEmpty()) return
         saveToUndoStack()
+        val finalStroke = if (stroke.linkToId.isEmpty() && stroke.strokeType in HANDWRITING_TYPES) {
+            val container = if (activeWritingNodeId != null) {
+                _state.value.strokes.find { it.id == activeWritingNodeId } ?: findContainerNodeForStroke(stroke)
+            } else {
+                findContainerNodeForStroke(stroke)
+            }
+            if (container != null) stroke.copy(linkToId = container.id) else stroke
+        } else stroke
         _state.update { s ->
             s.copy(
-                strokes = s.strokes + stroke,
+                strokes = s.strokes + finalStroke,
                 currentStroke = null,
                 canUndo = true,
                 canRedo = false
@@ -2912,11 +3552,11 @@ class CanvasViewModel @Inject constructor(
         }
         redoStack.clear()
         scheduleSave()
-        if (stroke.strokeType in HANDWRITING_TYPES && _state.value.smartWriteEnabled && _state.value.inkTool != WhiteboardTool.MATH_PEN) {
+        if (finalStroke.strokeType in HANDWRITING_TYPES && _state.value.smartWriteEnabled && _state.value.inkTool != WhiteboardTool.MATH_PEN) {
             scheduleSmartWrite()
         }
-        if (stroke.strokeType in HANDWRITING_TYPES && _state.value.inkTool == WhiteboardTool.MATH_PEN) {
-            mathPenSessionStrokeIds.add(stroke.id)
+        if (finalStroke.strokeType in HANDWRITING_TYPES && _state.value.inkTool == WhiteboardTool.MATH_PEN) {
+            mathPenSessionStrokeIds.add(finalStroke.id)
             scheduleMathPen()
         }
     }

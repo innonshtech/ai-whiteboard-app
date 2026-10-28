@@ -352,6 +352,7 @@ fun AvitriSphareWhiteboardChrome(
     onPickCustomBackground: () -> Unit = {},
     onOpenStickerEmoji: () -> Unit = {},
     onSelectSticker: (String, String) -> Unit = { _, _ -> },
+    onOpenMindmapTemplates: () -> Unit = {},
     onEditNodeText: (String, String) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
@@ -443,6 +444,10 @@ fun AvitriSphareWhiteboardChrome(
                 val selectedStrokes = remember(state.strokes, state.selectedStrokeIds) {
                     state.strokes.filter { it.id in state.selectedStrokeIds }
                 }
+                val isDiagram = remember(selectedStrokes) {
+                    selectedStrokes.any { isMindMapNode(it) || it.strokeType == StrokeType.CONNECTOR }
+                }
+                if (!isDiagram) {
                 val selectedImage = selectedStrokes.firstOrNull { it.strokeType == StrokeType.IMAGE }
                 val onlyImageSelected = selectedImage != null && selectedStrokes.size == 1
 
@@ -1009,6 +1014,7 @@ fun AvitriSphareWhiteboardChrome(
                         }
                     }
                 }
+                }
             }
             }
             Spacer(Modifier.height(8.dp))
@@ -1466,12 +1472,13 @@ fun AvitriSphareWhiteboardChrome(
                                     "flowchart" -> {
                                         DockItem(
                                             icon = Icons.Default.Hub,
-                                            label = stringResource(R.string.tool_flowchart),
-                                            active = activeDockTool == ActiveDockTool.FLOWCHART,
+                                            label = "Mind Map",
+                                            active = false,
                                             tint = Color(0xFF2563EB),
                                             modifier = Modifier.onGloballyPositioned { toolIconBounds["flowchart"] = it.boundsInRoot() }
                                         ) {
-                                            toggle("flowchart")
+                                            panel = null
+                                            onOpenMindmapTemplates()
                                         }
                                     }
                                     "stickers" -> {
@@ -1622,6 +1629,7 @@ fun AvitriSphareWhiteboardChrome(
                                         }
                                     }
                                 }
+
                             }
                         }
 
@@ -1931,7 +1939,8 @@ fun AvitriSphareWhiteboardChrome(
                             }
                         )
                     }
-                    "geometry" -> DockPopover(maxWidth = 340.dp, scrollable = false) {
+                    "geometry" -> DockPopover(maxWidth = 460.dp, scrollable = false) {
+
                         GeometryToolPanel(
                             state = state,
                             viewModel = viewModel,

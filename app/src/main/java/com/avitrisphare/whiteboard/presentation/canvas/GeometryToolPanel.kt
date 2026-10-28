@@ -818,6 +818,6 @@ private fun sizeLabel(kind: MathToolKind, span: Float, pxPerCm: Float): String {
             val hyp = leg * 1.41421356f
             String.format(Locale.US, "Legs %.1f · hyp %.1f cm", leg, hyp)
         }
-        MathToolKind.TRIANGLE -> "Side: ${formatCentimetres(triangleSidePx(span), safe)}"
+        MathToolKind.TRIANGLE -> "Length: ${formatCentimetres(triangleSidePx(span), safe)}"
     }
 }

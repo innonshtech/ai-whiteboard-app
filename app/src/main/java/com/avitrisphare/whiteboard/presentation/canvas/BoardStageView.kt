@@ -957,23 +957,21 @@ class BoardStageView(context: Context) : FrameLayout(context) {
                 val p2 = points.last()
                 p.color = stroke.colorValue
                 p.strokeWidth = stroke.strokeWidth.coerceAtLeast(3f) * blurBoost
-                canvas.drawLine(p1.x, p1.y, p2.x, p2.y, p)
-                val angle = kotlin.math.atan2(p2.y - p1.y, p2.x - p1.x)
-                val arrowLen = (stroke.strokeWidth * 4.5f).coerceIn(16f, 32f)
-                val arrowAngle = Math.PI / 6.0
-                val ap1X = p2.x - (arrowLen * kotlin.math.cos(angle - arrowAngle)).toFloat()
-                val ap1Y = p2.y - (arrowLen * kotlin.math.sin(angle - arrowAngle)).toFloat()
-                val ap2X = p2.x - (arrowLen * kotlin.math.cos(angle + arrowAngle)).toFloat()
-                val ap2Y = p2.y - (arrowLen * kotlin.math.sin(angle + arrowAngle)).toFloat()
-                val arrowPath = android.graphics.Path().apply {
-                    moveTo(p2.x, p2.y)
-                    lineTo(ap1X, ap1Y)
-                    lineTo(ap2X, ap2Y)
-                    close()
-                }
                 val prevStyle = p.style
-                p.style = android.graphics.Paint.Style.FILL
-                canvas.drawPath(arrowPath, p)
+                p.style = android.graphics.Paint.Style.STROKE
+                p.strokeCap = android.graphics.Paint.Cap.ROUND
+                p.strokeJoin = android.graphics.Paint.Join.ROUND
+                if (stroke.stickerKind == "straight") {
+                    for (i in 0 until points.size - 1) {
+                        canvas.drawLine(points[i].x, points[i].y, points[i + 1].x, points[i + 1].y, p)
+                    }
+                } else if (stroke.stickerKind == "curved") {
+                    val wirePath = MindmapEngine.buildNativeCurvedPath(points)
+                    canvas.drawPath(wirePath, p)
+                } else {
+                    val wirePath = MindmapEngine.buildNativeOrthogonalPath(points)
+                    canvas.drawPath(wirePath, p)
+                }
                 p.style = prevStyle
                 return
             }
