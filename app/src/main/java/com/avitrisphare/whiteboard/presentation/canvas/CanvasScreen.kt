@@ -1,4 +1,4 @@
-package com.avitrisphare.whiteboard.presentation.canvas
+﻿package com.avitrisphare.whiteboard.presentation.canvas
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -255,6 +255,7 @@ fun List<Offset>.toSmoothedPath(): Path {
         path.quadraticBezierTo(this[i].x, this[i].y, midX, midY)
     }
     path.lineTo(last().x, last().y)
+    path.close()  // close the lasso loop so fill and dashed stroke join start to end
     return path
 }
 
@@ -477,7 +478,7 @@ fun DrawScope.renderStroke(
                     textAlign = Paint.Align.CENTER
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 }
-                drawText("🔒", lockCenter.x, lockCenter.y + 4f / safeScale, p)
+                drawText("­ƒöÆ", lockCenter.x, lockCenter.y + 4f / safeScale, p)
             }
         }
         return
@@ -944,11 +945,11 @@ fun DrawScope.renderStroke(
             } else {
                 val symbol = stroke.text.ifEmpty {
                     when (cleanKind) {
-                        "star" -> "⭐"
-                        "tick" -> "✓"
-                        "cross" -> "✕"
-                        "thumb" -> "👍"
-                        else -> "⭐"
+                        "star" -> "Ô¡É"
+                        "tick" -> "Ô£ô"
+                        "cross" -> "Ô£ò"
+                        "thumb" -> "­ƒæì"
+                        else -> "Ô¡É"
                     }
                 }
                 drawContext.canvas.nativeCanvas.apply {
@@ -995,7 +996,7 @@ fun DrawScope.renderStroke(
                 textAlign = Paint.Align.CENTER
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             }
-            drawText("🔒", lockCenter.x, lockCenter.y + 4f / safeScale, p)
+            drawText("­ƒöÆ", lockCenter.x, lockCenter.y + 4f / safeScale, p)
         }
     }
 }
@@ -1449,6 +1450,14 @@ fun CanvasScreen(
         viewModel.cancelCurrentStroke()
     }
 
+    // Clear stale lasso preview whenever the user switches away from LASSO tool
+    LaunchedEffect(state.currentTool) {
+        if (state.currentTool != WhiteboardTool.LASSO) {
+            lassoPoints = emptyList()
+        }
+        viewModel.dismissSmartWrite()
+    }
+
     fun placeMathTool(kind: MathToolKind, center: Offset, isDrag: Boolean = false) {
         val existingIndex = mathTools.indexOfFirst { it.kind == kind }
 
@@ -1775,6 +1784,7 @@ fun CanvasScreen(
                         }
                         var down = awaitFirstDown(requireUnconsumed = false)
                         dockDismissNonce++
+                        viewModel.dismissSmartWrite()
                         while (down.rejectedPalm(stylusDrawing = false)) {
                             down.consume()
                             val skipped = awaitPointerEvent()
@@ -2471,7 +2481,7 @@ fun CanvasScreen(
                                     replaceMathTool(updated)
                                     if (updated.kind == MathToolKind.RULER) {
                                         val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
-                                        mathReadout = "${formatCentimetres(updated.span, pxPerCm)} • $deg°" to centroid + Offset(0f, -42f)
+                                        mathReadout = "${formatCentimetres(updated.span, pxPerCm)} ÔÇó $deg┬░" to centroid + Offset(0f, -42f)
                                     } else {
                                         mathReadout = null
                                     }
@@ -2581,9 +2591,9 @@ fun CanvasScreen(
                                                     replaceMathTool(updated)
                                                     val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
                                                     val text = if (tool.kind == MathToolKind.RULER) {
-                                                        "${formatCentimetres(updated.span, pxPerCm)} • $deg°"
+                                                        "${formatCentimetres(updated.span, pxPerCm)} ÔÇó $deg┬░"
                                                     } else {
-                                                        "$deg°"
+                                                        "$deg┬░"
                                                     }
                                                     mathReadout = text to change.position + Offset(0f, -38f)
                                                 }
@@ -3026,7 +3036,7 @@ fun CanvasScreen(
                                 val leftBaseWorld = CanvasTransform.screenToWorld(leftBaseScreen, canvasScale, offset)
                                 when (mathGesture.zone) {
                                     MathToolZone.ANGLE_MODE_1 -> {
-                                        // Left Angle: from Left baseline (180°) to arm
+                                        // Left Angle: from Left baseline (180┬░) to arm
                                         val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
                                         viewModel.commitStroke(straightStroke(centerWorld, leftBaseWorld, state.selectedColor, state.strokeWidth))
                                         viewModel.commitStroke(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
@@ -3050,12 +3060,12 @@ fun CanvasScreen(
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
                                         val labelScreen = tool.center + midD * (arcR + 32f)
                                         viewModel.commitStroke(
-                                            measurementLabel("${leftAngleDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${leftAngleDeg.roundToInt()}┬░", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
-                                        Toast.makeText(context, "Left Angle ${leftAngleDeg.roundToInt()}° drawn", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Left Angle ${leftAngleDeg.roundToInt()}┬░ drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     MathToolZone.ANGLE_MODE_ARC_LEFT -> {
-                                        // Left Arc: circular arc only from Left baseline (180°) down to arm
+                                        // Left Arc: circular arc only from Left baseline (180┬░) down to arm
                                         val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
                                         val arcScreenPoints = mutableListOf<Offset>()
                                         val steps = (leftAngleDeg / 2.5f).roundToInt().coerceAtLeast(8)
@@ -3076,12 +3086,12 @@ fun CanvasScreen(
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
                                         val labelScreen = tool.center + midD * (tool.span + 32f)
                                         viewModel.commitStroke(
-                                            measurementLabel("${leftAngleDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${leftAngleDeg.roundToInt()}┬░", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
-                                        Toast.makeText(context, "Left Arc (${leftAngleDeg.roundToInt()}°) drawn", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Left Arc (${leftAngleDeg.roundToInt()}┬░) drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     MathToolZone.ANGLE_MODE_ARC -> {
-                                        // Right Arc: circular arc only from Right baseline (0°) up to arm
+                                        // Right Arc: circular arc only from Right baseline (0┬░) up to arm
                                         val arcScreenPoints = mutableListOf<Offset>()
                                         val steps = (pDeg / 2.5f).roundToInt().coerceAtLeast(8)
                                         for (i in 0..steps) {
@@ -3101,12 +3111,12 @@ fun CanvasScreen(
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
                                         val labelScreen = tool.center + midD * (tool.span + 32f)
                                         viewModel.commitStroke(
-                                            measurementLabel("${pDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${pDeg.roundToInt()}┬░", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
-                                        Toast.makeText(context, "Right Arc (${pDeg.roundToInt()}°) drawn", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Right Arc (${pDeg.roundToInt()}┬░) drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     MathToolZone.ANGLE_MODE_2 -> {
-                                        // Right Angle: from Right baseline (0°) to arm
+                                        // Right Angle: from Right baseline (0┬░) to arm
                                         viewModel.commitStroke(straightStroke(centerWorld, rightBaseWorld, state.selectedColor, state.strokeWidth))
                                         viewModel.commitStroke(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
                                         val arcScreenPoints = mutableListOf<Offset>()
@@ -3129,9 +3139,9 @@ fun CanvasScreen(
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
                                         val labelScreen = tool.center + midD * (arcR + 32f)
                                         viewModel.commitStroke(
-                                            measurementLabel("${pDeg.roundToInt()}°", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${pDeg.roundToInt()}┬░", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
-                                        Toast.makeText(context, "Right Angle ${pDeg.roundToInt()}° drawn", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Right Angle ${pDeg.roundToInt()}┬░ drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     else -> Unit
                                 }
@@ -3267,6 +3277,12 @@ fun CanvasScreen(
                             rulerLivePreview = null
                             mathReadout = null
                         }
+                        // Lasso cleanup: always clear the lasso preview path regardless of
+                        // whether the gesture was cancelled by multi-touch or palm rejection.
+                        if (wasMultiTouch && lassoPoints.isNotEmpty()) {
+                            lassoPoints = emptyList()
+                        }
+
                         if (wasMultiTouch) {
                             viewModel.setMathTools(mathTools)
                         }
@@ -4193,7 +4209,7 @@ fun CanvasScreen(
                             },
                             modifier = Modifier.size(26.dp)
                         ) {
-                            Text("←", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("ÔåÉ", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                         IconButton(
                             onClick = {
@@ -4205,7 +4221,7 @@ fun CanvasScreen(
                             },
                             modifier = Modifier.size(26.dp)
                         ) {
-                            Text("→", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("ÔåÆ", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                         IconButton(
                             onClick = {
@@ -4217,7 +4233,7 @@ fun CanvasScreen(
                             },
                             modifier = Modifier.size(26.dp)
                         ) {
-                            Text("↑", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("Ôåæ", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                         IconButton(
                             onClick = {
@@ -4229,7 +4245,7 @@ fun CanvasScreen(
                             },
                             modifier = Modifier.size(26.dp)
                         ) {
-                            Text("↓", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("Ôåô", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -4451,6 +4467,12 @@ fun CanvasScreen(
         }
 
         val smartOffer = state.smartWriteOffer
+        LaunchedEffect(smartOffer) {
+            if (smartOffer != null) {
+                delay(5000L)
+                viewModel.dismissSmartWrite()
+            }
+        }
         if (smartOffer != null) {
             val anchor = CanvasTransform.worldToScreen(
                 smartOffer.anchor,
@@ -4458,15 +4480,17 @@ fun CanvasScreen(
                 Offset(canvasOffsetX, canvasOffsetY)
             )
             val dockTop = chromeBounds.dock?.top ?: Float.MAX_VALUE
-            val targetY = if (anchor.y + 70f >= dockTop) {
+            val rawY = if (anchor.y + 70f >= dockTop) {
                 (anchor.y - 70f).coerceAtLeast(80f)
             } else {
                 (anchor.y + 12f).coerceAtLeast(80f)
             }
+            val safeX = anchor.x.coerceIn(16f, (canvasSize.width - 500f).coerceAtLeast(16f))
+            val safeY = rawY.coerceIn(80f, (dockTop - 65f).coerceAtLeast(80f))
             Surface(
                 modifier = Modifier
-                    .offset { IntOffset(anchor.x.roundToInt().coerceAtLeast(8), targetY.roundToInt()) }
-                    .widthIn(max = 520.dp),
+                    .offset { IntOffset(safeX.roundToInt(), safeY.roundToInt()) }
+                    .widthIn(max = 480.dp),
                 shape = RoundedCornerShape(16.dp),
                 color = Color.White,
                 shadowElevation = 8.dp
@@ -4474,7 +4498,7 @@ fun CanvasScreen(
                 Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                     if (smartOffer.lowConfidence) {
                         Text(
-                            "Low confidence — please check",
+                            "Low confidence ÔÇö please check",
                             color = Color(0xFFD97706),
                             fontSize = 12.sp,
                             modifier = Modifier.padding(bottom = 6.dp)
@@ -4598,7 +4622,7 @@ fun CanvasScreen(
                         color = Color(0xFF818CF8)
                     )
                     Text(
-                        "Recognizing equation…",
+                        "Recognizing equationÔÇª",
                         color = Color.White,
                         fontSize = 13.sp
                     )
@@ -4616,7 +4640,7 @@ fun CanvasScreen(
                 color = Color(0xF21C2130)
             ) {
                 Text(
-                    "Reading handwriting…",
+                    "Reading handwritingÔÇª",
                     color = Color.White,
                     fontSize = 13.sp,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
@@ -5154,7 +5178,7 @@ fun CanvasScreen(
                 if (state.panelIdForHelp.isNotBlank()) {
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        "Panel: ${state.panelIdForHelp} · ${state.licenseStateForHelp}",
+                        "Panel: ${state.panelIdForHelp} ┬À ${state.licenseStateForHelp}",
                         fontSize = 11.sp,
                         color = if (isDark) Color(0xFF64748B) else Color(0xFF9CA3AF)
                     )
@@ -5365,7 +5389,7 @@ fun CanvasScreen(
             OutlinedTextField(
                 value = textInputValue,
                 onValueChange = { textInputValue = it },
-                placeholder = { Text("Type something…") },
+                placeholder = { Text("Type somethingÔÇª") },
                 colors = boardFieldColors(),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -5387,7 +5411,7 @@ fun CanvasScreen(
             OutlinedTextField(
                 value = editingNodeText,
                 onValueChange = { editingNodeText = it },
-                placeholder = { Text("Type text for this mind map shape…") },
+                placeholder = { Text("Type text for this mind map shapeÔÇª") },
                 colors = boardFieldColors(),
                 modifier = Modifier.fillMaxWidth()
             )

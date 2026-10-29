@@ -415,6 +415,7 @@ class CanvasViewModel @Inject constructor(
         }
         val width = toolWidths[tool]
         val isMathPen = tool == WhiteboardTool.MATH_PEN
+        smartJob?.cancel()
         if (isMathPen) {
             viewModelScope.launch(Dispatchers.IO) {
                 handwritingReader.prefetch(SmartWriteLanguage("en", "English", SmartWriteScript.LATIN))
@@ -455,7 +456,8 @@ class CanvasViewModel @Inject constructor(
                     WhiteboardTool.CONE,
                     WhiteboardTool.PYRAMID
                 ),
-                splitPanes = panes
+                splitPanes = panes,
+                smartWriteOffer = null
             )
         }
     }
@@ -759,8 +761,8 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun setSmartWriteLanguage(tag: String) {
-        _state.update { it.copy(smartWriteLanguageTag = tag, smartWriteEnabled = true) }
-        smartPrefs().edit().putString(SMART_WRITE_LANG_KEY, tag).putBoolean(SMART_WRITE_KEY, true).apply()
+        _state.update { it.copy(smartWriteLanguageTag = tag) }
+        smartPrefs().edit().putString(SMART_WRITE_LANG_KEY, tag).apply()
         prefetchSmartWrite()
     }
 
@@ -1378,7 +1380,7 @@ class CanvasViewModel @Inject constructor(
             s.copy(
                 strokes = s.strokes.filterNot { it.id in ids } + typed,
                 selectedStrokeIds = setOf(typed.id),
-                editingTextId = typed.id,
+                editingTextId = null,
                 smartWriteOffer = null,
                 smartWriteBusy = false,
                 smartWriteWarning = if (lowConfidence) "Low confidence — please check" else null,
@@ -1507,6 +1509,8 @@ class CanvasViewModel @Inject constructor(
 
     fun lassoSelect(lassoPoints: List<Offset>) {
         if (lassoPoints.size < 3) return
+
+        // Validate lasso has a non-trivial bounding area to avoid single-tap false fires
         var minX = Float.MAX_VALUE
         var minY = Float.MAX_VALUE
         var maxX = -Float.MAX_VALUE
@@ -1517,39 +1521,33 @@ class CanvasViewModel @Inject constructor(
             if (p.y < minY) minY = p.y
             if (p.y > maxY) maxY = p.y
         }
-        val lassoRect = Rect(minX, minY, maxX, maxY)
+        if ((maxX - minX) < 4f && (maxY - minY) < 4f) return
 
-        fun pointInLasso(pt: Offset): Boolean {
-            var inside = false
-            var j = lassoPoints.size - 1
-            for (i in lassoPoints.indices) {
-                val pi = lassoPoints[i]
-                val pj = lassoPoints[j]
-                if ((pi.y > pt.y) != (pj.y > pt.y) &&
-                    pt.x < (pj.x - pi.x) * (pt.y - pi.y) / (pj.y - pi.y + 0.00001f) + pi.x
-                ) {
-                    inside = !inside
-                }
-                j = i
+        val currentStrokes = _state.value.strokes
+        val result = LassoCutEngine.cutAndSelect(currentStrokes, lassoPoints)
+
+        if (result.didCut) {
+            // The lasso boundary crossed at least one ink stroke; strokes were split.
+            // Save an undo entry because document content changes.
+            saveToUndoStack()
+            redoStack.clear()
+            redoActionStack.clear()
+            _state.update { s ->
+                s.copy(
+                    strokes = result.strokes,
+                    selectedStrokeIds = result.selectedIds,
+                    canUndo = true,
+                    canRedo = false
+                )
             }
-            return inside
+            scheduleSave()
+        } else {
+            // Selection-only: no strokes were split, only selection IDs change.
+            // Do NOT push to undo stack - no document content was modified.
+            _state.update { s ->
+                s.copy(selectedStrokeIds = result.selectedIds)
+            }
         }
-
-        val selected = _state.value.strokes.filter { stroke ->
-            val b = strokeSelectionBounds(stroke)
-            if (!lassoRect.overlaps(b)) {
-                false
-            } else if (pointInLasso(b.center)) {
-                true
-            } else if (stroke.points.any { pointInLasso(it) }) {
-                true
-            } else {
-                pointInLasso(b.topLeft) || pointInLasso(b.topRight) ||
-                pointInLasso(b.bottomLeft) || pointInLasso(b.bottomRight)
-            }
-        }.map { it.id }.toSet()
-
-        _state.update { it.copy(selectedStrokeIds = selected) }
     }
 
     fun bucketFillAt(worldPoint: Offset, fillColor: Int) {
