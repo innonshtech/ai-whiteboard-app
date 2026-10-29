@@ -252,13 +252,47 @@ fun isPenNibContact(
     )
 }
 
+/** True if the MotionEvent tool type is a stylus tip or stylus eraser. */
+fun isStylusToolType(toolType: Int): Boolean {
+    return toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
+}
+
+/** Hardware touch accuracy tolerance in millimetres as specified by Annex A: ±1.0 mm */
+const val HARDWARE_TOUCH_ACCURACY_MM = 1.0f
+
+/**
+ * Validates whether a touch coordinate is within the ±1mm hardware accuracy tolerance.
+ */
+fun isTouchWithinAccuracyTolerance(
+    actualPx: Offset,
+    expectedPx: Offset,
+    xdpi: Float,
+    toleranceMm: Float = HARDWARE_TOUCH_ACCURACY_MM
+): Boolean {
+    val errorPx = hypot(actualPx.x - expectedPx.x, actualPx.y - expectedPx.y)
+    val errorMm = (errorPx / xdpi.coerceAtLeast(1f)) * 25.4f
+    return errorMm <= toleranceMm
+}
+
+/**
+ * Converts screen pixel distance to physical millimetres given the display DPI.
+ */
+fun touchDistanceMm(distancePx: Float, xdpi: Float): Float {
+    return (distancePx / xdpi.coerceAtLeast(1f)) * 25.4f
+}
+
 /**
  * Remembers stylus contact size from the platform touch stream and asks
  * MotionEventPredictor for a short look-ahead so the ink tip is less late.
  */
-class TouchContacts(view: View) {
-    private val predictor = MotionEventPredictor.newInstance(view)
-    val classifier: AdaptiveTouchClassifier = AdaptiveTouchClassifier.get(view.context)
+class TouchContacts(view: View? = null) {
+    private val predictor: MotionEventPredictor? = try {
+        view?.let { MotionEventPredictor.newInstance(it) }
+    } catch (_: Throwable) {
+        null
+    }
+    val classifier: AdaptiveTouchClassifier = view?.context?.let { AdaptiveTouchClassifier.get(it) }
+        ?: AdaptiveTouchClassifier.defaultInstance
 
     data class ContactData(
         val x: Float,
@@ -294,11 +328,26 @@ class TouchContacts(view: View) {
         private set
 
     fun record(event: MotionEvent) {
+        val action = event.actionMasked
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            activeContacts.clear()
+            majorPxById.clear()
+            minorPxById.clear()
+            toolById.clear()
+            stylusActive = false
+            activeCount = 0
+            predictDx = 0f
+            predictDy = 0f
+            return
+        }
+
         var stylus = false
         val seen = HashSet<Long>()
         activeContacts.clear()
         val limit = event.pointerCount.coerceAtMost(MAX_TOUCH_POINTS)
+        val upIndex = if (action == MotionEvent.ACTION_POINTER_UP) event.actionIndex else -1
         for (index in 0 until limit) {
+            if (index == upIndex) continue
             val id = event.getPointerId(index).toLong()
             seen.add(id)
             val tool = event.getToolType(index)
@@ -333,13 +382,14 @@ class TouchContacts(view: View) {
         activeCount = seen.size
 
         // One stylus tip needs a look-ahead. A full 40-point frame does not.
-        if (event.pointerCount > 2) {
+        val pred = predictor
+        if (pred == null || event.pointerCount > 2) {
             predictDx = 0f
             predictDy = 0f
             return
         }
-        predictor.record(event)
-        val predicted = predictor.predict()
+        pred.record(event)
+        val predicted = pred.predict()
         if (predicted == null) {
             predictDx = 0f
             predictDy = 0f

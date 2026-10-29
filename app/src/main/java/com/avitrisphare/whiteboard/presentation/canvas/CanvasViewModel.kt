@@ -153,7 +153,7 @@ data class CanvasState(
     val currentTool: WhiteboardTool = WhiteboardTool.SELECT,
     val inkTool: WhiteboardTool = WhiteboardTool.PEN,
     val isToolLocked: Boolean = false,
-    val isDrawToShapeEnabled: Boolean = true,
+    val isDrawToShapeEnabled: Boolean = false,
     val smartWriteEnabled: Boolean = false,
     val smartWriteLanguageTag: String = "en",
     val smartWriteIntervalMs: Long = 500L,
@@ -377,7 +377,7 @@ class CanvasViewModel @Inject constructor(
 
     init {
         val prefs = context.getSharedPreferences(SHAPE_PREFS, Context.MODE_PRIVATE)
-        val enabled = prefs.getBoolean(SHAPE_RECOGNITION_KEY, true)
+        val enabled = prefs.getBoolean(SHAPE_RECOGNITION_KEY, false)
         val interval = prefs.getLong(SMART_WRITE_INTERVAL_KEY, 500L).let { if (it < 400L) 500L else it }
         val savedOrderStr = prefs.getString(TOOLBAR_ORDER_KEY, null)
         val savedOrder = if (!savedOrderStr.isNullOrBlank()) {
@@ -413,32 +413,28 @@ class CanvasViewModel @Inject constructor(
             _state.update { it.copy(isToolLocked = !it.isToolLocked) }
             return
         }
-        val width = toolWidths[tool]
-        val isMathPen = tool == WhiteboardTool.MATH_PEN
+        val resolved = if (tool == WhiteboardTool.MATH_PEN) WhiteboardTool.PEN else tool
+        val width = toolWidths[resolved]
         smartJob?.cancel()
-        if (isMathPen) {
-            viewModelScope.launch(Dispatchers.IO) {
-                handwritingReader.prefetch(SmartWriteLanguage("en", "English", SmartWriteScript.LATIN))
-            }
-        } else if (_state.value.inkTool == WhiteboardTool.MATH_PEN) {
+        if (_state.value.inkTool == WhiteboardTool.MATH_PEN) {
             mathPenJob?.cancel()
             mathPenSessionStrokeIds.clear()
         }
         _state.update {
             val panes = if (it.splitCount > 1) {
                 it.splitPanes.mapIndexed { index, pane ->
-                    if (index == it.splitActive) pane.copy(tool = tool) else pane
+                    if (index == it.splitActive) pane.copy(tool = resolved) else pane
                 }
             } else {
                 it.splitPanes
             }
             it.copy(
-                currentTool = tool,
-                inkTool = if (tool in PEN_PANEL_TOOLS) tool else it.inkTool,
+                currentTool = resolved,
+                inkTool = if (resolved in PEN_PANEL_TOOLS) resolved else it.inkTool,
                 strokeWidth = width ?: it.strokeWidth,
-                isEraser = tool == WhiteboardTool.ERASER,
-                isHighlighter = tool == WhiteboardTool.HIGHLIGHTER,
-                isShapeMode = tool in listOf(
+                isEraser = resolved == WhiteboardTool.ERASER,
+                isHighlighter = resolved == WhiteboardTool.HIGHLIGHTER,
+                isShapeMode = resolved in listOf(
                     WhiteboardTool.RECTANGLE,
                     WhiteboardTool.DIAMOND,
                     WhiteboardTool.CIRCLE,
@@ -2405,12 +2401,13 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun setSecondaryInkTool(tool: WhiteboardTool) {
-        val width = toolWidths[tool]
+        val resolved = if (tool == WhiteboardTool.MATH_PEN) WhiteboardTool.PEN else tool
+        val width = toolWidths[resolved]
         _state.update {
             it.copy(
-                secondaryInkTool = tool,
+                secondaryInkTool = resolved,
                 secondaryStrokeWidth = width ?: it.secondaryStrokeWidth,
-                currentTool = if (it.useSecondaryPenColor) tool else it.currentTool
+                currentTool = if (it.useSecondaryPenColor) resolved else it.currentTool
             )
         }
         scheduleSave()
@@ -3764,6 +3761,41 @@ class CanvasViewModel @Inject constructor(
         if (finalStroke.strokeType in HANDWRITING_TYPES && _state.value.inkTool == WhiteboardTool.MATH_PEN) {
             mathPenSessionStrokeIds.add(finalStroke.id)
             scheduleMathPen()
+        }
+    }
+
+    fun commitStrokes(newStrokes: List<Stroke>) {
+        val valid = newStrokes.filter { it.points.isNotEmpty() }
+        if (valid.isEmpty()) return
+        saveToUndoStack()
+        val finalStrokes = valid.map { stroke ->
+            if (stroke.linkToId.isEmpty() && stroke.strokeType in HANDWRITING_TYPES) {
+                val container = if (activeWritingNodeId != null) {
+                    _state.value.strokes.find { it.id == activeWritingNodeId } ?: findContainerNodeForStroke(stroke)
+                } else {
+                    findContainerNodeForStroke(stroke)
+                }
+                if (container != null) stroke.copy(linkToId = container.id) else stroke
+            } else stroke
+        }
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes + finalStrokes,
+                currentStroke = null,
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+        for (finalStroke in finalStrokes) {
+            if (finalStroke.strokeType in HANDWRITING_TYPES && _state.value.smartWriteEnabled && _state.value.inkTool != WhiteboardTool.MATH_PEN) {
+                scheduleSmartWrite()
+            }
+            if (finalStroke.strokeType in HANDWRITING_TYPES && _state.value.inkTool == WhiteboardTool.MATH_PEN) {
+                mathPenSessionStrokeIds.add(finalStroke.id)
+                scheduleMathPen()
+            }
         }
     }
 

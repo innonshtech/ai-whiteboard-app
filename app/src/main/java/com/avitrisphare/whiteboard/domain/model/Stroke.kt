@@ -2,6 +2,7 @@ package com.avitrisphare.whiteboard.domain.model
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Path
 import java.util.UUID
 
 data class Stroke(
@@ -25,6 +26,23 @@ data class Stroke(
     /** Bundled sticker id or emoji payload. */
     val stickerKind: String = ""
 ) {
+    @Transient
+    private var _cachedSmoothedPath: Path? = null
+
+    /**
+     * Reusable, lazily calculated smoothed bezier path.
+     * Prevents re-allocating Path objects and re-calculating bezier curves on every render frame.
+     */
+    val cachedPath: Path
+        get() {
+            var p = _cachedSmoothedPath
+            if (p == null) {
+                p = createSmoothedPath(points)
+                _cachedSmoothedPath = p
+            }
+            return p
+        }
+
     val bounds: Rect by lazy {
         if (points.isEmpty()) {
             Rect.Zero
@@ -73,6 +91,26 @@ data class Stroke(
             }
             val halfW = strokeWidth / 2f
             Rect(minX - halfW, minY - halfW, maxX + halfW, maxY + halfW)
+        }
+    }
+
+    companion object {
+        fun createSmoothedPath(points: List<Offset>): Path {
+            val path = Path()
+            if (points.size < 2) {
+                if (points.isNotEmpty()) {
+                    path.moveTo(points[0].x, points[0].y)
+                }
+                return path
+            }
+            path.moveTo(points[0].x, points[0].y)
+            for (i in 1 until points.size - 1) {
+                val midX = (points[i].x + points[i + 1].x) / 2f
+                val midY = (points[i].y + points[i + 1].y) / 2f
+                path.quadraticBezierTo(points[i].x, points[i].y, midX, midY)
+            }
+            path.lineTo(points.last().x, points.last().y)
+            return path
         }
     }
 }

@@ -14,12 +14,9 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -247,44 +244,79 @@ private fun androidx.compose.ui.input.pointer.PointerInputChange.pastPositions()
 }
 
 fun List<Offset>.toSmoothedPath(): Path {
-    val path = Path()
-    if (size < 2) return path
-    path.moveTo(this[0].x, this[0].y)
-    for (i in 1 until size - 1) {
-        val midX = (this[i].x + this[i + 1].x) / 2f
-        val midY = (this[i].y + this[i + 1].y) / 2f
-        path.quadraticBezierTo(this[i].x, this[i].y, midX, midY)
-    }
-    path.lineTo(last().x, last().y)
-    path.close()  // close the lasso loop so fill and dashed stroke join start to end
+    val path = Stroke.createSmoothedPath(this)
+    if (size >= 2) path.close()
     return path
 }
 
-private fun decodeMediaBitmap(context: Context, uriString: String, maxDim: Int = 2048): android.graphics.Bitmap? {
-    return try {
-        val openStream: () -> java.io.InputStream? = {
-            when {
-                uriString.startsWith("/") -> java.io.File(uriString).inputStream()
-                uriString.startsWith("http://") || uriString.startsWith("https://") -> {
-                    val conn = java.net.URL(uriString).openConnection()
-                    conn.connectTimeout = 8000
-                    conn.getInputStream()
-                }
-                else -> context.contentResolver.openInputStream(Uri.parse(uriString))
-            }
-        }
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        openStream()?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        var sample = 1
-        while (bounds.outWidth / sample > maxDim || bounds.outHeight / sample > maxDim) {
-            sample *= 2
-        }
-        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        openStream()?.use { BitmapFactory.decodeStream(it, null, opts) }
-    } catch (_: Exception) {
-        null
+private class PointerInkTrack(
+    val id: Long,
+    val isStylus: Boolean,
+    val color: Int,
+    val baseWidth: Float,
+    val strokeType: StrokeType,
+    val isHighlighter: Boolean,
+    initialWorld: Offset,
+    initialPressure: Float
+) {
+    val points = ArrayList<Offset>(256)
+    val pressures = ArrayList<Float>(256)
+    val strokeId: String = java.util.UUID.randomUUID().toString()
+
+    init {
+        points.add(initialWorld)
+        pressures.add(initialPressure)
     }
+
+    fun addPoint(world: Offset, pressure: Float, gap: Float) {
+        val last = points.lastOrNull()
+        if (last != null) {
+            val dx = world.x - last.x
+            val dy = world.y - last.y
+            if (dx * dx + dy * dy < gap * gap) return
+        }
+        points.add(world)
+        pressures.add(pressure)
+    }
+
+    fun toStroke(): Stroke {
+        val width = if (isStylus && pressures.isNotEmpty()) {
+            stylusPressureWidth(baseWidth, pressures.last())
+        } else {
+            baseWidth
+        }
+        return Stroke(
+            id = strokeId,
+            points = ArrayList(points),
+            pointPressures = ArrayList(pressures),
+            colorValue = color,
+            strokeWidth = width,
+            strokeType = strokeType,
+            isHighlighter = isHighlighter
+        )
+    }
+
+    fun toFinalStroke(): Stroke {
+        val width = if (isStylus && pressures.isNotEmpty()) {
+            stylusPressureWidth(baseWidth, pressures.average().toFloat())
+        } else {
+            baseWidth
+        }
+        return Stroke(
+            id = strokeId,
+            points = ArrayList(points),
+            pointPressures = ArrayList(pressures),
+            colorValue = color,
+            strokeWidth = width,
+            strokeType = strokeType,
+            isHighlighter = isHighlighter
+        )
+    }
+}
+
+
+private fun decodeMediaBitmap(context: Context, uriString: String, maxDim: Int = 2048): android.graphics.Bitmap? {
+    return BitmapCache.decodeSampledBitmap(context, uriString, maxDim)
 }
 
 private fun DrawScope.drawCenteredNodeText(
@@ -949,15 +981,7 @@ fun DrawScope.renderStroke(
 
             val isCustomImage = stroke.text.startsWith("/") || stroke.text.startsWith("content://") || stroke.text.startsWith("file://")
             if (isCustomImage) {
-                val bmp = try {
-                    if (stroke.text.startsWith("/")) {
-                        android.graphics.BitmapFactory.decodeFile(stroke.text)
-                    } else {
-                        context.contentResolver.openInputStream(Uri.parse(stroke.text))?.use {
-                            android.graphics.BitmapFactory.decodeStream(it)
-                        }
-                    }
-                } catch (_: Exception) { null }
+                val bmp = BitmapCache.decodeSampledBitmap(context, stroke.text)
                 if (bmp != null) {
                     val pad = size * 0.18f
                     val destRect = android.graphics.RectF(
@@ -1324,7 +1348,7 @@ fun CanvasScreen(
     }
 
     var canvasScale by remember { mutableFloatStateOf(1f) }
-    val liveInkTick = remember { mutableIntStateOf(0) }
+    // liveInkTick removed
     val liveInk = remember { LiveInk() }
     val eraserSession = remember { EraserSession() }
     var boardStage by remember { mutableStateOf<BoardStageView?>(null) }
@@ -1798,11 +1822,19 @@ fun CanvasScreen(
                         }
                         fun PointerInputChange.rejectedPalm(stylusDrawing: Boolean): Boolean {
                             if (isStylusPointer() || isMousePointer()) return false
-                            // Any hand contact is ignored while the pen is down, including frames
-                            // that do not report a contact size.
-                            return stylusDrawing || touchContacts.stylusActive
+                            val activeStylus = stylusDrawing || touchContacts.stylusActive
+                            if (!activeStylus) return false
+                            val major = touchContacts.majorPx(id)
+                            val minor = touchContacts.minorPx(id)
+                            // Palm rejection: contact area larger than 3cm² filtered out when stylus is active
+                            if (major > 0f) {
+                                return isPalmContactArea(major, xdpi, minor, ydpi)
+                            }
+                            // On frames where size is unreported, reject hand touch while stylus is down
+                            return true
                         }
                         fun PointerInputChange.isHandEraser(tool: WhiteboardTool): Boolean {
+                            if (!viewModel.state.value.palmEraserEnabled) return false
                             if (isStylusPointer() || isMousePointer()) return false
                             if (tool != WhiteboardTool.ERASER && tool !in WRITING_TOOLS) return false
                             if (isPalmTouch()) return true
@@ -1885,7 +1917,7 @@ fun CanvasScreen(
                         val activeTool = if (isPalmEraser) {
                             WhiteboardTool.ERASER
                         } else if (stylusDraw) {
-                            if (isEraserType && latestState.currentTool == WhiteboardTool.ERASER) {
+                            if (isEraserType) {
                                 WhiteboardTool.ERASER
                             } else if (isShapeActive) {
                                 state.currentTool
@@ -1910,14 +1942,32 @@ fun CanvasScreen(
                         var penCommittedForPalm = false
                         var lastEraseWorld: Offset? = null
                         var lastEraseScreen: Offset? = null
+                        val activeTracks = LinkedHashMap<Long, PointerInkTrack>()
+                        val finishedMultiStrokes = ArrayList<Stroke>()
+                        val writingNow = activeTool in WRITING_TOOLS
+                        if (writingNow) {
+                            val downPressure = if (stylusDraw) stylusPressure(down.pressure) else down.inkPressure()
+                            val initialTrack = PointerInkTrack(
+                                id = down.id.value,
+                                isStylus = stylusDraw,
+                                color = activeInkColor,
+                                baseWidth = activeInkWidth,
+                                strokeType = activeTool.toStrokeType(),
+                                isHighlighter = activeTool == WhiteboardTool.HIGHLIGHTER,
+                                initialWorld = downWorld,
+                                initialPressure = downPressure
+                            )
+                            activeTracks[down.id.value] = initialTrack
+                            boardStage?.setLiveStrokes(activeTracks.values.map { it.toStroke() })
+                            shapePrompt = null
+                            shapePromptVisible = false
+                        }
                         val inkPoints = ArrayList<Offset>(256)
                         val inkPressures = ArrayList<Float>(256)
                         inkPoints.add(downWorld)
                         inkPressures.add(if (stylusDraw) stylusPressure(down.pressure) else down.inkPressure())
                         if (activeTool in WRITING_TOOLS) {
                             liveInk.begin(downWorld)
-                            shapePrompt = null
-                            shapePromptVisible = false
                         }
                         var wasMultiTouch = false
                         var transformMoved = false
@@ -1928,8 +1978,7 @@ fun CanvasScreen(
                         var gestureScale = canvasScale
                         var gestureOffsetX = canvasOffsetX
                         var gestureOffsetY = canvasOffsetY
-                        val fingerScratch = ArrayList<androidx.compose.ui.input.pointer.PointerInputChange>(8)
-                        val writingNow = activeTool in WRITING_TOOLS
+                        val fingerScratch = ArrayList<androidx.compose.ui.input.pointer.PointerInputChange>(MAX_TOUCH_POINTS)
                         val inkTemplate = if (writingNow) {
                             Stroke(
                                 points = inkPoints,
@@ -1973,7 +2022,6 @@ fun CanvasScreen(
                                 } else activeInkWidth
                                 template.copy(strokeWidth = liveWidth)
                             }
-                            liveInkTick.intValue = liveInkTick.intValue + 1
                             boardStage?.setLiveInk(liveInk)
                         }
                         fun appendInk(screen: Offset, pressure: Float) {
@@ -2079,7 +2127,6 @@ fun CanvasScreen(
                         }
                         if (mathHit != null) {
                             liveInk.stroke = null
-                            liveInkTick.intValue = liveInkTick.intValue + 1
                             boardStage?.setLiveInk(null)
                             rulerLivePreview = null
                         }
@@ -2156,7 +2203,6 @@ fun CanvasScreen(
                             shapePoints = newStroke.points
                             viewModel.startStroke(newStroke)
                             liveInk.stroke = newStroke
-                            liveInkTick.intValue = liveInkTick.intValue + 1
                             boardStage?.setLiveInk(liveInk)
                             rulerLivePreview = snappedStartScreen to snappedStartScreen
                             val perp = perpendicular(straightedge.rotationDeg)
@@ -2456,34 +2502,77 @@ fun CanvasScreen(
                                 if (!change.isStylusPointer()) fingerScratch.add(change)
                             }
                             if (fingerScratch.size > fingerPeak) fingerPeak = fingerScratch.size
-                            val drawsImmediately = activeTool == WhiteboardTool.PENCIL ||
-                                activeTool == WhiteboardTool.MATH_PEN ||
-                                activeTool == WhiteboardTool.ERASER ||
-                                erasing
-                            val multiFingers = !drawsImmediately &&
-                                !touchContacts.stylusActive &&
-                                fingerScratch.size >= 2
-                            if (multiFingers) {
-                                if (!wasMultiTouch) {
-                                    wasMultiTouch = true
-                                    liveInk.stroke = null
-                                    liveInk.predicted = null
-                                    boardStage?.setLiveInk(null)
-                                    viewModel.cancelCurrentStroke()
-                                    rulerLivePreview = null
+
+                            if (writingNow) {
+                                val gap = inkSampleGapPx(state.inkSampleGapMm, xdpi, canvasScale)
+                                for (change in event.changes) {
+                                    if (change.pressed) {
+                                        if (change.rejectedPalm(stylusDrawing = anyStylusPressed)) {
+                                            change.consume()
+                                            continue
+                                        }
+                                        var track = activeTracks[change.id.value]
+                                        if (track == null) {
+                                            val ptrStylus = change.isStylusPointer()
+                                            val ptrMajor = touchContacts.majorPx(change.id)
+                                            val ptrMinor = touchContacts.minorPx(change.id)
+                                            val ptrNib = isPenNibContact(
+                                                isEraser = false,
+                                                isStylus = ptrStylus,
+                                                majorPx = ptrMajor,
+                                                minorPx = ptrMinor,
+                                                xdpi = xdpi
+                                            )
+                                            val ptrColor = if (ptrNib) state.selectedColor else state.secondaryColor
+                                            val ptrWidth = if (ptrNib) state.strokeWidth else secondaryStrokeWidth
+                                            val ptrPressure = if (ptrStylus) stylusPressure(change.pressure) else change.inkPressure()
+                                            val ptrWorld = CanvasTransform.screenToWorld(
+                                                screenPoint = change.position,
+                                                scale = canvasScale,
+                                                offset = Offset(canvasOffsetX, canvasOffsetY)
+                                            )
+                                            track = PointerInkTrack(
+                                                id = change.id.value,
+                                                isStylus = ptrStylus,
+                                                color = ptrColor,
+                                                baseWidth = ptrWidth,
+                                                strokeType = activeTool.toStrokeType(),
+                                                isHighlighter = activeTool == WhiteboardTool.HIGHLIGHTER,
+                                                initialWorld = ptrWorld,
+                                                initialPressure = ptrPressure
+                                            )
+                                            activeTracks[change.id.value] = track
+                                        } else {
+                                            val pressure = if (track.isStylus) stylusPressure(change.pressure) else change.inkPressure()
+                                            if (track.isStylus) {
+                                                change.historical.forEach { sample ->
+                                                    val sampleWorld = CanvasTransform.screenToWorld(
+                                                        screenPoint = sample.position,
+                                                        scale = canvasScale,
+                                                        offset = Offset(canvasOffsetX, canvasOffsetY)
+                                                    )
+                                                    track.addPoint(sampleWorld, pressure, gap)
+                                                }
+                                            }
+                                            val curWorld = CanvasTransform.screenToWorld(
+                                                screenPoint = change.position,
+                                                scale = canvasScale,
+                                                offset = Offset(canvasOffsetX, canvasOffsetY)
+                                            )
+                                            track.addPoint(curWorld, pressure, gap)
+                                        }
+                                        prevPosition = change.position
+                                        change.consume()
+                                    } else if (change.previousPressed) {
+                                        val lifted = activeTracks.remove(change.id.value)
+                                        if (lifted != null && lifted.points.size >= 1) {
+                                            finishedMultiStrokes.add(lifted.toFinalStroke())
+                                        }
+                                        change.consume()
+                                    }
                                 }
-                                var sumX = 0f
-                                var sumY = 0f
-                                for (finger in fingerScratch) {
-                                    sumX += finger.position.x
-                                    sumY += finger.position.y
-                                }
-                                val fingerCenter = Offset(sumX / fingerScratch.size, sumY / fingerScratch.size)
-                                val origin = gestureStart ?: fingerCenter
-                                gestureStart = origin
-                                gestureEnd = fingerCenter
-                                val travel = centroidTravel(origin.x, origin.y, fingerCenter.x, fingerCenter.y)
-                                if (travel > gestureTravel) gestureTravel = travel
+                                boardStage?.setLiveStrokes(activeTracks.values.map { it.toStroke() })
+                            } else {
                                 val centroid = event.calculateCentroid(useCurrent = true)
                                 val pinchedTool = if (fingerScratch.size != 2) {
                                     null
@@ -2516,38 +2605,10 @@ fun CanvasScreen(
                                         mathReadout = null
                                     }
                                     event.changes.forEach { it.consume() }
-                                } else if (fingerScratch.size == 2) {
-                                val zoomChange = event.calculateZoom()
-                                val panChange = event.calculatePan()
-
-                                if (zoomChange != 1f || panChange != Offset.Zero) {
-                                    val newScale = (gestureScale * zoomChange).coerceIn(
-                                        CanvasTransform.MIN_SCALE,
-                                        CanvasTransform.MAX_SCALE
-                                    )
-                                    val newOffset = CanvasTransform.calculatePivotZoomOffset(
-                                        oldScale = gestureScale,
-                                        newScale = newScale,
-                                        oldOffset = Offset(gestureOffsetX, gestureOffsetY),
-                                        centroid = centroid,
-                                        panDelta = panChange
-                                    )
-                                    gestureScale = newScale
-                                    gestureOffsetX = newOffset.x
-                                    gestureOffsetY = newOffset.y
-                                    transformMoved = true
-                                    boardStage?.previewTransform(gestureScale, gestureOffsetX, gestureOffsetY)
                                 }
-                                event.changes.forEach { it.consume() }
-                                } else {
-                                    event.changes.forEach { it.consume() }
-                                }
-                            } else {
                                 val change = if (erasingByHand) {
                                     realPressed.firstOrNull { !it.isStylusPointer() && !it.isMousePointer() }
                                         ?: realPressed.firstOrNull { it.id == down.id }
-                                } else if (drawsImmediately) {
-                                    realPressed.firstOrNull { it.id == down.id }
                                 } else {
                                     realPressed.firstOrNull { pointer ->
                                         val tool = touchContacts.toolType(pointer.id)
@@ -2555,7 +2616,7 @@ fun CanvasScreen(
                                             tool == MotionEvent.TOOL_TYPE_ERASER ||
                                             pointer.type == PointerType.Stylus ||
                                             pointer.type == PointerType.Eraser
-                                    } ?: realPressed.firstOrNull()
+                                    } ?: realPressed.firstOrNull { it.id == down.id } ?: realPressed.firstOrNull()
                                 }
                                 if (change != null) {
                                     val curWorld = CanvasTransform.screenToWorld(
@@ -2703,7 +2764,6 @@ fun CanvasScreen(
                                                 strokeType = if (activeTool == WhiteboardTool.HIGHLIGHTER) StrokeType.HIGHLIGHTER else StrokeType.LINE
                                             )
                                             liveInk.stroke = liveStroke
-                                            liveInkTick.intValue = liveInkTick.intValue + 1
                                             boardStage?.setLiveInk(liveInk)
 
                                             val snappedStartScreen = CanvasTransform.worldToScreen(
@@ -2790,18 +2850,6 @@ fun CanvasScreen(
                                         shadeEdge = (change.position.y / height).coerceIn(0.05f, 0.95f)
                                     } else if (activeTool == WhiteboardTool.MAGNIFIER) {
                                         boardStage?.showMagnifier(change.position.x, change.position.y)
-                                    } else if (writingNow) {
-                                        if (stylusDraw) {
-                                            val pressure = stylusPressure(change.pressure)
-                                            change.historical.forEach { sample ->
-                                                appendInk(sample.position, pressure)
-                                            }
-                                            appendInk(change.position, pressure)
-                                        } else {
-                                            change.pastPositions().forEach { appendInk(it, change.inkPressure()) }
-                                            appendInk(change.position, change.inkPressure())
-                                        }
-                                        publishInk()
                                     } else if (isShapeActive || activeTool in listOf(
                                             WhiteboardTool.RECTANGLE,
                                             WhiteboardTool.DIAMOND,
@@ -3028,7 +3076,6 @@ fun CanvasScreen(
                                 viewModel.cancelCurrentStroke()
                             }
                             liveInk.stroke = null
-                            liveInkTick.intValue = liveInkTick.intValue + 1
                             boardStage?.setLiveInk(null)
                             rulerLivePreview = null
                             mathReadout = null
@@ -3240,53 +3287,38 @@ fun CanvasScreen(
                                 if (state.selectedStrokeIds.isNotEmpty()) {
                                     selectionToolbarDismissed = false
                                 }
-                            } else if (writingNow && inkPoints.isNotEmpty() && !penCommittedForPalm) {
-                                val finishedWidth = if (isPenNib) {
-                                    if (stylusDraw) {
-                                        stylusPressureWidth(
-                                            activeInkWidth,
-                                            inkPressures.average().toFloat()
-                                        )
-                                    } else {
-                                        activeInkWidth
+                            } else if (writingNow) {
+                                for (remaining in activeTracks.values) {
+                                    if (remaining.points.size >= 1) {
+                                        finishedMultiStrokes.add(remaining.toFinalStroke())
                                     }
-                                } else {
-                                    val curMajor = touchContacts.majorPx(down.position)
-                                    val curMinor = touchContacts.minorPx(down.position)
-                                    val curContact = if (curMajor > 0f) (if (curMinor > 0f) (curMajor + curMinor) / 2f else curMajor) else 0f
-                                    if (state.secondaryStrokeWidth > 0f) {
-                                        state.secondaryStrokeWidth
-                                    } else if (curContact > 0f) {
-                                        if (curContact <= 5.0f) (curContact * 5f).coerceIn(14f, 32f) else curContact.coerceIn(12f, 44f)
-                                    } else activeInkWidth
                                 }
-                                val finished = inkTemplate!!.copy(
-                                    points = ArrayList(inkPoints),
-                                    pointPressures = ArrayList(inkPressures),
-                                    strokeWidth = finishedWidth,
-                                    colorValue = activeInkColor
-                                )
+                                activeTracks.clear()
+                                boardStage?.clearLiveStrokes()
                                 liveInk.stroke = null
-                                liveInkTick.intValue = liveInkTick.intValue + 1
-                                boardStage?.setLiveInk(null)
-                                viewModel.commitStroke(finished)
-                                val canRecognize = !state.smartWriteEnabled &&
-                                    state.isDrawToShapeEnabled && activeTool in setOf(
-                                    WhiteboardTool.PEN,
-                                    WhiteboardTool.PENCIL,
-                                    WhiteboardTool.MARKER
-                                )
-                                if (canRecognize) {
-                                    val recognized = ShapeRecognitionHelper.recognize(finished.points)
-                                    if (recognized != null && recognized.confidence >= 0.7f) {
-                                        shapePrompt = ShapePrompt(
-                                            strokeId = finished.id,
-                                            replacement = finished.copy(
-                                                points = recognized.points,
-                                                pointPressures = emptyList(),
-                                                strokeType = recognized.strokeType
-                                            )
+                                if (finishedMultiStrokes.isNotEmpty()) {
+                                    viewModel.commitStrokes(finishedMultiStrokes)
+                                    if (finishedMultiStrokes.size == 1) {
+                                        val finished = finishedMultiStrokes.first()
+                                        val canRecognize = !state.smartWriteEnabled &&
+                                            state.isDrawToShapeEnabled && activeTool in setOf(
+                                            WhiteboardTool.PEN,
+                                            WhiteboardTool.PENCIL,
+                                            WhiteboardTool.MARKER
                                         )
+                                        if (canRecognize) {
+                                            val recognized = ShapeRecognitionHelper.recognize(finished.points)
+                                            if (recognized != null && recognized.confidence >= 0.7f) {
+                                                shapePrompt = ShapePrompt(
+                                                    strokeId = finished.id,
+                                                    replacement = finished.copy(
+                                                        points = recognized.points,
+                                                        pointPressures = emptyList(),
+                                                        strokeType = recognized.strokeType
+                                                    )
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             } else if ((isShapeActive || activeTool in listOf(
@@ -3353,7 +3385,7 @@ fun CanvasScreen(
                         document?.pageHeight ?: 0f
                     )
                     stage.setDocumentFrame(page.documentFrameX, page.documentFrameY, page.documentFrameScale)
-                    stage.setFrostedBounds(chromeBounds.frost.map { android.graphics.RectF(it.left, it.top, it.right, it.bottom) })
+                    // frosted bounds removed for performance
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -4734,8 +4766,8 @@ fun CanvasScreen(
 
         AnimatedVisibility(
             visible = showAiPanel,
-            enter = fadeIn() + slideInHorizontally { it },
-            exit = fadeOut() + slideOutHorizontally { it }
+            enter = fadeIn(tween(120)),
+            exit = fadeOut(tween(100))
         ) {
             Box(
                 modifier = Modifier
@@ -4750,7 +4782,7 @@ fun CanvasScreen(
                         .width(320.dp)
                         .clickable { },
                     color = Color(0xFF1C2130),
-                    shadowElevation = 12.dp
+                    shadowElevation = 6.dp
                 ) {
                     Column(modifier = Modifier.padding(24.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -4791,8 +4823,8 @@ fun CanvasScreen(
         // 5. Left Floating Sidebar
         AnimatedVisibility(
             visible = showSidebar,
-            enter = fadeIn() + slideInHorizontally { -it },
-            exit = fadeOut() + slideOutHorizontally { -it }
+            enter = fadeIn(tween(120)),
+            exit = fadeOut(tween(100))
         ) {
             Box(
                 modifier = Modifier
@@ -4805,7 +4837,7 @@ fun CanvasScreen(
                     shape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
                     color = if (isDark) Color(0xFF1E293B) else Color.White,
                     border = if (isDark) BorderStroke(1.dp, Color(0xFF334155)) else null,
-                    shadowElevation = 16.dp,
+                    shadowElevation = 8.dp,
                     modifier = Modifier
                         .width(260.dp)
                         .fillMaxHeight()

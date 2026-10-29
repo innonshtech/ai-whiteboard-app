@@ -173,14 +173,14 @@ fun PanelLockedScreen(
             // Primary Button: Contact Administrator / Check Licence
             Box(
                 modifier = Modifier
-                    .width(220.dp)
-                    .height(50.dp)
+                    .width(240.dp)
+                    .height(52.dp)
                     .shadow(
-                        elevation = 8.dp,
-                        shape = RoundedCornerShape(16.dp),
-                        spotColor = Color(0x558B5CF6)
+                        elevation = 10.dp,
+                        shape = RoundedCornerShape(999.dp),
+                        spotColor = Color(0x552E2466)
                     )
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(999.dp))
                     .background(EntryGradient)
                     .clickable(enabled = !busy) {
                         if (onCheckAgain != null) {
@@ -219,7 +219,7 @@ fun PanelLockedScreen(
             // Secondary Option: Enter New Licence Key
             Text(
                 text = "Enter New Licence Key",
-                color = Color(0xFF2563EB),
+                color = BrandOrange,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier

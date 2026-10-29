@@ -198,7 +198,6 @@ val LocalDarkTheme = androidx.compose.runtime.compositionLocalOf { false }
 fun localizedToolLabel(tool: WhiteboardTool): String = when (tool) {
     WhiteboardTool.SELECT -> stringResource(R.string.tool_select)
     WhiteboardTool.PEN -> stringResource(R.string.tool_pen)
-    WhiteboardTool.MATH_PEN -> "Math fx"
     WhiteboardTool.PENCIL -> stringResource(R.string.tool_pencil)
     WhiteboardTool.MARKER -> stringResource(R.string.tool_marker)
     WhiteboardTool.HIGHLIGHTER -> stringResource(R.string.tool_highlighter)
@@ -212,17 +211,16 @@ fun localizedToolLabel(tool: WhiteboardTool): String = when (tool) {
 
 private val DockColor = Color(0x66FFFFFF) // Figma: #FFFFFF 40%
 private val DockLabel = Color(0xFF475569)
-// Button gradient: linear-gradient(90deg, #22D3EE 0%, #3B82F6 50%, #A855F7 100%)
+// Brand gradient: 2E2466, F26A1B
 private val ButtonGradient = listOf(
-    Color(0xFF22D3EE), // 0%
-    Color(0xFF3B82F6), // 50%
-    Color(0xFFA855F7)  // 100%
+    Color(0xFFF26A1B), // 0%
+    Color(0xFF2E2466)  // 100%
 )
 
-// Figma: Plain solid white background (#FFFFFF) + blue border (#9DC1FE)
+// Plain solid white background (#FFFFFF) + orange border (#F26A1B)
 private val DockBackgroundColor = Color.White
-private val DockBorderColor = Color(0xFF9DC1FE)
-private val DockBorder = BorderStroke(1.dp, DockBorderColor)
+private val DockBorderColor = Color(0xFFF26A1B)
+private val DockBorder = BorderStroke(1.5.dp, DockBorderColor)
 
 // Figma: Drop shadow X: 0, Y: 8, Blur: 28, Spread: 0, Behind transparent areas: checked, Color: #2563EB 20% (#2563EB33)
 // We clip at top = 0 so the shadow casts downward and does NOT bleed upwards onto the canvas!
@@ -2597,7 +2595,7 @@ private fun DockBar(
             cornerRadius = cornerRadius,
             offsetY = 8.dp,
             blurRadius = 20.dp,
-            shadowColor = if (isDark) Color(0x40000000) else Color(0x332563EB)
+            shadowColor = if (isDark) Color(0x40000000) else Color(0x30F26A1B)
         ),
         shape = RoundedCornerShape(cornerRadius),
         color = if (isDark) Color(0xFF1E293B) else DockBackgroundColor,
@@ -2624,51 +2622,67 @@ private fun DockItem(
     isDark: Boolean = LocalDarkTheme.current,
     onClick: () -> Unit
 ) {
-    Column(
+    val activeBg = Color(0xFFF26A1B)
+    val activeShape = RoundedCornerShape(14.dp)
+
+    Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .padding(horizontal = 2.dp)
+            .then(
+                if (active) {
+                    Modifier
+                        .shadow(
+                            elevation = 8.dp,
+                            shape = activeShape,
+                            ambientColor = activeBg,
+                            spotColor = activeBg
+                        )
+                        .clip(activeShape)
+                        .background(activeBg)
+                } else {
+                    Modifier.clip(RoundedCornerShape(12.dp))
+                }
+            )
             .clickable(
                 enabled = enabled,
                 onClick = onClick
             )
-            .padding(horizontal = 4.dp, vertical = 2.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = if (active) 12.dp else 6.dp, vertical = if (active) 5.dp else 4.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .size(30.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(
-                    if (active) Brush.horizontalGradient(ButtonGradient)
-                    else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
-                ),
-            contentAlignment = Alignment.Center
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = if (active) Color.White else if (enabled) tint else (if (isDark) Color(0xFF64748B) else Color(0xFF94A3B8)),
-                modifier = Modifier.size(16.dp)
-            )
-            if (swatch != null) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(2.dp)
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(Color(swatch))
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = if (active) Color.White else if (enabled) tint else (if (isDark) Color(0xFF64748B) else Color(0xFF94A3B8)),
+                    modifier = Modifier.size(18.dp)
                 )
+                if (swatch != null && !active) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(1.dp)
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(Color(swatch))
+                    )
+                }
             }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = label,
+                color = if (!enabled) (if (isDark) Color(0xFF64748B) else Color(0xFF94A3B8))
+                        else if (active) Color.White
+                        else (if (isDark) Color(0xFFCBD5E1) else DockLabel),
+                fontSize = 9.5.sp,
+                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 1
+            )
         }
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = label,
-            color = if (!enabled) (if (isDark) Color(0xFF64748B) else Color(0xFF94A3B8)) else if (active) (if (isDark) Color(0xFF60A5FA) else Color(0xFF1E293B)) else (if (isDark) Color(0xFFCBD5E1) else DockLabel),
-            fontSize = 9.sp,
-            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-            maxLines = 1
-        )
     }
 }
 
@@ -2682,17 +2696,30 @@ private fun PenSplitDockItem(
     onPenClick: () -> Unit,
     onDropdownClick: () -> Unit
 ) {
+    val activeBg = Color(0xFFF26A1B)
     val activeContentColor = Color.White
     val inactiveIconColor = Color(0xFF2563EB)
     val inactiveTextColor = if (isDark) Color(0xFFCBD5E1) else DockLabel
+    val activeShape = RoundedCornerShape(14.dp)
 
     Row(
         modifier = modifier
-            .height(44.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(
-                if (active) Brush.horizontalGradient(ButtonGradient)
-                else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+            .height(46.dp)
+            .padding(horizontal = 2.dp)
+            .then(
+                if (active) {
+                    Modifier
+                        .shadow(
+                            elevation = 8.dp,
+                            shape = activeShape,
+                            ambientColor = activeBg,
+                            spotColor = activeBg
+                        )
+                        .clip(activeShape)
+                        .background(activeBg)
+                } else {
+                    Modifier.clip(RoundedCornerShape(12.dp))
+                }
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -2701,7 +2728,7 @@ private fun PenSplitDockItem(
             modifier = Modifier
                 .fillMaxHeight()
                 .clickable(onClick = onPenClick)
-                .padding(start = 6.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                .padding(start = if (active) 10.dp else 6.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -2718,8 +2745,8 @@ private fun PenSplitDockItem(
                 Text(
                     text = label,
                     color = if (active) activeContentColor else inactiveTextColor,
-                    fontSize = 9.sp,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                    fontSize = 9.5.sp,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
                     maxLines = 1
                 )
             }
@@ -2741,7 +2768,7 @@ private fun PenSplitDockItem(
             modifier = Modifier
                 .fillMaxHeight()
                 .clickable(onClick = onDropdownClick)
-                .padding(start = 2.dp, end = 4.dp),
+                .padding(start = 2.dp, end = if (active) 8.dp else 4.dp),
             contentAlignment = Alignment.Center
         ) {
             Icon(

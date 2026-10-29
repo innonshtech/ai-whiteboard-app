@@ -1,10 +1,12 @@
 package com.avitrisphare.whiteboard.presentation.entry
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,11 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.avitrisphare.whiteboard.R
 
 internal val EntryBg = Color(0xFFFFFFFF)
 internal val EntryCard = Color(0xFFFFFFFF)
@@ -30,17 +35,34 @@ internal val EntryMuted = Color(0xFF64748B)
 internal val EntryText = Color(0xFF0F172A)
 internal val EntryPlaceholder = Color(0xFF94A3B8)
 
-internal val EntryCyan = Color(0xFF00C6FF)
-internal val EntryBlue = Color(0xFF2563EB)
-internal val EntryPurple = Color(0xFF8B5CF6)
+// Brand Colors: F26A1B (Orange) and 2E2466 (Deep Purple)
+internal val BrandOrange = Color(0xFFF26A1B)
+internal val BrandPurple = Color(0xFF2E2466)
+
+internal val EntryCyan = Color(0xFFF26A1B)
+internal val EntryBlue = Color(0xFF8B3A44)
+internal val EntryPurple = Color(0xFF2E2466)
 
 internal val EntryGradient = Brush.horizontalGradient(
-    listOf(Color(0xFF00B4D8), Color(0xFF3B82F6), Color(0xFF8B5CF6))
+    listOf(BrandOrange, BrandPurple)
 )
 
 internal val EntryActiveBorder = Brush.horizontalGradient(
-    listOf(Color(0xFF00C6FF), Color(0xFF8B5CF6))
+    listOf(BrandOrange, BrandPurple)
 )
+
+@Composable
+internal fun GyoashFullLogo(
+    modifier: Modifier = Modifier,
+    contentDescription: String = "GYOASH - Redefining Trust"
+) {
+    Image(
+        painter = painterResource(R.drawable.ic_gyoash_logo),
+        contentDescription = contentDescription,
+        contentScale = ContentScale.Fit,
+        modifier = modifier
+    )
+}
 
 @Composable
 internal fun GyoashMark(
@@ -50,33 +72,29 @@ internal fun GyoashMark(
     showLabel: Boolean = true
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(markSize)
-                .clip(RoundedCornerShape(markSize * 0.28f))
-                .background(
-                    Brush.linearGradient(
-                        listOf(Color(0xFF00C6FF), Color(0xFF0072FF), Color(0xFF7F00FF))
-                    )
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "G",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = (labelSize.value * 1.15f).sp
+        if (schoolName == null && showLabel) {
+            Image(
+                painter = painterResource(R.drawable.ic_gyoash_logo_compact),
+                contentDescription = "GYOASH",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.height(markSize)
             )
-        }
-        if (showLabel) {
-            Spacer(Modifier.width(markSize * 0.35f))
-            Text(
-                text = schoolName ?: "GYOASH",
-                color = EntryText,
-                fontWeight = FontWeight.Bold,
-                fontSize = labelSize,
-                letterSpacing = if (schoolName == null) 1.sp else 0.sp
+        } else {
+            Image(
+                painter = painterResource(R.drawable.ic_gyoash_mark),
+                contentDescription = "GYOASH Mark",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(markSize)
             )
+            if (showLabel && schoolName != null) {
+                Spacer(Modifier.width(markSize * 0.35f))
+                Text(
+                    text = schoolName,
+                    color = EntryText,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = labelSize
+                )
+            }
         }
     }
 }

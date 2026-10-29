@@ -6,8 +6,7 @@ import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -617,8 +616,8 @@ fun CanvasSidebarMenu(
 ) {
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn() + slideInHorizontally { -it },
-        exit = fadeOut() + slideOutHorizontally { -it }
+        enter = fadeIn(tween(120)),
+        exit = fadeOut(tween(100))
     ) {
         Box(
             modifier = Modifier
@@ -629,7 +628,7 @@ fun CanvasSidebarMenu(
             Surface(
                 shape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
                 color = Color.White,
-                shadowElevation = 16.dp,
+                shadowElevation = 8.dp,
                 modifier = Modifier
                     .width(260.dp)
                     .fillMaxHeight()

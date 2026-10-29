@@ -100,8 +100,8 @@ fun LicenseActivationScreen(
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFE0F2FE).copy(alpha = 0.5f),
-                            Color(0xFFF0FDF4).copy(alpha = 0.2f),
+                            BrandOrange.copy(alpha = 0.08f),
+                            BrandPurple.copy(alpha = 0.05f),
                             Color.Transparent
                         )
                     )
@@ -127,7 +127,7 @@ fun LicenseActivationScreen(
         ) {
             // Header Section
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                GyoashMark(markSize = 34.dp, labelSize = 17.sp)
+                GyoashFullLogo(modifier = Modifier.height(52.dp))
                 Spacer(Modifier.height(18.dp))
                 Text(
                     text = "Activate this Panel",
@@ -236,15 +236,15 @@ fun LicenseActivationScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     modifier = Modifier
-                        .width(220.dp)
-                        .height(50.dp)
-                        .clip(RoundedCornerShape(16.dp))
+                        .width(240.dp)
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(999.dp))
                         .then(
                             if (complete && !busy) {
                                 Modifier.shadow(
-                                    elevation = 10.dp,
-                                    shape = RoundedCornerShape(16.dp),
-                                    spotColor = Color(0x668B5CF6)
+                                    elevation = 12.dp,
+                                    shape = RoundedCornerShape(999.dp),
+                                    spotColor = Color(0x662E2466)
                                 )
                             } else Modifier
                         )
@@ -370,7 +370,7 @@ private fun EditableKeySlot(
             .width(width)
             .height(height)
             .then(
-                if (active) Modifier.gradientBorder(shape, width = 2.dp)
+                if (active) Modifier.border(2.dp, BrandOrange, shape)
                 else Modifier.border(1.5.dp, Color(0xFFE2E8F0), shape)
             )
             .clip(shape)

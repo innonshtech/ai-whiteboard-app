@@ -78,6 +78,11 @@ fun DrawScope.drawVectorInk(
     inPageSpace(offsetX, offsetY, scale) {
         val selectedStrokes = ArrayList<Stroke>()
         for (stroke in strokes) {
+            if (stroke.strokeType == StrokeType.IMAGE && stroke.bounds.overlaps(viewport)) {
+                renderStroke(context, stroke, scale, false)
+            }
+        }
+        for (stroke in strokes) {
             if (stroke.id in selectedIds) {
                 selectedStrokes.add(stroke)
             } else if (!stroke.isPlacedMedia() && stroke.bounds.overlaps(viewport)) {
@@ -86,10 +91,11 @@ fun DrawScope.drawVectorInk(
         }
         if (selectedStrokes.isNotEmpty()) drawSelectionBox(selectedStrokes, scale)
         for (stroke in selectedStrokes) {
+            if (stroke.strokeType == StrokeType.IMAGE) continue
             renderStroke(context, stroke, scale, false)
         }
         for (stroke in strokes) {
-            if (stroke.isPlacedMedia()) {
+            if (stroke.isPlacedMedia() && stroke.strokeType != StrokeType.IMAGE) {
                 renderStroke(context, stroke, scale, stroke.id in selectedIds)
             }
         }

@@ -106,7 +106,7 @@ fun parseVerifyLicenseResult(json: String): LicenseCheckResult {
 fun parseVerifyResponse(json: String): ApiCall<VerifiedLicense> {
     return when (val res = parseVerifyLicenseResult(json)) {
         is LicenseCheckResult.Valid -> ApiCall.Ok(res.license)
-        is LicenseCheckResult.Expired -> ApiCall.Err(res.message, licenseRejected = false, licenseExpired = true)
+        is LicenseCheckResult.Expired -> ApiCall.Err(res.message, licenseRejected = true, licenseExpired = true)
         is LicenseCheckResult.SchoolInactive -> ApiCall.Err(res.message, licenseRejected = false)
         is LicenseCheckResult.Invalid -> ApiCall.Err(res.message, licenseRejected = true)
         is LicenseCheckResult.NetworkError -> ApiCall.Err(res.message)

@@ -36,6 +36,11 @@ import com.avitrisphare.whiteboard.domain.repository.NoteRepository
 import com.avitrisphare.whiteboard.presentation.canvas.CanvasScreen
 import com.avitrisphare.whiteboard.presentation.dashboard.DashboardScreen
 import com.avitrisphare.whiteboard.presentation.entry.ClassHomeScreen
+import com.avitrisphare.whiteboard.presentation.attendance.AttendanceScreen
+import com.avitrisphare.whiteboard.presentation.timetable.TimetableScreen
+import com.avitrisphare.whiteboard.presentation.homework.HomeworkScreen
+import com.avitrisphare.whiteboard.presentation.doubts.DoubtsScreen
+import com.avitrisphare.whiteboard.presentation.grading.TestsGradingScreen
 import com.avitrisphare.whiteboard.presentation.entry.LicenseActivationScreen
 import com.avitrisphare.whiteboard.presentation.entry.PanelSessionStore
 import com.avitrisphare.whiteboard.presentation.entry.QrLoginScreen
@@ -437,6 +442,11 @@ class AvitriSphareActivity : ComponentActivity() {
                                         }
                                     },
                                     onOpenBoards = { navController.navigate("dashboard") },
+                                    onOpenAttendance = { navController.navigate("attendance") },
+                                    onOpenTimetable = { navController.navigate("timetable") },
+                                    onOpenHomework = { navController.navigate("homework") },
+                                    onOpenDoubts = { navController.navigate("doubts") },
+                                    onOpenTestsGrading = { navController.navigate("tests_grading") },
                                     onLogout = {
                                         val token = signedIn.accessToken
                                         scope.launch { panelApi.logout(token) }
@@ -446,6 +456,98 @@ class AvitriSphareActivity : ComponentActivity() {
                                             popUpTo(0) { inclusive = true }
                                         }
                                     }
+                                )
+                            }
+                        }
+                        composable("attendance") {
+                            val signedIn = teacher
+                            if (signedIn == null) {
+                                LaunchedEffect(Unit) { navController.navigate("classhome") }
+                            } else {
+                                AttendanceScreen(
+                                    teacher = signedIn,
+                                    schoolName = schoolName,
+                                    classroomName = classroomName,
+                                    subject = signedIn.subject,
+                                    onBack = { navController.popBackStack() }
+                                )
+                            }
+                        }
+                        composable("timetable") {
+                            val signedIn = teacher
+                            if (signedIn == null) {
+                                LaunchedEffect(Unit) { navController.navigate("classhome") }
+                            } else {
+                                TimetableScreen(
+                                    teacher = signedIn,
+                                    schoolName = schoolName,
+                                    classroomName = classroomName,
+                                    subject = signedIn.subject,
+                                    onBack = { navController.popBackStack() },
+                                    onLaunchClassBoard = { clsName, subName ->
+                                        val targetTitle = listOf(clsName, subName).filter { it.isNotBlank() }.joinToString(" ")
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val note = Note(
+                                                id = UUID.randomUUID().toString(),
+                                                title = targetTitle.ifBlank { "Class Lesson" }
+                                            )
+                                            noteRepository.insertNote(note)
+                                            navController.navigate("canvas/${note.id}")
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                        composable("homework") {
+                            val signedIn = teacher
+                            if (signedIn == null) {
+                                LaunchedEffect(Unit) { navController.navigate("classhome") }
+                            } else {
+                                HomeworkScreen(
+                                    teacher = signedIn,
+                                    schoolName = schoolName,
+                                    classroomName = classroomName,
+                                    subject = signedIn.subject,
+                                    onBack = { navController.popBackStack() }
+                                )
+                            }
+                        }
+                        composable("doubts") {
+                            val signedIn = teacher
+                            if (signedIn == null) {
+                                LaunchedEffect(Unit) { navController.navigate("classhome") }
+                            } else {
+                                DoubtsScreen(
+                                    teacher = signedIn,
+                                    schoolName = schoolName,
+                                    classroomName = classroomName,
+                                    subject = signedIn.subject,
+                                    onBack = { navController.popBackStack() },
+                                    onSolveOnWhiteboard = { chapter, _ ->
+                                        val boardName = "$classroomName Doubt: $chapter"
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val note = Note(
+                                                id = UUID.randomUUID().toString(),
+                                                title = boardName
+                                            )
+                                            noteRepository.insertNote(note)
+                                            navController.navigate("canvas/${note.id}")
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                        composable("tests_grading") {
+                            val signedIn = teacher
+                            if (signedIn == null) {
+                                LaunchedEffect(Unit) { navController.navigate("classhome") }
+                            } else {
+                                TestsGradingScreen(
+                                    teacher = signedIn,
+                                    schoolName = schoolName,
+                                    classroomName = classroomName,
+                                    subject = signedIn.subject,
+                                    onBack = { navController.popBackStack() }
                                 )
                             }
                         }

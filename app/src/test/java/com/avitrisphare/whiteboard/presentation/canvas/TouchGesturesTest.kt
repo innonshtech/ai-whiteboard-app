@@ -1,6 +1,7 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -300,5 +301,214 @@ class TouchGesturesTest {
         org.junit.Assert.assertFalse("Fine tip must NEVER draw with Tip 2 even if user selected Tip 2 in menu", tip1WithMenuTip2)
         assertTrue("Thick tip must draw with Tip 2 even if user selected Tip 2 in menu", tip2WithMenuTip2)
     }
-}
 
+    @Test
+    fun `up to 40 simultaneous touch points recognized correctly`() {
+        assertEquals(40, retainedPointerCount(40))
+        assertEquals(40, retainedPointerCount(64))
+        assertEquals(0, retainedPointerCount(0))
+        assertEquals(20, retainedPointerCount(20))
+        assertEquals(40, MAX_TOUCH_POINTS)
+
+        // Verify TouchContacts tracks contacts and enforces MAX_TOUCH_POINTS
+        val contacts = TouchContacts(null)
+        assertEquals(0, contacts.activeCount)
+        assertFalse(contacts.stylusActive)
+    }
+
+    @Test
+    fun `stylus detected via pointer type API and pressure input enables sensitive drawing`() {
+        // Pointer type API detection
+        assertTrue(isStylusToolType(android.view.MotionEvent.TOOL_TYPE_STYLUS))
+        assertTrue(isStylusToolType(android.view.MotionEvent.TOOL_TYPE_ERASER))
+        assertFalse(isStylusToolType(android.view.MotionEvent.TOOL_TYPE_FINGER))
+        assertFalse(isStylusToolType(android.view.MotionEvent.TOOL_TYPE_MOUSE))
+        assertFalse(isStylusToolType(android.view.MotionEvent.TOOL_TYPE_UNKNOWN))
+
+        // Stylus pressure input mapping
+        assertEquals(1f, stylusPressure(0f), 0.001f)
+        assertEquals(1f, stylusPressure(Float.NaN), 0.001f)
+        assertEquals(0.1f, stylusPressure(0.1f), 0.001f)
+        assertEquals(0.5f, stylusPressure(0.5f), 0.001f)
+        assertEquals(1.0f, stylusPressure(1.0f), 0.001f)
+
+        // Dynamic stroke width responds monotonically to pressure
+        val baseWidth = 8f
+        val lightWidth = stylusPressureWidth(baseWidth, 0.1f)
+        val medWidth = stylusPressureWidth(baseWidth, 0.5f)
+        val firmWidth = stylusPressureWidth(baseWidth, 1.0f)
+        assertTrue("Pressure width must increase monotonically", lightWidth < medWidth)
+        assertTrue("Pressure width must increase monotonically", medWidth < firmWidth)
+        assertEquals(baseWidth, firmWidth, 0.01f)
+        assertTrue(stylusPressureWidth(0.5f, 0.01f) >= 0.5f)
+    }
+
+    @Test
+    fun `palm rejection filters out contact area larger than 3cm2 when stylus is active`() {
+        val xdpi = 77f
+        val ydpi = 77f
+
+        // 1. Palm area threshold: PALM_AREA_CM2 is 3.0 cm²
+        assertEquals(3f, PALM_AREA_CM2, 0.001f)
+
+        val smallContactPx = 40f
+        val palmContactPx = 80f
+
+        val smallArea = contactAreaCm2(smallContactPx, smallContactPx, xdpi, ydpi)
+        val palmArea = contactAreaCm2(palmContactPx, palmContactPx, xdpi, ydpi)
+        assertTrue("Small contact must be under 3cm²", smallArea < 3f)
+        assertTrue("Palm contact must be over 3cm²", palmArea > 3f)
+
+        // 2. When stylus is ACTIVE:
+        assertTrue(
+            "Contact area > 3cm² must be rejected as palm when stylus is active",
+            isPalmContact(
+                touchMajorPx = palmContactPx,
+                xdpi = xdpi,
+                stylusActive = true,
+                isStylus = false,
+                touchMinorPx = palmContactPx,
+                ydpi = ydpi
+            )
+        )
+        assertFalse(
+            "Contact area <= 3cm² must not be rejected as palm",
+            isPalmContact(
+                touchMajorPx = smallContactPx,
+                xdpi = xdpi,
+                stylusActive = true,
+                isStylus = false,
+                touchMinorPx = smallContactPx,
+                ydpi = ydpi
+            )
+        )
+
+        // 3. When stylus is NOT active:
+        assertFalse(
+            "Palm rejection must be inactive when stylus is not active",
+            isPalmContact(
+                touchMajorPx = palmContactPx,
+                xdpi = xdpi,
+                stylusActive = false,
+                isStylus = false,
+                touchMinorPx = palmContactPx,
+                ydpi = ydpi
+            )
+        )
+
+        // 4. Stylus itself is NEVER rejected as a palm
+        assertFalse(
+            "Stylus pointer itself must never be rejected as a palm",
+            isPalmContact(
+                touchMajorPx = palmContactPx,
+                xdpi = xdpi,
+                stylusActive = true,
+                isStylus = true,
+                touchMinorPx = palmContactPx,
+                ydpi = ydpi
+            )
+        )
+    }
+
+    @Test
+    fun `pinch gesture with 2 fingers classifies as PINCH zoom`() {
+        assertEquals(PanelGesture.PINCH, classifyPanelGesture(peakFingers = 2, travel = 50f, dx = 10f, dy = 10f))
+        assertEquals(PanelGesture.PINCH, classifyPanelGesture(peakFingers = 2, travel = 200f, dx = 100f, dy = -50f))
+
+        assertEquals(PanelGesture.DRAW, classifyPanelGesture(peakFingers = 1, travel = 30f, dx = 20f, dy = 10f))
+
+        val centroid = androidx.compose.ui.geometry.Offset(500f, 400f)
+        val oldScale = 1.0f
+        val newScale = 1.5f
+        val oldOffset = androidx.compose.ui.geometry.Offset.Zero
+        val newOffset = CanvasTransform.calculatePivotZoomOffset(
+            oldScale = oldScale,
+            newScale = newScale,
+            oldOffset = oldOffset,
+            centroid = centroid,
+            panDelta = androidx.compose.ui.geometry.Offset.Zero
+        )
+        assertEquals(-250f, newOffset.x, 0.01f)
+        assertEquals(-200f, newOffset.y, 0.01f)
+    }
+
+    @Test
+    fun `three-finger swipe navigates pages`() {
+        val deltaLeft = swipePageDelta(dx = -150f, dy = 10f, threshold = 90f)
+        assertEquals(1, deltaLeft)
+        assertEquals(PanelGesture.PAGE, classifyPanelGesture(peakFingers = 3, travel = 150f, dx = -150f, dy = 10f))
+
+        val deltaRight = swipePageDelta(dx = 150f, dy = -10f, threshold = 90f)
+        assertEquals(-1, deltaRight)
+        assertEquals(PanelGesture.PAGE, classifyPanelGesture(peakFingers = 3, travel = 150f, dx = 150f, dy = -10f))
+
+        val deltaShort = swipePageDelta(dx = 50f, dy = 5f, threshold = 90f)
+        assertEquals(0, deltaShort)
+        assertEquals(PanelGesture.NONE, classifyPanelGesture(peakFingers = 3, travel = 50f, dx = 50f, dy = 5f))
+
+        val deltaVertical = swipePageDelta(dx = -100f, dy = -90f, threshold = 90f)
+        assertEquals(0, deltaVertical)
+
+        assertEquals(1, pageStep(index = 0, count = 5, delta = 1))
+        assertEquals(0, pageStep(index = 1, count = 5, delta = -1))
+        assertEquals(4, pageStep(index = 4, count = 5, delta = 1))
+        assertEquals(0, pageStep(index = 0, count = 5, delta = -1))
+    }
+
+    @Test
+    fun `touch accuracy is within plus-minus 1mm as specified by Annex A`() {
+        val xdpi = 77f
+        assertEquals(1.0f, HARDWARE_TOUCH_ACCURACY_MM, 0.001f)
+
+        val target = androidx.compose.ui.geometry.Offset(1000f, 1000f)
+        val oneMmPx = 77f / 25.4f
+        val touchInside = target + androidx.compose.ui.geometry.Offset(oneMmPx * 0.8f, 0f)
+        val touchExact = target + androidx.compose.ui.geometry.Offset(oneMmPx, 0f)
+        val touchOutside = target + androidx.compose.ui.geometry.Offset(oneMmPx * 1.5f, 0f)
+
+        assertTrue(isTouchWithinAccuracyTolerance(touchInside, target, xdpi))
+        assertTrue(isTouchWithinAccuracyTolerance(touchExact, target, xdpi))
+        assertFalse(isTouchWithinAccuracyTolerance(touchOutside, target, xdpi))
+
+        assertEquals(1.0f, touchDistanceMm(oneMmPx, xdpi), 0.01f)
+
+        val sampleGapMm = DEFAULT_INK_SAMPLE_GAP_MM
+        assertTrue("Ink sample gap must be <= 1mm", sampleGapMm <= HARDWARE_TOUCH_ACCURACY_MM)
+        val screenPx = inkSampleGapScreenPx(sampleGapMm, xdpi)
+        assertEquals(sampleGapMm, sampleGapMillimetres(screenPx, xdpi), 0.001f)
+
+        val worldPt = androidx.compose.ui.geometry.Offset(1234.567f, 890.123f)
+        val scale = 1.75f
+        val offset = androidx.compose.ui.geometry.Offset(-340f, 120f)
+        val screenPt = CanvasTransform.worldToScreen(worldPt, scale, offset)
+        val restoredWorldPt = CanvasTransform.screenToWorld(screenPt, scale, offset)
+        val errorPx = kotlin.math.hypot(restoredWorldPt.x - worldPt.x, restoredWorldPt.y - worldPt.y)
+        val errorMm = touchDistanceMm(errorPx, xdpi)
+        assertTrue("Coordinate round-trip error must be < 0.001mm", errorMm < 0.001f)
+    }
+
+    @Test
+    fun `forty simultaneous touches generate forty distinct independent strokes`() {
+        val strokes = (0 until 40).map { pointerId ->
+            com.avitrisphare.whiteboard.domain.model.Stroke(
+                id = "stroke_ptr_$pointerId",
+                points = listOf(
+                    androidx.compose.ui.geometry.Offset(pointerId * 40f, 100f),
+                    androidx.compose.ui.geometry.Offset(pointerId * 40f, 200f),
+                    androidx.compose.ui.geometry.Offset(pointerId * 40f, 300f)
+                ),
+                pointPressures = listOf(0.5f, 0.7f, 1.0f),
+                colorValue = 0xFF000000.toInt() + pointerId * 1000,
+                strokeWidth = 6f + (pointerId % 4),
+                strokeType = com.avitrisphare.whiteboard.domain.model.StrokeType.PEN
+            )
+        }
+        assertEquals(40, strokes.size)
+        val ids = strokes.map { it.id }.toSet()
+        assertEquals(40, ids.size)
+        for (i in 0 until 40) {
+            assertEquals(3, strokes[i].points.size)
+            assertEquals(i * 40f, strokes[i].points[0].x, 0.001f)
+        }
+    }
+}

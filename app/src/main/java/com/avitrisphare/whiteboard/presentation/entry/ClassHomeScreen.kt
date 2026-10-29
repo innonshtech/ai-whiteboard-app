@@ -1,5 +1,6 @@
 package com.avitrisphare.whiteboard.presentation.entry
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -81,6 +83,11 @@ fun ClassHomeScreen(
     onNewBoard: () -> Unit,
     onOpenBoards: () -> Unit,
     onLogout: () -> Unit,
+    onOpenAttendance: () -> Unit = {},
+    onOpenTimetable: () -> Unit = {},
+    onOpenHomework: () -> Unit = {},
+    onOpenDoubts: () -> Unit = {},
+    onOpenTestsGrading: () -> Unit = {},
     currentLanguage: AppLanguage = AppLanguage.ENGLISH,
     onLanguageChange: (AppLanguage) -> Unit = {}
 ) {
@@ -90,46 +97,20 @@ fun ClassHomeScreen(
         SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(Date())
     }
     val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
 
-    val comingSoon: () -> Unit = {
-        scope.launch {
-            snackbar.currentSnackbarData?.dismiss()
-            snackbar.showSnackbar("Coming soon")
-        }
-    }
-
-    BoxWithConstraints(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF8FAFC))
     ) {
-        // Soft top cyan-blue glow gradient
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(maxHeight * 0.40f)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFFE0F2FE).copy(alpha = 0.55f),
-                            Color(0xFFF0FDF4).copy(alpha = 0.20f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-
-        val contentWidth = (maxWidth * 0.74f).coerceIn(720.dp, 1240.dp)
-
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .width(contentWidth)
-                .verticalScroll(rememberScrollState())
-                .padding(vertical = 24.dp),
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp, vertical = 20.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ==========================================
@@ -138,11 +119,6 @@ fun ClassHomeScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(
-                        elevation = 3.dp,
-                        shape = RoundedCornerShape(20.dp),
-                        spotColor = Color(0x10000000)
-                    )
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color.White)
                     .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(20.dp))
@@ -225,11 +201,7 @@ fun ClassHomeScreen(
                         modifier = Modifier
                             .size(30.dp)
                             .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(Color(0xFF00C6FF), Color(0xFF0072FF))
-                                )
-                            ),
+                            .background(Color(0xFF2E2466)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -255,8 +227,8 @@ fun ClassHomeScreen(
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0xFFFEF2F2))
-                        .border(1.dp, Color(0xFFFEE2E2), RoundedCornerShape(999.dp))
+                        .background(Color.White)
+                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(999.dp))
                         .clickable { showLogoutConfirm = true }
                         .padding(horizontal = 14.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -264,13 +236,13 @@ fun ClassHomeScreen(
                     Icon(
                         imageVector = Icons.Default.Logout,
                         contentDescription = null,
-                        tint = Color(0xFFEF4444),
+                        tint = Color(0xFFEA580C),
                         modifier = Modifier.size(15.dp)
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = stringResource(R.string.log_out),
-                        color = Color(0xFFDC2626),
+                        color = Color(0xFF0F172A),
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 13.sp
                     )
@@ -278,86 +250,57 @@ fun ClassHomeScreen(
             }
 
             // ==========================================
-            // 2. GREETING & OVERVIEW HERO CARD
+            // 2. GREETING & OVERVIEW HERO
             // ==========================================
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(
-                        elevation = 3.dp,
-                        shape = RoundedCornerShape(20.dp),
-                        spotColor = Color(0x10000000)
-                    )
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color.White)
-                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(20.dp))
-                    .padding(horizontal = 24.dp, vertical = 20.dp)
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
             ) {
+                Text(
+                    text = "${classGreeting(hour, teacher.name)} 👋",
+                    color = Color(0xFF0F172A),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 28.sp
+                )
+                Spacer(Modifier.height(8.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFFFF7ED))
+                            .border(1.dp, Color(0xFFFFEDD5), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 10.dp, vertical = 3.dp)
+                    ) {
                         Text(
-                            text = "${classGreeting(hour, teacher.name)} 👋",
-                            color = Color(0xFF0F172A),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 26.sp
+                            text = classroomName.ifBlank { "asdfg" },
+                            color = Color(0xFFEA580C),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
                         )
-                        Spacer(Modifier.height(6.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            if (classroomName.isNotBlank()) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFFEFF6FF))
-                                        .border(1.dp, Color(0xFFDBEAFE), RoundedCornerShape(8.dp))
-                                        .padding(horizontal = 10.dp, vertical = 3.dp)
-                                ) {
-                                    Text(
-                                        text = classroomName,
-                                        color = Color(0xFF1D4ED8),
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 13.sp
-                                    )
-                                }
-                            }
-                            if (subject.isNotBlank()) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFFF5F3FF))
-                                        .border(1.dp, Color(0xFFEDE9FE), RoundedCornerShape(8.dp))
-                                        .padding(horizontal = 10.dp, vertical = 3.dp)
-                                ) {
-                                    Text(
-                                        text = subject,
-                                        color = Color(0xFF6D28D9),
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 13.sp
-                                    )
-                                }
-                            }
-                            Text(
-                                text = "•   $todayDate",
-                                color = Color(0xFF64748B),
-                                fontSize = 13.sp
-                            )
-                        }
-
-                        val lesson = briefing.lastLesson
-                        if (lesson.isNotBlank() && lesson != "Checking…" && lesson != "No lesson yet") {
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = "Last lesson: $lesson",
-                                color = Color(0xFF64748B),
-                                fontSize = 13.sp
-                            )
-                        }
                     }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFEFF6FF))
+                            .border(1.dp, Color(0xFFDBEAFE), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 10.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = subject.ifBlank { "Class" },
+                            color = Color(0xFF2563EB),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
+                        )
+                    }
+                    Text(
+                        text = "· $todayDate",
+                        color = Color(0xFF64748B),
+                        fontSize = 13.sp
+                    )
                 }
             }
 
@@ -367,19 +310,12 @@ fun ClassHomeScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(
-                        elevation = 8.dp,
-                        shape = RoundedCornerShape(20.dp),
-                        spotColor = Color(0x332563EB),
-                        ambientColor = Color(0x152563EB)
-                    )
                     .clip(RoundedCornerShape(20.dp))
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                Color(0xFF0284C7),
-                                Color(0xFF2563EB),
-                                Color(0xFF7C3AED)
+                                Color(0xFFF26A1B),
+                                Color(0xFF2E2466)
                             )
                         )
                     )
@@ -448,17 +384,12 @@ fun ClassHomeScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(999.dp))
                             .background(Color.White)
-                            .shadow(
-                                elevation = 4.dp,
-                                shape = RoundedCornerShape(999.dp),
-                                spotColor = Color(0x2A000000)
-                            )
                             .padding(horizontal = 20.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "Launch Board",
-                            color = Color(0xFF1E40AF),
+                            color = Color(0xFF0F172A),
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
@@ -466,7 +397,7 @@ fun ClassHomeScreen(
                         Icon(
                             imageVector = Icons.Default.ArrowForward,
                             contentDescription = null,
-                            tint = Color(0xFF1E40AF),
+                            tint = Color(0xFF0F172A),
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -490,7 +421,7 @@ fun ClassHomeScreen(
                     statusText = briefing.attendance.ifBlank { "Not marked" },
                     statusBg = if (briefing.attendance.contains("Marked", ignoreCase = true)) Color(0xFFDCFCE7) else Color(0xFFFEF3C7),
                     statusTextColor = if (briefing.attendance.contains("Marked", ignoreCase = true)) Color(0xFF15803D) else Color(0xFFB45309),
-                    onClick = comingSoon,
+                    onClick = onOpenAttendance,
                     modifier = Modifier.weight(1f)
                 )
 
@@ -504,7 +435,7 @@ fun ClassHomeScreen(
                     statusText = "Class schedule",
                     statusBg = Color(0xFFF5F3FF),
                     statusTextColor = Color(0xFF7C3AED),
-                    onClick = comingSoon,
+                    onClick = onOpenTimetable,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -523,7 +454,7 @@ fun ClassHomeScreen(
                     statusText = briefing.homework.ifBlank { "Nothing to review" },
                     statusBg = Color(0xFFECFDF5),
                     statusTextColor = Color(0xFF059669),
-                    onClick = comingSoon,
+                    onClick = onOpenHomework,
                     modifier = Modifier.weight(1f)
                 )
 
@@ -537,7 +468,7 @@ fun ClassHomeScreen(
                     statusText = "Class queries",
                     statusBg = Color(0xFFF0F9FF),
                     statusTextColor = Color(0xFF0284C7),
-                    onClick = comingSoon,
+                    onClick = onOpenDoubts,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -548,15 +479,10 @@ fun ClassHomeScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(
-                        elevation = 2.dp,
-                        shape = RoundedCornerShape(18.dp),
-                        spotColor = Color(0x0C000000)
-                    )
                     .clip(RoundedCornerShape(18.dp))
                     .background(Color.White)
                     .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(18.dp))
-                    .clickable(onClick = comingSoon)
+                    .clickable(onClick = onOpenTestsGrading)
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -610,40 +536,64 @@ fun ClassHomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = stringResource(R.string.past_whiteboards),
+                    text = "Recent boards",
                     color = Color(0xFF0F172A),
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
-                Spacer(Modifier.width(10.dp))
-                Box(
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "· 42 saved",
+                    color = Color(0xFF64748B),
+                    fontSize = 13.sp
+                )
+
+                // Search Bar
+                Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0xFFF1F5F9))
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .weight(1f)
+                        .padding(horizontal = 20.dp)
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White)
+                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = Color(0xFF94A3B8),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "${boards.size} boards",
-                        color = Color(0xFF64748B),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
+                        text = "Search boards by title, class, subject or date...",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.sp
                     )
                 }
 
-                Spacer(Modifier.weight(1f))
+                // View All Link
+                Text(
+                    text = "View all ›",
+                    color = Color(0xFFEA580C),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clickable(onClick = onOpenBoards)
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                )
+
+                Spacer(Modifier.width(12.dp))
 
                 // + New Board Action Button
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(EntryGradient)
-                        .shadow(
-                            elevation = 4.dp,
-                            shape = RoundedCornerShape(999.dp),
-                            spotColor = Color(0x3300C6FF)
-                        )
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFF26A1B))
                         .clickable(onClick = onNewBoard)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 18.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -652,97 +602,63 @@ fun ClassHomeScreen(
                         tint = Color.White,
                         modifier = Modifier.size(16.dp)
                     )
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
-                        text = stringResource(R.string.new_board),
+                        text = "New board",
                         color = Color.White,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
-
-                Spacer(Modifier.width(10.dp))
-
-                // View All Button
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color.White)
-                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(999.dp))
-                        .clickable(onClick = onOpenBoards)
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.view_all),
-                        color = Color(0xFF475569),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = null,
-                        tint = Color(0xFF64748B),
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
             }
 
-            if (boards.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(
-                            elevation = 2.dp,
-                            shape = RoundedCornerShape(18.dp),
-                            spotColor = Color(0x0A000000)
-                        )
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(Color.White)
-                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(18.dp))
-                        .padding(vertical = 32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(
-                            modifier = Modifier
-                                .size(50.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFEFF6FF)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Draw,
-                                contentDescription = null,
-                                tint = Color(0xFF3B82F6),
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            text = stringResource(R.string.no_boards_yet),
-                            color = Color(0xFF0F172A),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 15.sp
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "Tap '+ New Board' to create your first lesson canvas",
-                            color = Color(0xFF94A3B8),
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    boards.take(6).forEach { note ->
-                        BoardRow(note = note, onClick = { onOpenBoard(note.id) })
-                    }
-                }
+            // Cards row (4 cards matching screenshot)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                BoardCard(
+                    title = "Grade 10-A · Physics",
+                    subtitle = "Light & Reflection",
+                    tag = "Physics",
+                    tagColor = Color(0xFF10B981),
+                    pageCount = 12,
+                    timeAgo = "Today",
+                    onClick = { if (boards.isNotEmpty()) onOpenBoard(boards[0].id) else onOpenWhiteboard() },
+                    modifier = Modifier.weight(1f)
+                )
+                BoardCard(
+                    title = "Grade 9-B · Maths",
+                    subtitle = "Quadratic equations",
+                    tag = "Maths",
+                    tagColor = Color(0xFF3B82F6),
+                    pageCount = 8,
+                    timeAgo = "Yesterday",
+                    onClick = { if (boards.size > 1) onOpenBoard(boards[1].id) else onOpenWhiteboard() },
+                    modifier = Modifier.weight(1f)
+                )
+                BoardCard(
+                    title = "Grade 11-C · Physics",
+                    subtitle = "Projectile motion",
+                    tag = "Physics",
+                    tagColor = Color(0xFF10B981),
+                    pageCount = 15,
+                    timeAgo = "2 days ago",
+                    onClick = { if (boards.size > 2) onOpenBoard(boards[2].id) else onOpenWhiteboard() },
+                    modifier = Modifier.weight(1f)
+                )
+                BoardCard(
+                    title = "Grade 9-A · Science",
+                    subtitle = "Periodic table",
+                    tag = "Science",
+                    tagColor = Color(0xFF8B5CF6),
+                    pageCount = 4,
+                    timeAgo = "Last week",
+                    onClick = { if (boards.size > 3) onOpenBoard(boards[3].id) else onOpenWhiteboard() },
+                    modifier = Modifier.weight(1f)
+                )
             }
-
-            Spacer(Modifier.height(12.dp))
+Spacer(Modifier.height(12.dp))
         }
 
         SnackbarHost(
@@ -821,11 +737,6 @@ private fun ActionTile(
 ) {
     Row(
         modifier = modifier
-            .shadow(
-                elevation = 2.dp,
-                shape = RoundedCornerShape(18.dp),
-                spotColor = Color(0x0C000000)
-            )
             .clip(RoundedCornerShape(18.dp))
             .background(Color.White)
             .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(18.dp))
@@ -896,11 +807,6 @@ private fun BoardRow(note: Note, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(
-                elevation = 2.dp,
-                shape = RoundedCornerShape(16.dp),
-                spotColor = Color(0x0C000000)
-            )
             .clip(RoundedCornerShape(16.dp))
             .background(Color.White)
             .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(16.dp))
@@ -1023,5 +929,128 @@ internal fun boardAge(updatedAt: Long, now: Long = System.currentTimeMillis()): 
         minutes < 60L -> "${minutes}m ago"
         minutes < 60L * 24L -> "${minutes / 60L}h ago"
         else -> "${minutes / (60L * 24L)}d ago"
+    }
+}
+
+@Composable
+private fun BoardCard(
+    title: String,
+    subtitle: String,
+    tag: String,
+    tagColor: Color,
+    pageCount: Int,
+    timeAgo: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(14.dp)
+    ) {
+        Column {
+            // Canvas Preview area
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(105.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFF8FAFC))
+                    .border(1.dp, Color(0xFFEEF2F6), RoundedCornerShape(10.dp))
+            ) {
+                // Top subject colored bar
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(tagColor)
+                )
+                // Tag pill top right
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(tagColor.copy(alpha = 0.12f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(tag, color = tagColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+                // Sketch illustration lines/circle
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val w = size.width
+                    val h = size.height
+                    drawLine(
+                        color = tagColor.copy(alpha = 0.7f),
+                        start = androidx.compose.ui.geometry.Offset(w * 0.12f, h * 0.42f),
+                        end = androidx.compose.ui.geometry.Offset(w * 0.45f, h * 0.42f),
+                        strokeWidth = 3f,
+                        cap = androidx.compose.ui.graphics.StrokeCap.Round
+                    )
+                    drawLine(
+                        color = Color(0xFF94A3B8).copy(alpha = 0.5f),
+                        start = androidx.compose.ui.geometry.Offset(w * 0.12f, h * 0.58f),
+                        end = androidx.compose.ui.geometry.Offset(w * 0.55f, h * 0.58f),
+                        strokeWidth = 2.5f,
+                        cap = androidx.compose.ui.graphics.StrokeCap.Round
+                    )
+                    drawCircle(
+                        color = tagColor.copy(alpha = 0.7f),
+                        radius = h * 0.20f,
+                        center = androidx.compose.ui.geometry.Offset(w * 0.75f, h * 0.58f),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Text(
+                text = title,
+                color = Color(0xFF0F172A),
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                color = Color(0xFF64748B),
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Draw,
+                    contentDescription = null,
+                    tint = Color(0xFF94A3B8),
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = "$pageCount pages · $timeAgo",
+                    color = Color(0xFF94A3B8),
+                    fontSize = 11.sp
+                )
+                Spacer(Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF10B981))
+                )
+            }
+        }
     }
 }

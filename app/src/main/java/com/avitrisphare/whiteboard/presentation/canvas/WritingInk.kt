@@ -1,11 +1,8 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -148,7 +145,7 @@ fun DrawScope.drawWritingStroke(stroke: Stroke, screenScale: Float) {
         return
     }
 
-    val path = points.toSmoothedPath()
+    val path = stroke.cachedPath
     drawPath(path = path, color = color, style = round)
 
     if (style.brush && stroke.pointPressures.size == points.size) {
@@ -239,8 +236,7 @@ fun InkToolPanel(
     }
 
     Row(
-        verticalAlignment = Alignment.Top,
-        modifier = Modifier.animateContentSize()
+        verticalAlignment = Alignment.Top
     ) {
         Column(
             modifier = Modifier
@@ -265,7 +261,6 @@ fun InkToolPanel(
                     Spacer(Modifier.width(8.dp))
                     val currentTipTool = if (editingSecondary) state.secondaryInkTool else state.inkTool
                     val activeToolLabel = when (currentTipTool) {
-                        WhiteboardTool.MATH_PEN -> "Math fx"
                         WhiteboardTool.LASSO -> stringResource(R.string.util_lasso)
                         else -> currentTipTool.label
                     }
@@ -302,14 +297,12 @@ fun InkToolPanel(
 
             Spacer(Modifier.height(10.dp))
 
-            // Tool Icons: 7 tools with equal size, equal spacing, and sleek icons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 listOf(
                     WhiteboardTool.PEN,
-                    WhiteboardTool.MATH_PEN,
                     WhiteboardTool.PENCIL,
                     WhiteboardTool.MARKER,
                     WhiteboardTool.HIGHLIGHTER,
@@ -319,7 +312,6 @@ fun InkToolPanel(
                     val currentTipTool = if (editingSecondary) state.secondaryInkTool else state.inkTool
                     val selected = currentTipTool == tool || (tool == WhiteboardTool.LASSO && state.currentTool == WhiteboardTool.LASSO)
                     val label = when (tool) {
-                        WhiteboardTool.MATH_PEN -> "Math fx"
                         WhiteboardTool.LASSO -> stringResource(R.string.util_lasso)
                         else -> tool.label
                     }
@@ -348,24 +340,7 @@ fun InkToolPanel(
                 }
             }
 
-            if (state.inkTool == WhiteboardTool.MATH_PEN) {
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFFEEF2FF))
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Math Pen active · Write equations (e.g. a² + b² = ) to auto-convert into formatted math.",
-                        fontSize = 11.sp,
-                        color = Color(0xFF4338CA),
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            } else if (state.inkTool == WhiteboardTool.LASSO || state.currentTool == WhiteboardTool.LASSO) {
+            if (state.inkTool == WhiteboardTool.LASSO || state.currentTool == WhiteboardTool.LASSO) {
                 Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier
@@ -740,8 +715,8 @@ fun InkToolPanel(
         // Side Big Multicolor Ball (HueWheel)
         AnimatedVisibility(
             visible = showColorWheel,
-            enter = fadeIn() + expandHorizontally(),
-            exit = fadeOut() + shrinkHorizontally()
+            enter = fadeIn(androidx.compose.animation.core.tween(120)),
+            exit = fadeOut(androidx.compose.animation.core.tween(100))
         ) {
             Row(verticalAlignment = Alignment.Top) {
                 Box(

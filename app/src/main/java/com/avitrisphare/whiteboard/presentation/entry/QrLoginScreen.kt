@@ -58,9 +58,9 @@ import kotlinx.coroutines.launch
 private data class LoginStep(val number: String, val color: Color, val text: String)
 
 private val loginSteps = listOf(
-    LoginStep("1", Color(0xFF06B6D4), "Open the GYOASH Teacher App"),
-    LoginStep("2", Color(0xFF3B82F6), "Tap 'Scan to Login'"),
-    LoginStep("3", Color(0xFF8B5CF6), "Point your camera at this QR code")
+    LoginStep("1", Color(0xFFF26A1B), "Open the GYOASH Teacher App"),
+    LoginStep("2", Color(0xFF98455A), "Tap 'Scan to Login'"),
+    LoginStep("3", Color(0xFF2E2466), "Point your camera at this QR code")
 )
 
 @Composable
@@ -128,8 +128,8 @@ fun QrLoginScreen(
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFE0F2FE).copy(alpha = 0.5f),
-                            Color(0xFFF5F3FF).copy(alpha = 0.3f),
+                            BrandOrange.copy(alpha = 0.08f),
+                            BrandPurple.copy(alpha = 0.05f),
                             Color.Transparent
                         )
                     )
@@ -225,9 +225,7 @@ fun QrLoginScreen(
                                 .clip(RoundedCornerShape(999.dp))
                                 .border(
                                     1.5.dp,
-                                    Brush.horizontalGradient(
-                                        listOf(Color(0xFF00C6FF), Color(0xFF8B5CF6))
-                                    ),
+                                    EntryGradient,
                                     RoundedCornerShape(999.dp)
                                 )
                                 .background(Color.White)
@@ -236,7 +234,7 @@ fun QrLoginScreen(
                         ) {
                             Text(
                                 text = "${seconds}s",
-                                color = Color(0xFF0284C7),
+                                color = BrandOrange,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp
                             )
@@ -319,7 +317,7 @@ fun QrLoginScreen(
                         // Fallback link
                         Text(
                             text = "Or log in with Email & Password",
-                            color = Color(0xFF2563EB),
+                            color = BrandOrange,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier
@@ -390,9 +388,9 @@ private fun WhiteEmailLoginDialog(
             val fieldColors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = EntryText,
                 unfocusedTextColor = EntryText,
-                focusedBorderColor = Color(0xFF2563EB),
+                focusedBorderColor = BrandOrange,
                 unfocusedBorderColor = Color(0xFFCBD5E1),
-                cursorColor = Color(0xFF2563EB)
+                cursorColor = BrandOrange
             )
 
             OutlinedTextField(
