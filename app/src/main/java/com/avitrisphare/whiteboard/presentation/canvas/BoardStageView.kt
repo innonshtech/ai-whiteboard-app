@@ -1,6 +1,7 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Paint
 import android.graphics.Path
@@ -16,13 +17,16 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import android.graphics.drawable.GradientDrawable
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -373,6 +377,23 @@ class BoardStageView(context: Context) : FrameLayout(context) {
             return false
         }
         val hit = mediaUnder(event.x, event.y) ?: return false
+        val strokeId = (hit.tag as? String) ?: ((hit.parent as? View)?.tag as? String)
+        if (tool == WhiteboardTool.SELECT || tool == WhiteboardTool.LASSO) {
+            val stroke = strokes.firstOrNull { it.id == strokeId }
+            if (stroke != null) {
+                val worldX = (event.x - offsetX) / scale
+                val worldY = (event.y - offsetY) / scale
+                val handleSlop = 42f / scale.coerceAtLeast(0.001f)
+                if (hitShapeHandle(stroke, androidx.compose.ui.geometry.Offset(worldX, worldY), handleSlop) != null) {
+                    return false
+                }
+                val b = stroke.bounds
+                val headerH = 38f / scale.coerceAtLeast(0.001f)
+                if (worldY <= b.top + headerH) {
+                    return false
+                }
+            }
+        }
         return hit is WebView || hit is TextureView
     }
 
@@ -575,24 +596,32 @@ class BoardStageView(context: Context) : FrameLayout(context) {
             setBackgroundColor(android.graphics.Color.parseColor("#E2E8F0"))
         }
 
+        val videoId = youtubeVideoId(stroke.text)
+        val isYouTube = videoId != null
+
         val icon = ImageView(context).apply {
-            setImageResource(android.R.drawable.ic_menu_compass)
-            setColorFilter(android.graphics.Color.parseColor("#475569"))
+            setImageResource(if (isYouTube) android.R.drawable.ic_media_play else android.R.drawable.ic_menu_compass)
+            setColorFilter(android.graphics.Color.parseColor(if (isYouTube) "#F26A1B" else "#475569"))
             layoutParams = LinearLayout.LayoutParams((18f * d).toInt(), (18f * d).toInt()).apply {
                 marginEnd = (6f * d).toInt()
             }
         }
         header.addView(icon)
 
-        val titleText = try {
-            Uri.parse(stroke.text).host ?: stroke.text
-        } catch (_: Exception) {
-            stroke.text
-        }.ifBlank { "Website" }
+        val titleText = if (isYouTube) {
+            "YouTube Video"
+        } else {
+            try {
+                Uri.parse(stroke.text).host ?: stroke.text
+            } catch (_: Exception) {
+                stroke.text
+            }.ifBlank { "Website" }
+        }
 
         val titleView = TextView(context).apply {
             text = titleText
             textSize = 12f
+            setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(android.graphics.Color.parseColor("#1E293B"))
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
@@ -614,12 +643,107 @@ class BoardStageView(context: Context) : FrameLayout(context) {
             settings.builtInZoomControls = true
             settings.displayZoomControls = false
             settings.userAgentString =
-                "Mozilla/5.0 (Linux; Android 13; Tablet) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            webChromeClient = WebChromeClient()
-            webViewClient = WebViewClient()
-            val headers = mapOf("Referer" to "https://www.youtube.com")
-            loadUrl(stroke.text, headers)
+                "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
+
+            val cookieManager = CookieManager.getInstance()
+            cookieManager.setAcceptCookie(true)
+            cookieManager.setAcceptThirdPartyCookies(this, true)
+
+            webChromeClient = object : WebChromeClient() {
+                override fun onReceivedTitle(view: WebView?, title: String?) {
+                    super.onReceivedTitle(view, title)
+                    if (!title.isNullOrBlank() && !title.equals("YouTube", ignoreCase = true) && !title.startsWith("http")) {
+                        titleView.text = title
+                    }
+                }
+            }
+
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                    val uri = request?.url ?: return false
+                    return handleExternal(uri)
+                }
+
+                @Suppress("DEPRECATION")
+                override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                    val uri = url?.let { Uri.parse(it) } ?: return false
+                    return handleExternal(uri)
+                }
+
+                private fun handleExternal(uri: Uri): Boolean {
+                    val urlStr = uri.toString()
+                    if (urlStr.contains("/embed/") || urlStr.contains("googlevideo.com") ||
+                        urlStr.contains("ytimg.com") || urlStr.contains("doubleclick.net") ||
+                        urlStr.startsWith("about:") || urlStr.startsWith("data:")) {
+                        return false
+                    }
+                    return try {
+                        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                        true
+                    } catch (_: Exception) {
+                        false
+                    }
+                }
+            }
+
+            if (isYouTube && videoId != null) {
+                val iframeHtml = """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                    <style>
+                      * { box-sizing: border-box; }
+                      html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; }
+                      iframe { width: 100%; height: 100%; border: none; }
+                    </style>
+                    </head>
+                    <body>
+                    <iframe 
+                      src="https://www.youtube.com/embed/$videoId?autoplay=1&playsinline=1&rel=0&modestbranding=1" 
+                      referrerpolicy="strict-origin-when-cross-origin"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                      allowfullscreen>
+                    </iframe>
+                    </body>
+                    </html>
+                """.trimIndent()
+                loadDataWithBaseURL("https://www.youtube.com", iframeHtml, "text/html", "UTF-8", null)
+            } else {
+                val headers = mapOf("Referer" to "https://www.google.com")
+                loadUrl(stroke.text, headers)
+            }
         }
+
+        val openExtBtn = ImageView(context).apply {
+            setImageResource(android.R.drawable.ic_menu_send)
+            setColorFilter(android.graphics.Color.parseColor("#475569"))
+            val pad = (4f * d).toInt()
+            setPadding(pad, pad, pad, pad)
+            layoutParams = LinearLayout.LayoutParams((24f * d).toInt(), (24f * d).toInt()).apply {
+                marginEnd = (4f * d).toInt()
+            }
+            contentDescription = if (isYouTube) "Open in YouTube" else "Open in browser"
+            setOnClickListener {
+                try {
+                    val targetUrl = if (isYouTube && videoId != null) {
+                        "https://www.youtube.com/watch?v=$videoId"
+                    } else {
+                        stroke.text
+                    }
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                } catch (_: Exception) {
+                    Toast.makeText(context, "Cannot open external app", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        header.addView(openExtBtn)
 
         val reloadBtn = ImageView(context).apply {
             setImageResource(android.R.drawable.ic_popup_sync)

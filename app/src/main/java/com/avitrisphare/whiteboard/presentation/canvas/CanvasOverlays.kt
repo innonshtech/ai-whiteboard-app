@@ -1,5 +1,7 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
+import com.avitrisphare.whiteboard.core.theme.BrandOrange
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -83,11 +85,11 @@ import com.avitrisphare.whiteboard.presentation.canvas.utility.UtilityToolKind
 fun boardFieldColors(isDark: Boolean = LocalDarkTheme.current) = OutlinedTextFieldDefaults.colors(
     focusedTextColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827),
     unfocusedTextColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827),
-    focusedBorderColor = Color(0xFF6366F1),
+    focusedBorderColor = BrandOrange,
     unfocusedBorderColor = if (isDark) Color(0xFF475569) else Color(0xFFE5E7EB),
     focusedContainerColor = if (isDark) Color(0xFF0F172A) else Color(0xFFF8FAFC),
     unfocusedContainerColor = if (isDark) Color(0xFF0F172A) else Color(0xFFF8FAFC),
-    cursorColor = Color(0xFF6366F1),
+    cursorColor = BrandOrange,
     focusedPlaceholderColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280),
     unfocusedPlaceholderColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
 )
@@ -170,7 +172,7 @@ fun BoardModal(
                                 Brush.linearGradient(listOf(Color(0xFFEF4444), Color(0xFFF97316)))
                             } else {
                                 Brush.horizontalGradient(
-                                    listOf(Color(0xFF22D3EE), Color(0xFF3B82F6), Color(0xFFA855F7))
+                                    listOf(BrandOrange, Color(0xFFEA580C))
                                 )
                             }
                             Box(

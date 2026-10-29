@@ -128,6 +128,8 @@ val DEFAULT_TOOLBAR_TOOLS: List<String> = listOf(
 val ALL_CUSTOMIZABLE_TOOLS: List<String> = listOf(
     "select",
     "pen",
+    "smart_write",
+    "shape_rec",
     "flowchart",
     "stickers",
     "shapes",
@@ -184,6 +186,7 @@ data class CanvasState(
     val canRedo: Boolean = false,
     val noteId: String = "",
     val noteTitle: String = "Untitled",
+    val noteSubtitle: String = "",
     val isLoading: Boolean = false,
     val canvasBackground: CanvasBackground = CanvasBackground.DOTTED,
     val showGrid: Boolean = false,
@@ -381,10 +384,10 @@ class CanvasViewModel @Inject constructor(
         val interval = prefs.getLong(SMART_WRITE_INTERVAL_KEY, 500L).let { if (it < 400L) 500L else it }
         val savedOrderStr = prefs.getString(TOOLBAR_ORDER_KEY, null)
         val savedOrder = if (!savedOrderStr.isNullOrBlank()) {
-            val list = savedOrderStr.split(",").filter { it.isNotBlank() && it != "color_swap" && it in ALL_CUSTOMIZABLE_TOOLS }
+            val list = savedOrderStr.split(",").filter { it.isNotBlank() && it != "color_swap" && it != "smart_write" && it != "shape_rec" && it in ALL_CUSTOMIZABLE_TOOLS }
             val missing = DEFAULT_TOOLBAR_TOOLS.filter { it !in list }
             val sanitized = list + missing
-            if (savedOrderStr.contains("color_swap")) {
+            if (savedOrderStr.contains("color_swap") || savedOrderStr.contains("smart_write") || savedOrderStr.contains("shape_rec")) {
                 prefs.edit().putString(TOOLBAR_ORDER_KEY, sanitized.joinToString(",")).apply()
             }
             sanitized
@@ -763,7 +766,7 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun setSmartWriteInterval(intervalMs: Long) {
-        val clamped = if (intervalMs < 750L) 500L else if (intervalMs < 1250L) 1000L else 1500L
+        val clamped = intervalMs.coerceIn(300L, 3000L)
         _state.update { it.copy(smartWriteIntervalMs = clamped) }
         smartPrefs().edit().putLong(SMART_WRITE_INTERVAL_KEY, clamped).apply()
     }
@@ -1361,7 +1364,8 @@ class CanvasViewModel @Inject constructor(
                         candidates = texts,
                         lowConfidence = isLowConfidence(guesses.first().score),
                         color = cluster.first().colorValue,
-                        anchor = Offset(bounds.left, bounds.bottom)
+                        anchor = Offset(bounds.left, bounds.bottom),
+                        topAnchor = Offset(bounds.left, bounds.top)
                     )
                 )
             }
@@ -1375,7 +1379,7 @@ class CanvasViewModel @Inject constructor(
         _state.update { s ->
             s.copy(
                 strokes = s.strokes.filterNot { it.id in ids } + typed,
-                selectedStrokeIds = setOf(typed.id),
+                selectedStrokeIds = emptySet(),
                 editingTextId = null,
                 smartWriteOffer = null,
                 smartWriteBusy = false,
@@ -1969,6 +1973,14 @@ class CanvasViewModel @Inject constructor(
 
     private fun openImage(uriString: String): java.io.InputStream? {
         return when {
+            uriString.startsWith("data:image/") -> {
+                val comma = uriString.indexOf(',')
+                if (comma >= 0) {
+                    val base64 = uriString.substring(comma + 1)
+                    val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                    java.io.ByteArrayInputStream(bytes)
+                } else null
+            }
             uriString.startsWith("/") -> File(uriString).inputStream()
             uriString.startsWith("http://") || uriString.startsWith("https://") -> {
                 val connection = java.net.URL(uriString).openConnection()
@@ -3620,6 +3632,7 @@ class CanvasViewModel @Inject constructor(
             _state.update {
                 it.copy(
                     noteTitle = note?.title ?: "Untitled",
+                    noteSubtitle = note?.subtitle ?: "",
                     canvasBackground = background,
                     isDarkCanvas = dark,
                     showGrid = loaded.showGrid,
@@ -4137,7 +4150,27 @@ class CanvasViewModel @Inject constructor(
         scheduleSave()
     }
 
+    fun updateTitleAndSubtitle(newTitle: String, newSubtitle: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val noteId = _state.value.noteId
+            if (noteId.isNotEmpty()) {
+                val note = noteRepository.getNoteById(noteId)
+                if (note != null) {
+                    val updatedNote = note.copy(title = newTitle, subtitle = newSubtitle, updatedAt = System.currentTimeMillis())
+                    noteRepository.updateNote(updatedNote)
+                    withContext(Dispatchers.Main) {
+                        _state.update { it.copy(noteTitle = newTitle, noteSubtitle = newSubtitle) }
+                    }
+                }
+            }
+        }
+    }
+
     fun updateTitle(newTitle: String) {
+        updateTitleAndSubtitle(newTitle, _state.value.noteSubtitle)
+    }
+
+    private fun legacyUpdateTitle(newTitle: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val noteId = _state.value.noteId
             if (noteId.isNotEmpty()) {

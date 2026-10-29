@@ -166,8 +166,8 @@ fun resizeShape(stroke: Stroke, hit: ShapeHandleHit, point: Offset): Stroke {
         else -> {
             if (stroke.points.size < 2) return stroke
             val box = normalizedBox(stroke.points.first(), stroke.points.last())
-            val minW = if (stroke.strokeType == StrokeType.WEB_EMBED) 260f else 12f
-            val minH = if (stroke.strokeType == StrokeType.WEB_EMBED) 180f else 12f
+            val minW = if (stroke.strokeType == StrokeType.WEB_EMBED || stroke.strokeType == StrokeType.VIDEO) 200f else 12f
+            val minH = if (stroke.strokeType == StrokeType.WEB_EMBED || stroke.strokeType == StrokeType.VIDEO) 120f else 12f
             val locked = resizeBox(box, hit.kind, point, stroke.strokeType in lockedAspect, minW, minH)
             listOf(Offset(locked.left, locked.top), Offset(locked.right, locked.bottom))
         }

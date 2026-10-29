@@ -447,6 +447,21 @@ class AvitriSphareActivity : ComponentActivity() {
                                     onOpenHomework = { navController.navigate("homework") },
                                     onOpenDoubts = { navController.navigate("doubts") },
                                     onOpenTestsGrading = { navController.navigate("tests_grading") },
+                                    onUpdateBoard = { noteId, newTitle, newSubtitle, newTag ->
+                                        scope.launch(Dispatchers.IO) {
+                                            val existing = noteRepository.getNoteById(noteId)
+                                            if (existing != null) {
+                                                val updatedTags = if (newTag.isNotBlank()) listOf(newTag) else existing.tags
+                                                val updated = existing.copy(
+                                                    title = newTitle.ifBlank { "Untitled" },
+                                                    subtitle = newSubtitle,
+                                                    tags = updatedTags,
+                                                    updatedAt = System.currentTimeMillis()
+                                                )
+                                                noteRepository.updateNote(updated)
+                                            }
+                                        }
+                                    },
                                     onLogout = {
                                         val token = signedIn.accessToken
                                         scope.launch { panelApi.logout(token) }

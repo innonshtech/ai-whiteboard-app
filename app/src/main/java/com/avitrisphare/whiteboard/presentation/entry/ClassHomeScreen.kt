@@ -30,6 +30,14 @@ import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.FactCheck
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.School
@@ -88,6 +96,7 @@ fun ClassHomeScreen(
     onOpenHomework: () -> Unit = {},
     onOpenDoubts: () -> Unit = {},
     onOpenTestsGrading: () -> Unit = {},
+    onUpdateBoard: (noteId: String, newTitle: String, newSubtitle: String, newTag: String) -> Unit = { _, _, _, _ -> },
     currentLanguage: AppLanguage = AppLanguage.ENGLISH,
     onLanguageChange: (AppLanguage) -> Unit = {}
 ) {
@@ -99,6 +108,8 @@ fun ClassHomeScreen(
     val snackbar = remember { SnackbarHostState() }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
+    var boardSearchQuery by remember { mutableStateOf("") }
+    var editingBoard by remember { mutableStateOf<Note?>(null) }
 
     Box(
         modifier = Modifier
@@ -138,7 +149,7 @@ fun ClassHomeScreen(
                 Icon(
                     imageVector = Icons.Default.School,
                     contentDescription = null,
-                    tint = Color(0xFF2563EB),
+                    tint = Color(0xFFF26A1B),
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(Modifier.width(8.dp))
@@ -285,13 +296,13 @@ fun ClassHomeScreen(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFFEFF6FF))
-                            .border(1.dp, Color(0xFFDBEAFE), RoundedCornerShape(6.dp))
+                            .background(Color(0xFFFFF7ED))
+                            .border(1.dp, Color(0xFFFFEDD5), RoundedCornerShape(6.dp))
                             .padding(horizontal = 10.dp, vertical = 3.dp)
                     ) {
                         Text(
                             text = subject.ifBlank { "Class" },
-                            color = Color(0xFF2563EB),
+                            color = Color(0xFFEA580C),
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 12.sp
                         )
@@ -490,14 +501,14 @@ fun ClassHomeScreen(
                     modifier = Modifier
                         .size(46.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFEEF2FF))
-                        .border(1.dp, Color(0xFFE0E7FF), RoundedCornerShape(12.dp)),
+                        .background(Color(0xFFFFF7ED))
+                        .border(1.dp, Color(0xFFFFEDD5), RoundedCornerShape(12.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.BarChart,
                         contentDescription = null,
-                        tint = Color(0xFF4F46E5),
+                        tint = Color(0xFFEA580C),
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -529,6 +540,18 @@ fun ClassHomeScreen(
             // ==========================================
             // 6. PAST WHITEBOARDS / RECENT LESSONS
             // ==========================================
+            val filteredBoards = remember(boards, boardSearchQuery) {
+                if (boardSearchQuery.isBlank()) {
+                    boards
+                } else {
+                    boards.filter {
+                        it.title.contains(boardSearchQuery, ignoreCase = true) ||
+                        it.subtitle.contains(boardSearchQuery, ignoreCase = true) ||
+                        it.tags.any { tag -> tag.contains(boardSearchQuery, ignoreCase = true) }
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -543,21 +566,21 @@ fun ClassHomeScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "· 42 saved",
+                    text = "· ${boards.size} saved",
                     color = Color(0xFF64748B),
                     fontSize = 13.sp
                 )
 
-                // Search Bar
+                // Search Bar with actual interactive input
                 Row(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 20.dp)
-                        .height(40.dp)
+                        .padding(horizontal = 16.dp)
+                        .height(42.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color.White)
                         .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 14.dp),
+                        .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -567,11 +590,37 @@ fun ClassHomeScreen(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "Search boards by title, class, subject or date...",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 12.sp
+                    BasicTextField(
+                        value = boardSearchQuery,
+                        onValueChange = { boardSearchQuery = it },
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            color = Color(0xFF0F172A),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Normal
+                        ),
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { innerTextField ->
+                            if (boardSearchQuery.isEmpty()) {
+                                Text(
+                                    text = "Search boards by title, class, subject...",
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 12.sp
+                                )
+                            }
+                            innerTextField()
+                        }
                     )
+                    if (boardSearchQuery.isNotEmpty()) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear",
+                            tint = Color(0xFF94A3B8),
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clickable { boardSearchQuery = "" }
+                        )
+                    }
                 }
 
                 // View All Link
@@ -612,51 +661,45 @@ fun ClassHomeScreen(
                 }
             }
 
-            // Cards row (4 cards matching screenshot)
+            // Cards row (Dynamic boards with Edit option, no hardcoded classes!)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                BoardCard(
-                    title = "Grade 10-A · Physics",
-                    subtitle = "Light & Reflection",
-                    tag = "Physics",
-                    tagColor = Color(0xFF10B981),
-                    pageCount = 12,
-                    timeAgo = "Today",
-                    onClick = { if (boards.isNotEmpty()) onOpenBoard(boards[0].id) else onOpenWhiteboard() },
-                    modifier = Modifier.weight(1f)
-                )
-                BoardCard(
-                    title = "Grade 9-B · Maths",
-                    subtitle = "Quadratic equations",
-                    tag = "Maths",
-                    tagColor = Color(0xFF3B82F6),
-                    pageCount = 8,
-                    timeAgo = "Yesterday",
-                    onClick = { if (boards.size > 1) onOpenBoard(boards[1].id) else onOpenWhiteboard() },
-                    modifier = Modifier.weight(1f)
-                )
-                BoardCard(
-                    title = "Grade 11-C · Physics",
-                    subtitle = "Projectile motion",
-                    tag = "Physics",
-                    tagColor = Color(0xFF10B981),
-                    pageCount = 15,
-                    timeAgo = "2 days ago",
-                    onClick = { if (boards.size > 2) onOpenBoard(boards[2].id) else onOpenWhiteboard() },
-                    modifier = Modifier.weight(1f)
-                )
-                BoardCard(
-                    title = "Grade 9-A · Science",
-                    subtitle = "Periodic table",
-                    tag = "Science",
-                    tagColor = Color(0xFF8B5CF6),
-                    pageCount = 4,
-                    timeAgo = "Last week",
-                    onClick = { if (boards.size > 3) onOpenBoard(boards[3].id) else onOpenWhiteboard() },
-                    modifier = Modifier.weight(1f)
-                )
+                if (filteredBoards.isEmpty()) {
+                    NewBoardCard(
+                        onClick = onNewBoard,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.weight(1f))
+                } else {
+                    val displayBoards = filteredBoards.take(4)
+                    displayBoards.forEach { note ->
+                        val tag = note.tags.firstOrNull() ?: subject.ifBlank { "Board" }
+                        BoardCard(
+                            title = note.title.ifBlank { "Untitled Board" },
+                            subtitle = note.subtitle.ifBlank { "Interactive whiteboard" },
+                            tag = tag,
+                            tagColor = boardTagColor(tag),
+                            pageCount = 1,
+                            timeAgo = boardAge(note.updatedAt),
+                            onClick = { onOpenBoard(note.id) },
+                            onEdit = { editingBoard = note },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (displayBoards.size < 4) {
+                        NewBoardCard(
+                            onClick = onNewBoard,
+                            modifier = Modifier.weight(1f)
+                        )
+                        for (i in (displayBoards.size + 1) until 4) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
             }
 Spacer(Modifier.height(12.dp))
         }
@@ -676,6 +719,111 @@ Spacer(Modifier.height(12.dp))
                     showLanguageDialog = false
                 },
                 onDismiss = { showLanguageDialog = false }
+            )
+        }
+
+        if (editingBoard != null) {
+            val b = editingBoard!!
+            var titleDraft by remember(b.id) { mutableStateOf(b.title) }
+            var subtitleDraft by remember(b.id) { mutableStateOf(b.subtitle) }
+            var tagDraft by remember(b.id) { mutableStateOf(b.tags.firstOrNull() ?: subject.ifBlank { "Whiteboard" }) }
+
+            AlertDialog(
+                onDismissRequest = { editingBoard = null },
+                title = {
+                    Text(
+                        text = "Edit Board Details",
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A),
+                        fontSize = 18.sp
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Column {
+                            Text(
+                                text = "Board Title (e.g., Grade 11-C · Physics)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF475569)
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = titleDraft,
+                                onValueChange = { titleDraft = it },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFFF26A1B),
+                                    cursorColor = Color(0xFFF26A1B)
+                                ),
+                                placeholder = { Text("e.g. Grade 11-C · Physics", fontSize = 13.sp) }
+                            )
+                        }
+
+                        Column {
+                            Text(
+                                text = "Subtitle / Topic (e.g., Projectile motion)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF475569)
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = subtitleDraft,
+                                onValueChange = { subtitleDraft = it },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFFF26A1B),
+                                    cursorColor = Color(0xFFF26A1B)
+                                ),
+                                placeholder = { Text("e.g. Projectile motion", fontSize = 13.sp) }
+                            )
+                        }
+
+                        Column {
+                            Text(
+                                text = "Subject / Tag",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF475569)
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = tagDraft,
+                                onValueChange = { tagDraft = it },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFFF26A1B),
+                                    cursorColor = Color(0xFFF26A1B)
+                                ),
+                                placeholder = { Text("e.g. Physics", fontSize = 13.sp) }
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val finalTitle = titleDraft.ifBlank { "Untitled Board" }
+                            onUpdateBoard(b.id, finalTitle, subtitleDraft, tagDraft)
+                            editingBoard = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF26A1B)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Save Changes", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { editingBoard = null }) {
+                        Text("Cancel", color = Color(0xFF64748B))
+                    }
+                },
+                containerColor = Color.White,
+                shape = RoundedCornerShape(20.dp)
             )
         }
 
@@ -825,7 +973,7 @@ private fun BoardRow(note: Note, onClick: () -> Unit) {
             Icon(
                 imageVector = Icons.Default.Draw,
                 contentDescription = null,
-                tint = Color(0xFF2563EB),
+                tint = Color(0xFFEA580C),
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -932,6 +1080,63 @@ internal fun boardAge(updatedAt: Long, now: Long = System.currentTimeMillis()): 
     }
 }
 
+private fun boardTagColor(tag: String): Color {
+    val lower = tag.lowercase()
+    return when {
+        lower.contains("physics") -> Color(0xFF10B981)
+        lower.contains("math") -> Color(0xFFF26A1B)
+        lower.contains("science") -> Color(0xFF8B5CF6)
+        lower.contains("chem") -> Color(0xFFEC4899)
+        lower.contains("bio") -> Color(0xFF059669)
+        lower.contains("hist") -> Color(0xFFD97706)
+        else -> Color(0xFFF26A1B)
+    }
+}
+
+@Composable
+private fun NewBoardCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFFFFF7ED))
+            .border(1.5.dp, Color(0xFFFFEDD5), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(14.dp)
+            .height(200.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFF26A1B)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "New Board",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "New Board",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = Color(0xFF0F172A)
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = "Start interactive board",
+                fontSize = 11.sp,
+                color = Color(0xFF64748B)
+            )
+        }
+    }
+}
+
 @Composable
 private fun BoardCard(
     title: String,
@@ -941,6 +1146,7 @@ private fun BoardCard(
     pageCount: Int,
     timeAgo: String,
     onClick: () -> Unit,
+    onEdit: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -979,6 +1185,29 @@ private fun BoardCard(
                 ) {
                     Text(tag, color = tagColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
+
+                // Edit pencil button on preview
+                if (onEdit != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(6.dp)
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.90f))
+                            .border(1.dp, Color(0xFFE2E8F0), CircleShape)
+                            .clickable { onEdit() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit board",
+                            tint = Color(0xFFF26A1B),
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+
                 // Sketch illustration lines/circle
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val w = size.width
@@ -1008,14 +1237,31 @@ private fun BoardCard(
 
             Spacer(Modifier.height(12.dp))
 
-            Text(
-                text = title,
-                color = Color(0xFF0F172A),
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    color = Color(0xFF0F172A),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                if (onEdit != null) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit board",
+                        tint = Color(0xFFF26A1B),
+                        modifier = Modifier
+                            .size(15.dp)
+                            .clickable { onEdit() }
+                    )
+                }
+            }
+
             Spacer(Modifier.height(2.dp))
             Text(
                 text = subtitle,

@@ -1,5 +1,7 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
+import com.avitrisphare.whiteboard.core.theme.BrandOrange
+
 import android.widget.Toast
 import com.avitrisphare.whiteboard.domain.model.isPlacedMedia
 import androidx.compose.animation.AnimatedVisibility
@@ -187,7 +189,7 @@ import com.avitrisphare.whiteboard.domain.model.Stroke
 import com.avitrisphare.whiteboard.domain.model.StrokeType
 
 private val KNOWN_TOOLBAR_TOOLS = setOf(
-    "select", "pen", "flowchart", "stickers", "shapes", "eraser",
+    "select", "pen", "smart_write", "shape_rec", "flowchart", "stickers", "shapes", "eraser",
     "laser", "geometry", "tools", "text", "image", "clear", "background",
     "undo", "redo", "save"
 )
@@ -228,7 +230,7 @@ private fun Modifier.figmaDropShadow(
     cornerRadius: androidx.compose.ui.unit.Dp = 18.dp,
     offsetY: androidx.compose.ui.unit.Dp = 8.dp,
     blurRadius: androidx.compose.ui.unit.Dp = 20.dp,
-    shadowColor: Color = Color(0x332563EB)
+    shadowColor: Color = Color(0x26F26A1B)
 ): Modifier = this.drawBehind {
     val offsetYPx = offsetY.toPx()
     val blurPx = blurRadius.toPx()
@@ -428,7 +430,611 @@ fun AvitriSphareWhiteboardChrome(
             )
         }
 
+        // Top Left Board Header: Back button + Title & Subtitle + Edit Button
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = if (state.isDarkTheme) Color(0xF01E293B) else Color.White.copy(alpha = 0.95f),
+            border = BorderStroke(1.dp, if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFE2E8F0)),
+            shadowElevation = 6.dp,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(top = 4.dp, start = 4.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Back Button (Exits to Class Home Screen)
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
+                        .clickable(onClick = onExit),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF0F172A),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
 
+                Spacer(Modifier.width(10.dp))
+
+                // Title & Subtitle column (Clickable to edit!)
+                Column(
+                    modifier = Modifier
+                        .clickable(onClick = onRename)
+                        .padding(horizontal = 4.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = state.noteTitle.ifBlank { "Whiteboard" },
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF0F172A),
+                            maxLines = 1
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit board title",
+                            tint = BrandOrange,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                    if (state.noteSubtitle.isNotBlank()) {
+                        Text(
+                            text = state.noteSubtitle,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+
+
+
+
+        // Floating Selection Toolbar Layer (Anchored above dock, never pushes dock down!)
+        AnimatedVisibility(
+            visible = state.selectedStrokeIds.isNotEmpty() && !selectionToolbarDismissed,
+            enter = fadeIn(tween(200)) + slideInVertically(tween(220)) { it / 2 },
+            exit = fadeOut(tween(160)) + slideOutVertically(tween(180)) { it / 2 },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = if (isNavbarVisible) 76.dp else 16.dp)
+        ) {
+            val selectedStrokes = remember(state.strokes, state.selectedStrokeIds) {
+                state.strokes.filter { it.id in state.selectedStrokeIds }
+            }
+            val isDiagram = remember(selectedStrokes) {
+                selectedStrokes.any { isMindMapNode(it) || it.strokeType == StrokeType.CONNECTOR }
+            }
+            if (!isDiagram) {
+                val hasImage = remember(selectedStrokes) {
+                    selectedStrokes.any { it.strokeType == StrokeType.IMAGE }
+                }
+                val hasVideo = remember(selectedStrokes) {
+                    selectedStrokes.any { it.strokeType == StrokeType.VIDEO || it.strokeType == StrokeType.WEB_EMBED }
+                }
+
+                if (hasImage || hasVideo) {
+                    Surface(
+                        shape = RoundedCornerShape(22.dp),
+                        color = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
+                        border = BorderStroke(1.dp, if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFE2E8F0)),
+                        shadowElevation = 6.dp,
+                        modifier = Modifier
+                            .offset { IntOffset(selectionToolbarOffset.x.roundToInt(), selectionToolbarOffset.y.roundToInt()) }
+                            .wrapContentWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                                .pointerInput(Unit) {
+                                    detectDragGestures { change, dragAmount ->
+                                        change.consume()
+                                        selectionToolbarOffset = Offset(
+                                            (selectionToolbarOffset.x + dragAmount.x).coerceIn(-1800f, 1800f),
+                                            (selectionToolbarOffset.y + dragAmount.y).coerceIn(-1800f, 300f)
+                                        )
+                                    }
+                                },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DragHandle,
+                                contentDescription = "Drag toolbar",
+                                tint = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                modifier = Modifier.size(16.dp)
+                            )
+
+                            if (selectedStrokes.size > 1) {
+                                Text(
+                                    "${selectedStrokes.size} selected",
+                                    color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+
+                            if (hasImage) {
+                                Text(
+                                    text = if (state.extractTextBusy) "Extracting…" else "OCR",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(BrandOrange)
+                                        .clickable(enabled = !state.extractTextBusy) { viewModel.extractTextFromSelectedImage() }
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            } else if (hasVideo) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFFFEF2F2))
+                                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.OndemandVideo,
+                                        contentDescription = null,
+                                        tint = Color(0xFFEF4444),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(Modifier.width(3.dp))
+                                    Text(
+                                        text = "Video",
+                                        color = Color(0xFFEF4444),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
+                                    .clickable { onCopySelection() }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy",
+                                    tint = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF475569),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = "Copy",
+                                    color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+
+                            if (state.hasStrokeClipboard) {
+                                Text(
+                                    text = "Paste",
+                                    color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
+                                        .clickable { onPasteClipboard() }
+                                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                                )
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFFEE2E2))
+                                    .clickable { viewModel.deleteSelectedStrokes() }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Remove",
+                                    tint = Color(0xFFDC2626),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = "Remove",
+                                    color = Color(0xFFDC2626),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .clip(CircleShape)
+                                    .clickable { onDismissSelectionToolbar(true) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Close toolbar",
+                                    tint = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF64748B),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    val hasFillableShape = remember(selectedStrokes) {
+                        selectedStrokes.any { isFillableShape(it.strokeType) }
+                    }
+                    val activeShape = selectedStrokes.firstOrNull { isFillableShape(it.strokeType) }
+                    val currentBorderColor = activeShape?.colorValue ?: state.selectedColor
+                    val currentFillColor = activeShape?.fillColor ?: 0
+                    val canConvert = remember(selectedStrokes) {
+                        selectedStrokes.any { isConvertibleEquationInk(it) }
+                    }
+                    val selectedEquation = remember(selectedStrokes) {
+                        selectedStrokes.singleOrNull { it.strokeType == StrokeType.EQUATION }
+                    }
+                    val editableStroke = remember(selectedStrokes) {
+                        selectedStrokes.singleOrNull {
+                            it.strokeType == StrokeType.TEXT ||
+                            it.stickerKind.startsWith("flow:") ||
+                            it.strokeType in setOf(
+                                StrokeType.RECTANGLE,
+                                StrokeType.DIAMOND,
+                                StrokeType.ELLIPSE,
+                                StrokeType.ROUND_RECT,
+                                StrokeType.CIRCLE,
+                                StrokeType.SQUARE
+                            )
+                        }
+                    }
+                    val canEdit = editableStroke != null
+
+                    Surface(
+                        shape = RoundedCornerShape(22.dp),
+                        color = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
+                        border = BorderStroke(1.dp, if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFE2E8F0)),
+                        shadowElevation = 6.dp,
+                        modifier = Modifier
+                            .offset { IntOffset(selectionToolbarOffset.x.roundToInt(), selectionToolbarOffset.y.roundToInt()) }
+                            .wrapContentWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                                .pointerInput(Unit) {
+                                    detectDragGestures { change, dragAmount ->
+                                        change.consume()
+                                        selectionToolbarOffset = Offset(
+                                            (selectionToolbarOffset.x + dragAmount.x).coerceIn(-1800f, 1800f),
+                                            (selectionToolbarOffset.y + dragAmount.y).coerceIn(-1800f, 300f)
+                                        )
+                                    }
+                                },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DragHandle,
+                                contentDescription = "Drag toolbar",
+                                tint = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                modifier = Modifier.size(16.dp)
+                            )
+
+                            if (selectedStrokes.size > 1) {
+                                Text(
+                                    "${selectedStrokes.size}",
+                                    color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+
+                            if (hasFillableShape) {
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (state.isDarkTheme) Color(0xFF0F172A) else Color(0xFFF1F5F9))
+                                        .padding(2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Border Tab
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(if (selectionColorTarget == "border") BrandOrange else Color.Transparent)
+                                            .clickable { selectionColorTarget = "border" }
+                                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .border(1.5.dp, Color(currentBorderColor), CircleShape)
+                                        )
+                                        Spacer(Modifier.width(3.dp))
+                                        Text(
+                                            "Border",
+                                            color = if (selectionColorTarget == "border") Color.White else (if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF475569)),
+                                            fontSize = 10.5.sp,
+                                            fontWeight = if (selectionColorTarget == "border") FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    }
+
+                                    // Fill Tab
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(if (selectionColorTarget == "fill") BrandOrange else Color.Transparent)
+                                            .clickable { selectionColorTarget = "fill" }
+                                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (currentFillColor == 0) {
+                                            Text("⊘", color = if (selectionColorTarget == "fill") Color.White else (if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B)), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        } else {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(8.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(currentFillColor))
+                                            )
+                                        }
+                                        Spacer(Modifier.width(3.dp))
+                                        Text(
+                                            "Fill",
+                                            color = if (selectionColorTarget == "fill") Color.White else (if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF475569)),
+                                            fontSize = 10.5.sp,
+                                            fontWeight = if (selectionColorTarget == "fill") FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (!hasFillableShape || selectionColorTarget == "border") {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (state.isDarkTheme) Color(0xFF0F172A) else Color(0xFFF1F5F9))
+                                        .padding(horizontal = 3.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        "−",
+                                        color = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF334155),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .clickable {
+                                                val cur = activeShape?.strokeWidth ?: state.strokeWidth
+                                                viewModel.setStrokeWidth((cur - 2f).coerceAtLeast(1f))
+                                            }
+                                            .padding(horizontal = 3.dp)
+                                    )
+                                    Text(
+                                        "${(activeShape?.strokeWidth ?: state.strokeWidth).toInt()}px",
+                                        color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF1E293B),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 2.dp)
+                                    )
+                                    Text(
+                                        "+",
+                                        color = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF334155),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .clickable {
+                                                val cur = activeShape?.strokeWidth ?: state.strokeWidth
+                                                viewModel.setStrokeWidth((cur + 2f).coerceAtMost(48f))
+                                            }
+                                            .padding(horizontal = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // Color swatches (16.dp dots)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                if (hasFillableShape && selectionColorTarget == "fill") {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFF1F5F9))
+                                            .border(
+                                                if (currentFillColor == 0) 2.dp else 1.dp,
+                                                if (currentFillColor == 0) BrandOrange else Color(0xFFCBD5E1),
+                                                CircleShape
+                                            )
+                                            .clickable { viewModel.setSelectionFillColor(0) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("⊘", color = Color(0xFF64748B), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    val fillPalette = listOf(
+                                        0xFFFFFFFF.toInt(),
+                                        0xFF1B1F2A.toInt(),
+                                        0xFFFF6B6B.toInt(),
+                                        0xFF3ECF8E.toInt(),
+                                        0xFF4ECDC4.toInt(),
+                                        0xFFFFE66D.toInt(),
+                                        0xFF60A5FA.toInt(),
+                                        0xFFAA96DA.toInt()
+                                    )
+                                    fillPalette.forEach { color ->
+                                        val isSelected = currentFillColor == color
+                                        Box(
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(color))
+                                                .then(
+                                                    if (isSelected) Modifier.border(2.dp, BrandOrange, CircleShape)
+                                                    else Modifier.border(0.8.dp, Color(0x33000000), CircleShape)
+                                                )
+                                                .clickable { viewModel.setSelectionFillColor(color) }
+                                        )
+                                    }
+                                } else {
+                                    val borderPalette = PEN_COLORS.take(7)
+                                    borderPalette.forEach { color ->
+                                        val isSelected = (if (hasFillableShape) currentBorderColor else state.selectedColor) == color
+                                        Box(
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(color))
+                                                .then(
+                                                    if (isSelected) Modifier.border(2.dp, BrandOrange, CircleShape)
+                                                    else Modifier.border(0.8.dp, Color(0x33000000), CircleShape)
+                                                )
+                                                .clickable {
+                                                    if (hasFillableShape) viewModel.setSelectionBorderColor(color)
+                                                    else viewModel.recolorSelected(color)
+                                                }
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (canEdit && editableStroke != null && state.editingTextId == null) {
+                                Text(
+                                    text = if (editableStroke.text.isNotEmpty()) "Edit text" else "Type text",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(BrandOrange)
+                                        .clickable {
+                                            if (editableStroke.strokeType == StrokeType.TEXT) {
+                                                viewModel.beginTextEdit()
+                                            } else {
+                                                onEditNodeText(editableStroke.id, editableStroke.text)
+                                            }
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+
+                            if (canConvert) {
+                                Text(
+                                    text = if (state.smartWriteBusy) "Reading…" else "Text",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(BrandOrange)
+                                        .clickable(enabled = !state.smartWriteBusy) { viewModel.convertSelectionToText() }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
+                                    .clickable { onCopySelection() }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy",
+                                    tint = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF475569),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = "Copy",
+                                    color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+
+                            if (state.hasStrokeClipboard) {
+                                Text(
+                                    text = "Paste",
+                                    color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
+                                        .clickable { onPasteClipboard() }
+                                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                                )
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFFEE2E2))
+                                    .clickable { viewModel.deleteSelectedStrokes() }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Remove",
+                                    tint = Color(0xFFDC2626),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = "Remove",
+                                    color = Color(0xFFDC2626),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .clip(CircleShape)
+                                    .clickable { onDismissSelectionToolbar(true) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Close toolbar",
+                                    tint = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF64748B),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         AnimatedVisibility(
             visible = isNavbarVisible,
@@ -442,549 +1048,6 @@ fun AvitriSphareWhiteboardChrome(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-            AnimatedVisibility(
-                visible = state.selectedStrokeIds.isNotEmpty() && !selectionToolbarDismissed,
-                enter = fadeIn(tween(200)) + slideInVertically(tween(220)) { it / 2 },
-                exit = fadeOut(tween(160)) + slideOutVertically(tween(180)) { it / 2 }
-            ) {
-                val selectedStrokes = remember(state.strokes, state.selectedStrokeIds) {
-                    state.strokes.filter { it.id in state.selectedStrokeIds }
-                }
-                val isDiagram = remember(selectedStrokes) {
-                    selectedStrokes.any { isMindMapNode(it) || it.strokeType == StrokeType.CONNECTOR }
-                }
-                if (!isDiagram) {
-                    val hasImage = remember(selectedStrokes) {
-                        selectedStrokes.any { it.strokeType == StrokeType.IMAGE }
-                    }
-
-                    if (hasImage) {
-                        Surface(
-                            shape = RoundedCornerShape(22.dp),
-                            color = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
-                            border = BorderStroke(1.dp, if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFE2E8F0)),
-                            shadowElevation = 6.dp,
-                            modifier = Modifier
-                                .padding(bottom = 10.dp)
-                                .offset { IntOffset(selectionToolbarOffset.x.roundToInt(), selectionToolbarOffset.y.roundToInt()) }
-                                .wrapContentWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(horizontal = 8.dp, vertical = 5.dp)
-                                    .pointerInput(Unit) {
-                                        detectDragGestures { change, dragAmount ->
-                                            change.consume()
-                                            selectionToolbarOffset = Offset(
-                                                (selectionToolbarOffset.x + dragAmount.x).coerceIn(-1800f, 1800f),
-                                                (selectionToolbarOffset.y + dragAmount.y).coerceIn(-1800f, 300f)
-                                            )
-                                        }
-                                    },
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.DragHandle,
-                                    contentDescription = "Drag toolbar",
-                                    tint = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
-                                    modifier = Modifier.size(16.dp)
-                                )
-
-                                if (selectedStrokes.size > 1) {
-                                    Text(
-                                        "${selectedStrokes.size} selected",
-                                        color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
-
-                                Text(
-                                    text = if (state.extractTextBusy) "Extracting…" else "OCR",
-                                    color = Color.White,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFF2563EB))
-                                        .clickable(enabled = !state.extractTextBusy) { viewModel.extractTextFromSelectedImage() }
-                                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                                )
-
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
-                                        .clickable { onCopySelection() }
-                                        .padding(horizontal = 8.dp, vertical = 5.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "Copy",
-                                        tint = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF475569),
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(Modifier.width(3.dp))
-                                    Text(
-                                        text = "Copy",
-                                        color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
-
-                                if (state.hasStrokeClipboard) {
-                                    Text(
-                                        text = "Paste",
-                                        color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
-                                            .clickable { onPasteClipboard() }
-                                            .padding(horizontal = 8.dp, vertical = 5.dp)
-                                    )
-                                }
-
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFFFEE2E2))
-                                        .clickable { viewModel.deleteSelectedStrokes() }
-                                        .padding(horizontal = 8.dp, vertical = 5.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Remove",
-                                        tint = Color(0xFFDC2626),
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(Modifier.width(3.dp))
-                                    Text(
-                                        text = "Remove",
-                                        color = Color(0xFFDC2626),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .clip(CircleShape)
-                                        .clickable { onDismissSelectionToolbar(true) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = "Close toolbar",
-                                        tint = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF64748B),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        val hasFillableShape = remember(selectedStrokes) {
-                            selectedStrokes.any { isFillableShape(it.strokeType) }
-                        }
-                        val activeShape = selectedStrokes.firstOrNull { isFillableShape(it.strokeType) }
-                        val currentBorderColor = activeShape?.colorValue ?: state.selectedColor
-                        val currentFillColor = activeShape?.fillColor ?: 0
-
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
-                            border = BorderStroke(1.dp, if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFE2E8F0)),
-                            shadowElevation = 8.dp,
-                            modifier = Modifier
-                                .padding(bottom = 10.dp)
-                                .offset { IntOffset(selectionToolbarOffset.x.roundToInt(), selectionToolbarOffset.y.roundToInt()) }
-                                .widthIn(max = 440.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                            ) {
-                                // Top row: drag handle, status, mode switch, stroke width, actions
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .pointerInput(Unit) {
-                                            detectDragGestures { change, dragAmount ->
-                                                change.consume()
-                                                selectionToolbarOffset = Offset(
-                                                    (selectionToolbarOffset.x + dragAmount.x).coerceIn(-1800f, 1800f),
-                                                    (selectionToolbarOffset.y + dragAmount.y).coerceIn(-1800f, 300f)
-                                                )
-                                            }
-                                        },
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.DragHandle,
-                                        contentDescription = "Drag toolbar",
-                                        tint = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .padding(end = 4.dp)
-                                    )
-                                    Text(
-                                        "${state.selectedStrokeIds.size} selected",
-                                        color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-
-                                    if (hasFillableShape) {
-                                        Row(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(if (state.isDarkTheme) Color(0xFF0F172A) else Color(0xFFF1F5F9))
-                                                .padding(2.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            // Border Tab
-                                            Row(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(if (selectionColorTarget == "border") Color(0xFF3B82F6) else Color.Transparent)
-                                                    .clickable { selectionColorTarget = "border" }
-                                                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(9.dp)
-                                                        .clip(CircleShape)
-                                                        .border(1.5.dp, Color(currentBorderColor), CircleShape)
-                                                )
-                                                Spacer(Modifier.width(3.dp))
-                                                Text(
-                                                    "Border",
-                                                    color = if (selectionColorTarget == "border") Color.White else (if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF475569)),
-                                                    fontSize = 11.sp,
-                                                    fontWeight = if (selectionColorTarget == "border") FontWeight.Bold else FontWeight.Medium
-                                                )
-                                            }
-
-                                            // Fill Tab
-                                            Row(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(if (selectionColorTarget == "fill") Color(0xFF3B82F6) else Color.Transparent)
-                                                    .clickable { selectionColorTarget = "fill" }
-                                                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                if (currentFillColor == 0) {
-                                                    Text("⊘", color = if (selectionColorTarget == "fill") Color.White else (if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B)), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                                } else {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(9.dp)
-                                                            .clip(CircleShape)
-                                                            .background(Color(currentFillColor))
-                                                    )
-                                                }
-                                                Spacer(Modifier.width(3.dp))
-                                                Text(
-                                                    "Fill",
-                                                    color = if (selectionColorTarget == "fill") Color.White else (if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF475569)),
-                                                    fontSize = 11.sp,
-                                                    fontWeight = if (selectionColorTarget == "fill") FontWeight.Bold else FontWeight.Medium
-                                                )
-                                            }
-                                        }
-
-                                        if (selectionColorTarget == "border") {
-                                            Spacer(Modifier.width(6.dp))
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(if (state.isDarkTheme) Color(0xFF0F172A) else Color(0xFFF1F5F9))
-                                                    .padding(horizontal = 4.dp, vertical = 2.dp)
-                                            ) {
-                                                Text(
-                                                    "−",
-                                                    color = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF334155),
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    modifier = Modifier
-                                                        .clip(CircleShape)
-                                                        .clickable {
-                                                            val cur = activeShape?.strokeWidth ?: state.strokeWidth
-                                                            viewModel.setStrokeWidth((cur - 2f).coerceAtLeast(1f))
-                                                        }
-                                                        .padding(horizontal = 3.dp)
-                                                )
-                                                Text(
-                                                    "${(activeShape?.strokeWidth ?: state.strokeWidth).toInt()}px",
-                                                    color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF1E293B),
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    modifier = Modifier.padding(horizontal = 2.dp)
-                                                )
-                                                Text(
-                                                    "+",
-                                                    color = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF334155),
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    modifier = Modifier
-                                                        .clip(CircleShape)
-                                                        .clickable {
-                                                            val cur = activeShape?.strokeWidth ?: state.strokeWidth
-                                                            viewModel.setStrokeWidth((cur + 2f).coerceAtMost(48f))
-                                                        }
-                                                        .padding(horizontal = 3.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Spacer(Modifier.weight(1f))
-
-                                    Text(
-                                        text = "Copy",
-                                        color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(if (state.isDarkTheme) Color(0xFF334155) else Color.Transparent)
-                                            .clickable { onCopySelection() }
-                                            .padding(horizontal = 6.dp, vertical = 3.dp)
-                                    )
-                                    if (state.hasStrokeClipboard) {
-                                        Text(
-                                            text = "Paste",
-                                            color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(if (state.isDarkTheme) Color(0xFF334155) else Color.Transparent)
-                                                .clickable { onPasteClipboard() }
-                                                .padding(horizontal = 6.dp, vertical = 3.dp)
-                                        )
-                                    }
-                                    Spacer(Modifier.width(4.dp))
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color(0xFFFEE2E2))
-                                            .clickable { viewModel.deleteSelectedStrokes() }
-                                            .padding(horizontal = 7.dp, vertical = 3.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "Remove",
-                                            tint = Color(0xFFDC2626),
-                                            modifier = Modifier.size(13.dp)
-                                        )
-                                        Spacer(Modifier.width(3.dp))
-                                        Text(
-                                            text = "Remove",
-                                            color = Color(0xFFDC2626),
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                    Spacer(Modifier.width(6.dp))
-                                    Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = "Close toolbar",
-                                        tint = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF64748B),
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .clip(CircleShape)
-                                            .clickable { onDismissSelectionToolbar(true) }
-                                            .padding(2.dp)
-                                    )
-                                    val canEdit = state.strokes.count {
-                                        it.id in state.selectedStrokeIds && it.strokeType == StrokeType.TEXT
-                                    } == 1
-                                    if (canEdit && state.editingTextId == null) {
-                                        Text(
-                                            text = "Edit text",
-                                            color = Color.White,
-                                            fontSize = 12.sp,
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .clickable { viewModel.beginTextEdit() }
-                                                .padding(horizontal = 8.dp, vertical = 6.dp)
-                                        )
-                                    }
-                                }
-
-                                // Bottom row: Color palette
-                                Spacer(Modifier.height(8.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (hasFillableShape && selectionColorTarget == "fill") {
-                                        // None / Transparent swatch
-                                        Box(
-                                            modifier = Modifier
-                                                .padding(end = 6.dp)
-                                                .size(20.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(0xFFF1F5F9))
-                                                .border(
-                                                    if (currentFillColor == 0) 2.dp else 1.dp,
-                                                    if (currentFillColor == 0) Color(0xFF3B82F6) else Color(0xFFCBD5E1),
-                                                    CircleShape
-                                                )
-                                                .clickable { viewModel.setSelectionFillColor(0) },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("⊘", color = Color(0xFF64748B), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                        }
-
-                                        val fillPalette = listOf(
-                                            0xFFFFFFFF.toInt(),
-                                            0xFF1B1F2A.toInt(),
-                                            0xFFFF6B6B.toInt(),
-                                            0xFF3ECF8E.toInt(),
-                                            0xFF4ECDC4.toInt(),
-                                            0xFFFFE66D.toInt(),
-                                            0xFF60A5FA.toInt(),
-                                            0xFFAA96DA.toInt()
-                                        )
-                                        fillPalette.forEach { color ->
-                                            val isSelected = currentFillColor == color
-                                            Box(
-                                                modifier = Modifier
-                                                    .padding(end = 6.dp)
-                                                    .size(20.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color(color))
-                                                    .then(
-                                                        if (isSelected) Modifier.border(2.dp, Color(0xFF3B82F6), CircleShape)
-                                                        else Modifier.border(0.8.dp, Color(0x33000000), CircleShape)
-                                                    )
-                                                    .clickable { viewModel.setSelectionFillColor(color) }
-                                            )
-                                        }
-                                    } else {
-                                        val borderPalette = if (hasFillableShape) PEN_COLORS.take(8) else PEN_COLORS.take(7)
-                                        borderPalette.forEach { color ->
-                                            val isSelected = (if (hasFillableShape) currentBorderColor else state.selectedColor) == color
-                                            Box(
-                                                modifier = Modifier
-                                                    .padding(end = 6.dp)
-                                                    .size(20.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color(color))
-                                                    .then(
-                                                        if (isSelected) Modifier.border(2.dp, Color(0xFF3B82F6), CircleShape)
-                                                        else Modifier.border(0.8.dp, Color(0x33000000), CircleShape)
-                                                    )
-                                                    .clickable {
-                                                        if (hasFillableShape) viewModel.setSelectionBorderColor(color)
-                                                        else viewModel.recolorSelected(color)
-                                                    }
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Optional row 3: Contextual actions for Handwriting / Equation
-                                val canConvert = state.strokes.any { it.id in state.selectedStrokeIds && isConvertibleEquationInk(it) }
-                                val selectedEquation = state.strokes.singleOrNull { it.id in state.selectedStrokeIds && it.strokeType == StrokeType.EQUATION }
-                                val editableStroke = state.strokes.singleOrNull {
-                                    it.id in state.selectedStrokeIds && (
-                                        it.strokeType == StrokeType.TEXT ||
-                                        it.stickerKind.startsWith("flow:") ||
-                                        it.strokeType in setOf(
-                                            StrokeType.RECTANGLE,
-                                            StrokeType.DIAMOND,
-                                            StrokeType.ELLIPSE,
-                                            StrokeType.ROUND_RECT,
-                                            StrokeType.CIRCLE,
-                                            StrokeType.SQUARE
-                                        )
-                                    )
-                                }
-                                val canEdit = editableStroke != null
-
-                                if (canConvert || (selectedEquation != null && state.formulaSolution?.solved != true) || (canEdit && state.editingTextId == null)) {
-                                    Spacer(Modifier.height(6.dp))
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        if (canConvert) {
-                                            Text(
-                                                text = if (state.smartWriteBusy) "Reading…" else "Text",
-                                                color = Color.White,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(Color(0xFF2563EB))
-                                                    .clickable(enabled = !state.smartWriteBusy) { viewModel.convertSelectionToText() }
-                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
-                                            )
-                                            Spacer(Modifier.width(6.dp))
-                                            Text(
-                                                text = if (state.equationBusy) "Reading…" else "Convert Equation",
-                                                color = Color.White,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(Color(0xFF4F46E5))
-                                                    .clickable(enabled = !state.equationBusy) { viewModel.convertSelectionToEquation() }
-                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
-                                            )
-                                            Spacer(Modifier.width(6.dp))
-                                        }
-                                        if (selectedEquation != null && state.formulaSolution?.solved != true) {
-                                            Text(
-                                                text = "Solve this",
-                                                color = Color.White,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(Color(0xFF0F766E))
-                                                    .clickable { viewModel.solveCurrentEquation() }
-                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
-                                            )
-                                            Spacer(Modifier.width(6.dp))
-                                        }
-                                        if (canEdit && editableStroke != null && state.editingTextId == null) {
-                                            Text(
-                                                text = if (editableStroke.text.isNotEmpty()) "Edit text" else "Type text",
-                                                color = Color(0xFF1E293B),
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(Color(0xFFF1F5F9))
-                                                    .clickable {
-                                                        if (editableStroke.strokeType == StrokeType.TEXT) {
-                                                            viewModel.beginTextEdit()
-                                                        } else {
-                                                            onEditNodeText(editableStroke.id, editableStroke.text)
-                                                        }
-                                                    }
-                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
             Spacer(Modifier.height(8.dp))
 
             AnimatedVisibility(
@@ -1173,7 +1236,7 @@ fun AvitriSphareWhiteboardChrome(
                                 .padding(end = 4.dp)
                                 .size(16.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF2563EB))
+                                .background(BrandOrange)
                                 .clickable {
                                     leftBarOffset = Offset.Zero
                                     Toast.makeText(context, "Left bar reset", Toast.LENGTH_SHORT).show()
@@ -1192,7 +1255,7 @@ fun AvitriSphareWhiteboardChrome(
                     DockItem(
                         icon = Icons.Default.Menu,
                         label = stringResource(R.string.tool_main_menu),
-                        tint = Color(0xFF2563EB)
+                        tint = BrandOrange
                     ) { panel = null; onOpenMenu() }
                 }
 
@@ -1284,7 +1347,7 @@ fun AvitriSphareWhiteboardChrome(
                                     .padding(end = 4.dp)
                                     .size(16.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF2563EB))
+                                    .background(BrandOrange)
                                     .clickable {
                                         centerBarOffset = Offset.Zero
                                         Toast.makeText(context, "Tools bar reset", Toast.LENGTH_SHORT).show()
@@ -1429,7 +1492,7 @@ fun AvitriSphareWhiteboardChrome(
                                             icon = Icons.Default.NearMe,
                                             label = stringResource(R.string.tool_select),
                                             active = activeDockTool == ActiveDockTool.SELECT,
-                                            tint = Color(0xFF0EA5E9),
+                                            tint = BrandOrange,
                                             modifier = Modifier.onGloballyPositioned { toolIconBounds["select"] = it.boundsInRoot() }
                                         ) {
                                             panel = null
@@ -1456,13 +1519,39 @@ fun AvitriSphareWhiteboardChrome(
                                             }
                                         )
                                     }
+                                    "smart_write" -> {
+                                        DockItem(
+                                            icon = Icons.Default.Draw,
+                                            label = "Smart Write",
+                                            active = state.smartWriteEnabled,
+                                            tint = BrandOrange,
+                                            modifier = Modifier.onGloballyPositioned { toolIconBounds["smart_write"] = it.boundsInRoot() }
+                                        ) {
+                                            viewModel.setSmartWriteEnabled(!state.smartWriteEnabled)
+                                            val msg = if (!state.smartWriteEnabled) "Smart Write enabled" else "Smart Write disabled"
+                                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    "shape_rec" -> {
+                                        DockItem(
+                                            icon = Icons.Default.AutoFixHigh,
+                                            label = "Shape Rec",
+                                            active = state.isDrawToShapeEnabled,
+                                            tint = BrandOrange,
+                                            modifier = Modifier.onGloballyPositioned { toolIconBounds["shape_rec"] = it.boundsInRoot() }
+                                        ) {
+                                            viewModel.toggleDrawToShape()
+                                            val msg = if (!state.isDrawToShapeEnabled) "Shape Recognition enabled" else "Shape Recognition disabled"
+                                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
 
                                     "flowchart" -> {
                                         DockItem(
                                             icon = Icons.Default.Hub,
                                             label = "Mind Map",
                                             active = false,
-                                            tint = Color(0xFF2563EB),
+                                            tint = BrandOrange,
                                             modifier = Modifier.onGloballyPositioned { toolIconBounds["flowchart"] = it.boundsInRoot() }
                                         ) {
                                             panel = null
@@ -1544,7 +1633,7 @@ fun AvitriSphareWhiteboardChrome(
                                             icon = Icons.Default.TextFields,
                                             label = stringResource(R.string.util_text),
                                             active = state.currentTool == WhiteboardTool.TEXT,
-                                            tint = Color(0xFF6366F1)
+                                            tint = BrandOrange
                                         ) {
                                             panel = null
                                             viewModel.setTool(WhiteboardTool.TEXT)
@@ -1626,7 +1715,7 @@ fun AvitriSphareWhiteboardChrome(
                             icon = Icons.Default.MoreHoriz,
                             label = stringResource(R.string.tool_more),
                             active = panel == "more_tools",
-                            tint = Color(0xFF6366F1),
+                            tint = BrandOrange,
                             modifier = Modifier.onGloballyPositioned { toolIconBounds["more_tools"] = it.boundsInRoot() }
                         ) {
                             toggle("more_tools")
@@ -1674,7 +1763,7 @@ fun AvitriSphareWhiteboardChrome(
                                     .padding(end = 4.dp)
                                     .size(16.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF2563EB))
+                                    .background(BrandOrange)
                                     .clickable {
                                         rightBarOffset = Offset.Zero
                                         Toast.makeText(context, "Right bar reset", Toast.LENGTH_SHORT).show()
@@ -1694,7 +1783,7 @@ fun AvitriSphareWhiteboardChrome(
                             icon = Icons.Default.ChevronLeft,
                             label = stringResource(R.string.tool_prev_page),
                             enabled = state.pageIndex > 0,
-                            tint = Color(0xFF2563EB)
+                            tint = BrandOrange
                         ) {
                             viewModel.selectPage(state.pageIndex - 1)
                         }
@@ -1716,7 +1805,7 @@ fun AvitriSphareWhiteboardChrome(
                             icon = Icons.Default.ChevronRight,
                             label = stringResource(R.string.tool_next_page),
                             enabled = state.pageIndex < state.pageCount - 1,
-                            tint = Color(0xFF2563EB)
+                            tint = BrandOrange
                         ) {
                             viewModel.selectPage(state.pageIndex + 1)
                         }
@@ -1806,7 +1895,7 @@ fun AvitriSphareWhiteboardChrome(
                 "stickers" -> 340.dp
                 "shapes" -> 340.dp
                 "geometry" -> 340.dp
-                "ink" -> 364.dp
+                "ink" -> 376.dp
                 "utilities" -> 440.dp
                 "more" -> 320.dp
                 "profile" -> 300.dp
@@ -2336,7 +2425,7 @@ fun AvitriSphareWhiteboardChrome(
                             onClose = { panel = null }
                         )
                     }
-                    "ink" -> DockPopover(maxWidth = 560.dp, scrollable = false) {
+                    "ink" -> DockPopover(maxWidth = 380.dp, maxHeight = 560.dp, scrollable = false) {
                         InkToolPanel(state = state, viewModel = viewModel, onClose = {
                             panel = null
                         })
@@ -2360,8 +2449,9 @@ fun AvitriSphareWhiteboardChrome(
                             valueRange = 1f..50f,
                             modifier = Modifier.width(220.dp),
                             colors = SliderDefaults.colors(
-                                thumbColor = Color(0xFF6366F1),
-                                activeTrackColor = Color(0xFF6366F1)
+                                thumbColor = BrandOrange,
+                                activeTrackColor = BrandOrange,
+                                inactiveTrackColor = Color(0xFFFFEDD5)
                             )
                         )
                     }
@@ -2789,6 +2879,7 @@ private fun DockPopover(
     onClose: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     maxWidth: androidx.compose.ui.unit.Dp = 340.dp,
+    maxHeight: androidx.compose.ui.unit.Dp = 480.dp,
     scrollable: Boolean = true,
     isDark: Boolean = LocalDarkTheme.current,
     content: @Composable ColumnScope.() -> Unit
@@ -2805,7 +2896,7 @@ private fun DockPopover(
         Column(
             modifier = Modifier
                 .padding(horizontal = 12.dp, vertical = 10.dp)
-                .heightIn(max = 380.dp)
+                .heightIn(max = maxHeight)
         ) {
             if (title != null) {
                 Row(
