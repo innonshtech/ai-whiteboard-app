@@ -148,7 +148,7 @@ object MindmapEngine {
         val directHits = blockingObstacles.any { obs -> lineIntersectsRect(directP1, directP2, obs) }
 
         if (!directHits) {
-            if (wireStyle == "straight") {
+            if (wireStyle == "straight" || wireStyle == "curved") {
                 return listOf(directP1, directP2)
             }
             if (isHorizontal) {
@@ -197,6 +197,10 @@ object MindmapEngine {
 
             val startAnchor = calculateBoundaryIntersection(from, Offset(fc.x, bypassY))
             val endAnchor = calculateBoundaryIntersection(to, Offset(tc.x, bypassY))
+            if (wireStyle == "curved") {
+                val bypassMid = Offset((startAnchor.x + endAnchor.x) / 2f, bypassY)
+                return listOf(startAnchor, bypassMid, endAnchor)
+            }
             val c1 = Offset(startAnchor.x, bypassY)
             val c2 = Offset(endAnchor.x, bypassY)
             return listOf(startAnchor, c1, c2, endAnchor)
@@ -209,6 +213,10 @@ object MindmapEngine {
 
             val startAnchor = calculateBoundaryIntersection(from, Offset(bypassX, fc.y))
             val endAnchor = calculateBoundaryIntersection(to, Offset(bypassX, tc.y))
+            if (wireStyle == "curved") {
+                val bypassMid = Offset(bypassX, (startAnchor.y + endAnchor.y) / 2f)
+                return listOf(startAnchor, bypassMid, endAnchor)
+            }
             val c1 = Offset(bypassX, startAnchor.y)
             val c2 = Offset(bypassX, endAnchor.y)
             return listOf(startAnchor, c1, c2, endAnchor)
@@ -562,12 +570,64 @@ object MindmapEngine {
     }
 
     /**
-     * Creates a new connected branch in the given direction (Right, Left, Bottom)
+     * Finds a position for a new box in the target direction that avoids overlapping any existing boxes.
+     */
+    fun findNonOverlappingPosition(
+        initial: Offset,
+        w: Float,
+        h: Float,
+        direction: String,
+        existingBounds: List<Rect>,
+        spacing: Float = 24f
+    ): Offset {
+        fun overlaps(pos: Offset): Boolean {
+            val candRect = Rect(pos.x - spacing, pos.y - spacing, pos.x + w + spacing, pos.y + h + spacing)
+            return existingBounds.any { eb ->
+                candRect.left < eb.right && candRect.right > eb.left &&
+                    candRect.top < eb.bottom && candRect.bottom > eb.top
+            }
+        }
+
+        if (!overlaps(initial)) return initial
+
+        val stepDir = when (direction.lowercase()) {
+            "left" -> Offset(-(w + 40f), 0f)
+            "right" -> Offset(w + 40f, 0f)
+            "top" -> Offset(0f, -(h + 40f))
+            "bottom" -> Offset(0f, h + 40f)
+            else -> Offset(w + 40f, 0f)
+        }
+
+        val perpOffsets = when (direction.lowercase()) {
+            "left", "right" -> listOf(Offset(0f, 85f), Offset(0f, -85f), Offset(0f, 170f), Offset(0f, -170f), Offset(0f, 255f), Offset(0f, -255f))
+            else -> listOf(Offset(170f, 0f), Offset(-170f, 0f), Offset(340f, 0f), Offset(-340f, 0f), Offset(510f, 0f), Offset(-510f, 0f))
+        }
+
+        for (p in perpOffsets) {
+            val testPos = initial + p
+            if (!overlaps(testPos)) return testPos
+        }
+
+        for (step in 1..8) {
+            val advanced = initial + Offset(stepDir.x * step, stepDir.y * step)
+            if (!overlaps(advanced)) return advanced
+            for (p in perpOffsets) {
+                val testPos = advanced + p
+                if (!overlaps(testPos)) return testPos
+            }
+        }
+        return initial
+    }
+
+    /**
+     * Creates a new connected branch in the given direction (Right, Left, Bottom, Top) without overlapping existing boxes.
      */
     fun createBranchInDirection(
         parent: Stroke,
         direction: String,
-        branchIndex: Int
+        branchIndex: Int,
+        existingBounds: List<Rect> = emptyList(),
+        wireStyle: String = "orthogonal"
     ): Pair<Stroke, Stroke> {
         val colors = listOf(PALETTE_PURPLE, PALETTE_CYAN, PALETTE_BLUE, PALETTE_PINK, PALETTE_ORANGE, PALETTE_GREEN)
         val color = colors[branchIndex % colors.size]
@@ -580,12 +640,15 @@ object MindmapEngine {
         val vOffset = if (branchIndex == 0) 0f else if (branchIndex % 2 == 1) ((branchIndex + 1) / 2) * 85f else -((branchIndex) / 2) * 85f
         val hOffset = if (branchIndex == 0) 0f else if (branchIndex % 2 == 1) ((branchIndex + 1) / 2) * 170f else -((branchIndex) / 2) * 170f
 
-        val childTopLeft = when (direction.lowercase()) {
+        val baseTopLeft = when (direction.lowercase()) {
             "left" -> Offset(pb.left - 130f - w, pb.top + vOffset)
             "bottom" -> Offset(pb.left + (pb.width - w) / 2f + hOffset, pb.bottom + 90f)
             "top" -> Offset(pb.left + (pb.width - w) / 2f + hOffset, pb.top - 90f - h)
             else -> Offset(pb.right + 130f, pb.top + vOffset) // "right" default
         }
+
+        val allBounds = if (existingBounds.isEmpty()) listOf(pb) else (existingBounds + pb)
+        val childTopLeft = findNonOverlappingPosition(baseTopLeft, w, h, direction, allBounds, spacing = 24f)
 
         val child = createNode(
             topLeft = childTopLeft,
@@ -597,7 +660,7 @@ object MindmapEngine {
             cornerRadius = 16f
         )
 
-        val connector = createConnector(parent, child, color = color, wireStyle = "orthogonal")
+        val connector = createConnector(parent, child, color = color, wireStyle = wireStyle)
         return child to connector
     }
 
@@ -621,17 +684,45 @@ object MindmapEngine {
         return path
     }
 
+    data class CurvedControlPoints(
+        val cx1: Float,
+        val cy1: Float,
+        val cx2: Float,
+        val cy2: Float
+    )
+
+    fun calculateCurvedControlPoints(p1: Offset, p2: Offset): CurvedControlPoints {
+        val dx = p2.x - p1.x
+        val dy = p2.y - p1.y
+        val isHorizontal = abs(dx) >= abs(dy)
+
+        return if (isHorizontal) {
+            val bow = if (abs(dy) < 8f) minOf(26f, abs(dx) * 0.16f) else 0f
+            CurvedControlPoints(
+                cx1 = p1.x + dx * 0.5f,
+                cy1 = p1.y + bow,
+                cx2 = p1.x + dx * 0.5f,
+                cy2 = p2.y + bow
+            )
+        } else {
+            val bow = if (abs(dx) < 8f) minOf(26f, abs(dy) * 0.16f) else 0f
+            CurvedControlPoints(
+                cx1 = p1.x + bow,
+                cy1 = p1.y + dy * 0.5f,
+                cx2 = p2.x + bow,
+                cy2 = p1.y + dy * 0.5f
+            )
+        }
+    }
+
     /**
      * Calculates the smooth cubic Bezier curved Path for Compose Canvas
      */
     fun buildComposeCurvedPath(p1: Offset, p2: Offset): ComposePath {
         val path = ComposePath()
         path.moveTo(p1.x, p1.y)
-        val cx1 = p1.x + (p2.x - p1.x) * 0.5f
-        val cy1 = p1.y
-        val cx2 = p1.x + (p2.x - p1.x) * 0.5f
-        val cy2 = p2.y
-        path.cubicTo(cx1, cy1, cx2, cy2, p2.x, p2.y)
+        val cp = calculateCurvedControlPoints(p1, p2)
+        path.cubicTo(cp.cx1, cp.cy1, cp.cx2, cp.cy2, p2.x, p2.y)
         return path
     }
 
@@ -661,11 +752,8 @@ object MindmapEngine {
     fun buildNativeCurvedPath(p1: Offset, p2: Offset): android.graphics.Path {
         val path = android.graphics.Path()
         path.moveTo(p1.x, p1.y)
-        val cx1 = p1.x + (p2.x - p1.x) * 0.5f
-        val cy1 = p1.y
-        val cx2 = p1.x + (p2.x - p1.x) * 0.5f
-        val cy2 = p2.y
-        path.cubicTo(cx1, cy1, cx2, cy2, p2.x, p2.y)
+        val cp = calculateCurvedControlPoints(p1, p2)
+        path.cubicTo(cp.cx1, cp.cy1, cp.cx2, cp.cy2, p2.x, p2.y)
         return path
     }
 
@@ -680,17 +768,19 @@ object MindmapEngine {
     }
 
     fun buildComposeCurvedPath(points: List<Offset>): ComposePath {
+        if (points.isEmpty()) return ComposePath()
         if (points.size <= 2) return buildComposeCurvedPath(points.first(), points.last())
         val path = ComposePath()
         path.moveTo(points.first().x, points.first().y)
+        if (points.size == 3) {
+            path.quadraticBezierTo(points[1].x, points[1].y, points[2].x, points[2].y)
+            return path
+        }
         for (i in 0 until points.size - 1) {
-            val p1 = points[i]
-            val p2 = points[i + 1]
-            val cx1 = p1.x + (p2.x - p1.x) * 0.5f
-            val cy1 = p1.y
-            val cx2 = p1.x + (p2.x - p1.x) * 0.5f
-            val cy2 = p2.y
-            path.cubicTo(cx1, cy1, cx2, cy2, p2.x, p2.y)
+            val pt1 = points[i]
+            val pt2 = points[i + 1]
+            val cp = calculateCurvedControlPoints(pt1, pt2)
+            path.cubicTo(cp.cx1, cp.cy1, cp.cx2, cp.cy2, pt2.x, pt2.y)
         }
         return path
     }
@@ -706,17 +796,19 @@ object MindmapEngine {
     }
 
     fun buildNativeCurvedPath(points: List<Offset>): android.graphics.Path {
-        if (points.size <= 2) return buildNativeCurvedPath(points.first(), points.last())
         val path = android.graphics.Path()
+        if (points.isEmpty()) return path
+        if (points.size <= 2) return buildNativeCurvedPath(points.first(), points.last())
         path.moveTo(points.first().x, points.first().y)
+        if (points.size == 3) {
+            path.quadTo(points[1].x, points[1].y, points[2].x, points[2].y)
+            return path
+        }
         for (i in 0 until points.size - 1) {
-            val p1 = points[i]
-            val p2 = points[i + 1]
-            val cx1 = p1.x + (p2.x - p1.x) * 0.5f
-            val cy1 = p1.y
-            val cx2 = p1.x + (p2.x - p1.x) * 0.5f
-            val cy2 = p2.y
-            path.cubicTo(cx1, cy1, cx2, cy2, p2.x, p2.y)
+            val pt1 = points[i]
+            val pt2 = points[i + 1]
+            val cp = calculateCurvedControlPoints(pt1, pt2)
+            path.cubicTo(cp.cx1, cp.cy1, cp.cx2, cp.cy2, pt2.x, pt2.y)
         }
         return path
     }
@@ -829,5 +921,48 @@ object MindmapEngine {
             }
         }
         return updatedStrokes
+    }
+
+    /**
+     * Calculates a non-overlapping center position for a newly created mind map template.
+     * Prevents successive mind map templates from colliding with existing ones.
+     */
+    fun calculateNonOverlappingCenter(
+        existingStrokes: List<Stroke>,
+        requestedCenter: Offset,
+        halfWidth: Float = 360f,
+        halfHeight: Float = 220f,
+        margin: Float = 100f
+    ): Offset {
+        val existingBounds = existingStrokes.filter {
+            it.stickerKind.startsWith("mindmap:") || it.stickerKind.startsWith("flow:") || it.strokeType == StrokeType.CONNECTOR
+        }.map { it.bounds }
+
+        if (existingBounds.isEmpty()) return requestedCenter
+
+        fun collides(c: Offset): Boolean {
+            val cand = Rect(
+                c.x - halfWidth - margin,
+                c.y - halfHeight - margin,
+                c.x + halfWidth + margin,
+                c.y + halfHeight + margin
+            )
+            return existingBounds.any { it.overlaps(cand) }
+        }
+
+        if (!collides(requestedCenter)) return requestedCenter
+
+        // Try placing to the right of existing cluster
+        val maxRight = existingBounds.maxOf { it.right }
+        val rightCandidate = Offset(maxRight + margin + halfWidth, requestedCenter.y)
+        if (!collides(rightCandidate)) return rightCandidate
+
+        // Try placing below existing cluster
+        val maxBottom = existingBounds.maxOf { it.bottom }
+        val bottomCandidate = Offset(requestedCenter.x, maxBottom + margin + halfHeight)
+        if (!collides(bottomCandidate)) return bottomCandidate
+
+        // Fallback: place further to the right
+        return rightCandidate
     }
 }

@@ -121,10 +121,12 @@ class MathToolsTest {
         )
         val half = setSquare.span / 2f
         assertEquals(MathToolZone.CLOSE, hitTestMathTool(setSquare, Offset(-half * 0.55f, -half * 0.45f)))
-        assertEquals(MathToolZone.PENCIL, hitTestMathTool(setSquare, Offset(-half * 0.35f, half * 0.35f)))
+        assertEquals(MathToolZone.SCALE, hitTestMathTool(setSquare, Offset(-half * 0.30f, half * 0.30f)))
         assertEquals(MathToolZone.ROTATE, hitTestMathTool(setSquare, Offset(-half, -half - 28f)))
-        assertEquals(MathToolZone.SCALE, hitTestMathTool(setSquare, Offset(half * 0.65f, half * 0.65f)))
-        assertEquals(MathToolZone.MOVE, hitTestMathTool(setSquare, Offset(-60f, 60f)))
+        assertEquals(MathToolZone.MOVE, hitTestMathTool(setSquare, Offset(-45f, 10f)))
+        // Touching near set square bottom edge returns NONE so edge line drawing flows like ruler!
+        assertEquals(MathToolZone.NONE, hitTestMathTool(setSquare, Offset(0f, half)))
+        assertNotNull(rulerForStraightedge(listOf(setSquare), Offset(0f, half)))
 
         val triangle = PlacedMathTool(
             kind = MathToolKind.TRIANGLE,
@@ -134,10 +136,12 @@ class MathToolsTest {
         val side = triangle.span * 1.8f
         val h = side * 0.8660254f
         assertEquals(MathToolZone.CLOSE, hitTestMathTool(triangle, Offset(0f, -h * 0.35f)))
-        assertEquals(MathToolZone.PENCIL, hitTestMathTool(triangle, Offset(0f, 0f)))
+        assertEquals(MathToolZone.SCALE, hitTestMathTool(triangle, Offset(0f, 20f)))
         assertEquals(MathToolZone.ROTATE, hitTestMathTool(triangle, Offset(0f, -h * 0.6667f - 28f)))
-        assertEquals(MathToolZone.SCALE, hitTestMathTool(triangle, Offset(side * 0.18f, h * 0.10f)))
-        assertEquals(MathToolZone.MOVE, hitTestMathTool(triangle, Offset(-70f, 30f)))
+        assertEquals(MathToolZone.MOVE, hitTestMathTool(triangle, Offset(0f, -20f)))
+        // Touching near triangle bottom edge returns NONE so edge line drawing flows like ruler!
+        assertEquals(MathToolZone.NONE, hitTestMathTool(triangle, Offset(0f, h * 0.3333f)))
+        assertNotNull(rulerForStraightedge(listOf(triangle), Offset(0f, h * 0.3333f)))
     }
 
     @Test
