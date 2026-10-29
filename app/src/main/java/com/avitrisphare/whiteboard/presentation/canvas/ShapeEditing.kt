@@ -117,24 +117,32 @@ fun hitShapeHandle(stroke: Stroke, point: Offset, slop: Float): ShapeHandleHit? 
         stroke.strokeType == StrokeType.VIDEO -> {
             if (stroke.points.size < 2) return null
             val b = strokeSelectionBounds(stroke)
-            val pad = 8f
+            val pad = 6f
+            val boxLeft = b.left - pad
+            val boxTop = b.top - pad
+            val boxRight = b.right + pad
+            val boxBottom = b.bottom + pad
             when {
-                near(Offset(b.left, b.top)) || near(Offset(b.left - pad, b.top - pad)) -> ShapeHandleHit(ShapeHandle.TOP_LEFT)
-                near(Offset(b.right, b.top)) || near(Offset(b.right + pad, b.top - pad)) -> ShapeHandleHit(ShapeHandle.TOP_RIGHT)
-                near(Offset(b.right, b.bottom)) || near(Offset(b.right + pad, b.bottom + pad)) -> ShapeHandleHit(ShapeHandle.BOTTOM_RIGHT)
-                near(Offset(b.left, b.bottom)) || near(Offset(b.left - pad, b.bottom + pad)) -> ShapeHandleHit(ShapeHandle.BOTTOM_LEFT)
+                near(Offset(boxLeft, boxTop)) || near(Offset(b.left, b.top)) -> ShapeHandleHit(ShapeHandle.TOP_LEFT)
+                near(Offset(boxRight, boxTop)) || near(Offset(b.right, b.top)) -> ShapeHandleHit(ShapeHandle.TOP_RIGHT)
+                near(Offset(boxRight, boxBottom)) || near(Offset(b.right, b.bottom)) -> ShapeHandleHit(ShapeHandle.BOTTOM_RIGHT)
+                near(Offset(boxLeft, boxBottom)) || near(Offset(b.left, b.bottom)) -> ShapeHandleHit(ShapeHandle.BOTTOM_LEFT)
                 else -> null
             }
         }
         else -> {
             if (stroke.points.size < 2) return null
             val box = normalizedBox(stroke.points.first(), stroke.points.last())
-            val pad = 8f
+            val pad = 6f
+            val boxLeft = box.left - pad
+            val boxTop = box.top - pad
+            val boxRight = box.right + pad
+            val boxBottom = box.bottom + pad
             when {
-                near(Offset(box.left, box.top)) || near(Offset(box.left - pad, box.top - pad)) -> ShapeHandleHit(ShapeHandle.TOP_LEFT)
-                near(Offset(box.right, box.top)) || near(Offset(box.right + pad, box.top - pad)) -> ShapeHandleHit(ShapeHandle.TOP_RIGHT)
-                near(Offset(box.right, box.bottom)) || near(Offset(box.right + pad, box.bottom + pad)) -> ShapeHandleHit(ShapeHandle.BOTTOM_RIGHT)
-                near(Offset(box.left, box.bottom)) || near(Offset(box.left - pad, box.bottom + pad)) -> ShapeHandleHit(ShapeHandle.BOTTOM_LEFT)
+                near(Offset(boxLeft, boxTop)) || near(Offset(box.left, box.top)) -> ShapeHandleHit(ShapeHandle.TOP_LEFT)
+                near(Offset(boxRight, boxTop)) || near(Offset(box.right, box.top)) -> ShapeHandleHit(ShapeHandle.TOP_RIGHT)
+                near(Offset(boxRight, boxBottom)) || near(Offset(box.right, box.bottom)) -> ShapeHandleHit(ShapeHandle.BOTTOM_RIGHT)
+                near(Offset(boxLeft, boxBottom)) || near(Offset(box.left, box.bottom)) -> ShapeHandleHit(ShapeHandle.BOTTOM_LEFT)
                 else -> null
             }
         }
@@ -262,12 +270,12 @@ fun hitSelectionBoundsHandle(strokes: List<Stroke>, point: Offset, slop: Float):
         bottom = maxOf(bottom, b.bottom)
     }
     if (left >= right || top >= bottom) return null
-    val pad = 12f
+    val pad = 6f
     val boxLeft = left - pad
     val boxTop = top - pad
     val boxRight = right + pad
     val boxBottom = bottom + pad
-    val origBounds = androidx.compose.ui.geometry.Rect(boxLeft, boxTop, boxRight, boxBottom)
+    val origBounds = androidx.compose.ui.geometry.Rect(left, top, right, bottom)
 
     val slopSq = slop * slop
     fun near(t: Offset) = hypot(point.x - t.x, point.y - t.y).let { it * it <= slopSq }
@@ -276,10 +284,10 @@ fun hitSelectionBoundsHandle(strokes: List<Stroke>, point: Offset, slop: Float):
     val midY = boxTop + (boxBottom - boxTop) / 2f
 
     // 1. Corners (Primary handles)
-    if (near(Offset(boxLeft, boxTop))) return ShapeHandle.TOP_LEFT to origBounds
-    if (near(Offset(boxRight, boxTop))) return ShapeHandle.TOP_RIGHT to origBounds
-    if (near(Offset(boxRight, boxBottom))) return ShapeHandle.BOTTOM_RIGHT to origBounds
-    if (near(Offset(boxLeft, boxBottom))) return ShapeHandle.BOTTOM_LEFT to origBounds
+    if (near(Offset(boxLeft, boxTop)) || near(Offset(left, top))) return ShapeHandle.TOP_LEFT to origBounds
+    if (near(Offset(boxRight, boxTop)) || near(Offset(right, top))) return ShapeHandle.TOP_RIGHT to origBounds
+    if (near(Offset(boxRight, boxBottom)) || near(Offset(right, bottom))) return ShapeHandle.BOTTOM_RIGHT to origBounds
+    if (near(Offset(boxLeft, boxBottom)) || near(Offset(left, bottom))) return ShapeHandle.BOTTOM_LEFT to origBounds
 
     // 2. Mid-edges
     if (near(Offset(midX, boxTop))) return ShapeHandle.TOP_LEFT to origBounds
