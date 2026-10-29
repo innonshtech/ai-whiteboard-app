@@ -2299,7 +2299,7 @@ fun CanvasScreen(
                                 }
                             }
                             WhiteboardTool.LASER -> {
-                                viewModel.addLaserPoint(downWorld)
+                                viewModel.startLaser(downWorld)
                             }
                             WhiteboardTool.TEXT -> {
                                 pendingWorldPoint = downWorld
@@ -3173,6 +3173,9 @@ fun CanvasScreen(
                                 val next = pageStep(latest.pageIndex, latest.pageCount, 1)
                                 if (next != latest.pageIndex) viewModel.selectPage(next)
                             }
+                            if (activeTool == WhiteboardTool.LASER) {
+                                viewModel.finishLaser()
+                            }
                             if (activeTool == WhiteboardTool.LASSO) {
                                 if (isDraggingSelection) {
                                     viewModel.endSelectionMove()
@@ -3347,10 +3350,45 @@ fun CanvasScreen(
                     scale(canvasScale, canvasScale, pivot = Offset.Zero)
                 }) {
                     if (state.laserPoints.isNotEmpty()) {
+                        val scale = canvasScale.coerceAtLeast(0.5f)
+                        if (state.laserPoints.size >= 2) {
+                            val laserPath = state.laserPoints.toSmoothedPath()
+                            // Outer laser glow
+                            drawPath(
+                                path = laserPath,
+                                color = Color(0x55FF2A2A),
+                                style = DrawStroke(
+                                    width = 14f / scale,
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
+                            // Intense laser core beam
+                            drawPath(
+                                path = laserPath,
+                                color = Color(0xFFFF2A2A),
+                                style = DrawStroke(
+                                    width = 6f / scale,
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
+                            // Bright white center line
+                            drawPath(
+                                path = laserPath,
+                                color = Color(0xFFFFF0F0),
+                                style = DrawStroke(
+                                    width = 2.5f / scale,
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
+                        }
                         val center = state.laserPoints.last()
-                        val radius = 10f / canvasScale.coerceAtLeast(0.5f)
-                        drawCircle(Color(0x55FF2A2A), radius * 2.2f, center)
+                        val radius = 9f / scale
+                        drawCircle(Color(0x55FF2A2A), radius * 2.4f, center)
                         drawCircle(Color(0xFFFF2A2A), radius, center)
+                        drawCircle(Color.White, radius * 0.45f, center)
                     }
                     if (lassoPoints.size >= 2) {
                         val lassoPath = lassoPoints.toSmoothedPath()
@@ -3727,9 +3765,17 @@ fun CanvasScreen(
             },
             isPeriodicTableVisible = periodicTableState.isVisible,
             onTogglePeriodicTable = {
-                val next = !periodicTableState.isVisible
-                periodicTableState = periodicTableState.copy(isVisible = next)
-                if (next) bringToolToFront(UtilityToolKind.PERIODIC_TABLE)
+                if (periodicTableState.isVisible && periodicTableState.isMinimized) {
+                    periodicTableState = periodicTableState.copy(isMinimized = false)
+                    bringToolToFront(UtilityToolKind.PERIODIC_TABLE)
+                } else {
+                    val next = !periodicTableState.isVisible
+                    periodicTableState = periodicTableState.copy(
+                        isVisible = next,
+                        isMinimized = if (next) false else periodicTableState.isMinimized
+                    )
+                    if (next) bringToolToFront(UtilityToolKind.PERIODIC_TABLE)
+                }
             },
             onOpenStickerEmoji = {
                 viewModel.clearSelection()

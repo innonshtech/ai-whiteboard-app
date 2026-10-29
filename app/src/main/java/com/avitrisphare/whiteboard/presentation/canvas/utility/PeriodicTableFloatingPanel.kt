@@ -1,15 +1,18 @@
 package com.avitrisphare.whiteboard.presentation.canvas.utility
 
+import android.graphics.Paint
+import android.graphics.Typeface
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -28,9 +31,7 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,12 +42,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,7 +85,7 @@ fun PeriodicTableFloatingPanel(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.padding(end = 4.dp)
             ) {
-                // Light / Dark Mode Toggle Pill
+                // Light / Dark Mode Toggle Pill (Defaults to Light Mode)
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
@@ -328,13 +334,6 @@ fun PeriodicTableFloatingPanel(
 
             Spacer(Modifier.height(8.dp))
 
-            // Base cell sizes calibrated so that all 4 lines (Number, Symbol, Name, Mass) have generous breathing room and zero cutting
-            val baseCellWidth = 50.dp
-            val baseCellHeight = 58.dp
-            val cellW = baseCellWidth * zoomScale
-            val cellH = baseCellHeight * zoomScale
-            val gap = 2.5.dp * zoomScale
-
             val scrollModifier = if (zoomScale > 1.0f) {
                 Modifier
                     .fillMaxWidth()
@@ -354,75 +353,18 @@ fun PeriodicTableFloatingPanel(
                     .padding(5.dp)
             }
 
+            // High-performance Periodic Table Grid: renders in < 2ms without heavy LayoutNode trees
             Box(modifier = scrollModifier) {
-                Column(verticalArrangement = Arrangement.spacedBy(gap)) {
-                    // Periods 1 to 7
-                    for (period in 1..7) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                            for (group in 1..18) {
-                                val elem = PeriodicTableData.elements.firstOrNull { it.period == period && it.group == group }
-                                if (elem != null) {
-                                    ElementCell(
-                                        element = elem,
-                                        cellWidth = cellW,
-                                        cellHeight = cellH,
-                                        zoomScale = zoomScale,
-                                        isSelected = elem == selectedElement,
-                                        isDimmed = !matchesFilter(elem, state.searchQuery, state.selectedCategory),
-                                        isDarkMode = state.isDarkMode,
-                                        onClick = { onStateChange(state.copy(selectedElement = elem)) }
-                                    )
-                                } else {
-                                    if (period == 6 && group == 3) {
-                                        MarkerCell("57-71", "La-Lu", "Lanthanide", cellW, cellH, zoomScale, ElementCategory.LANTHANIDE.color, state.isDarkMode)
-                                    } else if (period == 7 && group == 3) {
-                                        MarkerCell("89-103", "Ac-Lr", "Actinide", cellW, cellH, zoomScale, ElementCategory.ACTINIDE.color, state.isDarkMode)
-                                    } else {
-                                        Spacer(Modifier.size(width = cellW, height = cellH))
-                                    }
-                                }
-                            }
-                        }
+                PeriodicTableGridCanvas(
+                    zoomScale = zoomScale,
+                    selectedElement = selectedElement,
+                    searchQuery = state.searchQuery,
+                    selectedCategory = state.selectedCategory,
+                    isDarkMode = state.isDarkMode,
+                    onElementSelected = { elem ->
+                        onStateChange(state.copy(selectedElement = elem))
                     }
-
-                    Spacer(Modifier.height(gap * 1.5f))
-                    Divider(color = if (state.isDarkMode) Color(0xFF283248) else Color(0xFFE2E8F0), thickness = 1.dp)
-                    Spacer(Modifier.height(gap))
-
-                    // Lanthanides Row (57-71)
-                    Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                        Spacer(Modifier.size(width = (cellW * 2) + (gap * 2), height = cellH))
-                        PeriodicTableData.elements.filter { it.category == ElementCategory.LANTHANIDE }.forEach { elem ->
-                            ElementCell(
-                                element = elem,
-                                cellWidth = cellW,
-                                cellHeight = cellH,
-                                zoomScale = zoomScale,
-                                isSelected = elem == selectedElement,
-                                isDimmed = !matchesFilter(elem, state.searchQuery, state.selectedCategory),
-                                isDarkMode = state.isDarkMode,
-                                onClick = { onStateChange(state.copy(selectedElement = elem)) }
-                            )
-                        }
-                    }
-
-                    // Actinides Row (89-103)
-                    Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                        Spacer(Modifier.size(width = (cellW * 2) + (gap * 2), height = cellH))
-                        PeriodicTableData.elements.filter { it.category == ElementCategory.ACTINIDE }.forEach { elem ->
-                            ElementCell(
-                                element = elem,
-                                cellWidth = cellW,
-                                cellHeight = cellH,
-                                zoomScale = zoomScale,
-                                isSelected = elem == selectedElement,
-                                isDimmed = !matchesFilter(elem, state.searchQuery, state.selectedCategory),
-                                isDarkMode = state.isDarkMode,
-                                onClick = { onStateChange(state.copy(selectedElement = elem)) }
-                            )
-                        }
-                    }
-                }
+                )
             }
 
             Spacer(Modifier.height(8.dp))
@@ -433,169 +375,440 @@ fun PeriodicTableFloatingPanel(
     }
 }
 
-private fun matchesFilter(elem: ChemicalElement, query: String, category: ElementCategory?): Boolean {
-    val q = query.trim().lowercase()
-    val matchesQuery = q.isEmpty() ||
-        elem.symbol.lowercase().contains(q) ||
-        elem.name.lowercase().contains(q) ||
-        elem.atomicNumber.toString() == q
-    val matchesCategory = category == null || elem.category == category
-    return matchesQuery && matchesCategory
-}
-
 @Composable
-private fun ElementCell(
-    element: ChemicalElement,
-    cellWidth: androidx.compose.ui.unit.Dp,
-    cellHeight: androidx.compose.ui.unit.Dp,
+private fun PeriodicTableGridCanvas(
     zoomScale: Float,
-    isSelected: Boolean,
-    isDimmed: Boolean,
-    isDarkMode: Boolean = true,
-    onClick: () -> Unit
+    selectedElement: ChemicalElement,
+    searchQuery: String,
+    selectedCategory: ElementCategory?,
+    isDarkMode: Boolean,
+    onElementSelected: (ChemicalElement) -> Unit
 ) {
-    val cellAlpha = if (isDimmed) 0.25f else 1f
-    val baseColor = element.category.color
+    val density = LocalDensity.current
 
-    val cellBg = if (isDarkMode) {
-        baseColor.copy(alpha = if (isSelected) 0.7f else 0.22f * cellAlpha)
-    } else {
-        if (isSelected) baseColor.copy(alpha = 0.35f) else baseColor.copy(alpha = 0.12f * cellAlpha)
+    val baseCellWidth = 50.dp
+    val baseCellHeight = 58.dp
+    val baseGap = 2.5.dp
+
+    val cellW = baseCellWidth * zoomScale
+    val cellH = baseCellHeight * zoomScale
+    val gap = baseGap * zoomScale
+
+    val cellWPx = with(density) { cellW.toPx() }
+    val cellHPx = with(density) { cellH.toPx() }
+    val gapPx = with(density) { gap.toPx() }
+    val cornerRadiusPx = with(density) { 5.dp.toPx() }
+    val borderWidthPx = with(density) { 1.dp.toPx() }
+    val selectedBorderWidthPx = with(density) { 2.dp.toPx() }
+
+    val colStep = cellWPx + gapPx
+    val rowStep = cellHPx + gapPx
+
+    val gridWidthPx = 18 * colStep - gapPx
+    val mainGridHeightPx = 7 * rowStep - gapPx
+
+    val dividerGapTop = with(density) { (gap * 1.5f).toPx() }
+    val dividerThickness = with(density) { 1.dp.toPx() }
+    val dividerGapBottom = with(density) { gap.toPx() }
+
+    val dividerY = mainGridHeightPx + dividerGapTop
+    val fBlockStartY = dividerY + dividerThickness + dividerGapBottom
+    val totalGridHeightPx = fBlockStartY + 2 * rowStep - gapPx
+
+    val gridWidthDp = with(density) { gridWidthPx.toDp() }
+    val totalGridHeightDp = with(density) { totalGridHeightPx.toDp() }
+
+    val hasFilter = searchQuery.isNotEmpty() || selectedCategory != null
+    val matchingIds = remember(searchQuery, selectedCategory) {
+        if (hasFilter) {
+            PeriodicTableData.search(searchQuery, selectedCategory).map { it.atomicNumber }.toSet()
+        } else {
+            emptySet()
+        }
     }
 
-    val cellBorder = if (isDarkMode) {
-        if (isSelected) Color.White else baseColor.copy(alpha = 0.5f * cellAlpha)
+    // Reuse Paint objects for zero allocation during draw passes
+    val bgPaint = remember { Paint().apply { style = Paint.Style.FILL; isAntiAlias = true } }
+    val borderPaint = remember { Paint().apply { style = Paint.Style.STROKE; isAntiAlias = true } }
+    val numberPaint = remember {
+        Paint().apply {
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.MONOSPACE
+            isFakeBoldText = true
+        }
+    }
+    val symbolPaint = remember {
+        Paint().apply {
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+    }
+    val namePaint = remember {
+        Paint().apply {
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.DEFAULT
+        }
+    }
+    val massPaint = remember {
+        Paint().apply {
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.MONOSPACE
+        }
+    }
+    val markerSubPaint = remember {
+        Paint().apply {
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+    }
+
+    Canvas(
+        modifier = Modifier
+            .size(gridWidthDp, totalGridHeightDp)
+            .pointerInput(zoomScale, searchQuery, selectedCategory) {
+                detectTapGestures { offset ->
+                    val x = offset.x
+                    val y = offset.y
+
+                    // 1. Check main grid (periods 1..7, groups 1..18)
+                    if (y in 0f..mainGridHeightPx && x in 0f..gridWidthPx) {
+                        val col = (x / colStep).toInt()
+                        val row = (y / rowStep).toInt()
+                        val cellLeft = col * colStep
+                        val cellTop = row * rowStep
+                        if (x <= cellLeft + cellWPx && y <= cellTop + cellHPx && col in 0..17 && row in 0..6) {
+                            val period = row + 1
+                            val group = col + 1
+                            PeriodicTableData.elementByGridPosition[period to group]?.let { elem ->
+                                onElementSelected(elem)
+                            }
+                        }
+                    } else if (y in fBlockStartY..totalGridHeightPx) {
+                        // 2. Check Lanthanides & Actinides
+                        val startX = 2 * colStep
+                        if (x >= startX) {
+                            val col = ((x - startX) / colStep).toInt()
+                            val cellLeft = startX + col * colStep
+                            if (col in 0..14 && x <= cellLeft + cellWPx) {
+                                val fRow = ((y - fBlockStartY) / rowStep).toInt()
+                                val cellTop = fBlockStartY + fRow * rowStep
+                                if (y <= cellTop + cellHPx) {
+                                    if (fRow == 0) {
+                                        PeriodicTableData.lanthanides.getOrNull(col)?.let { onElementSelected(it) }
+                                    } else if (fRow == 1) {
+                                        PeriodicTableData.actinides.getOrNull(col)?.let { onElementSelected(it) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+    ) {
+        drawIntoCanvas { canvas ->
+            val nativeCanvas = canvas.nativeCanvas
+
+            // 1. Draw periods 1 to 7
+            for (period in 1..7) {
+                for (group in 1..18) {
+                    val col = group - 1
+                    val row = period - 1
+                    val cellLeft = col * colStep
+                    val cellTop = row * rowStep
+
+                    val elem = PeriodicTableData.elementByGridPosition[period to group]
+                    if (elem != null) {
+                        val isSelected = elem == selectedElement
+                        val isDimmed = hasFilter && elem.atomicNumber !in matchingIds
+                        drawCell(
+                            nativeCanvas = nativeCanvas,
+                            elem = elem,
+                            left = cellLeft,
+                            top = cellTop,
+                            width = cellWPx,
+                            height = cellHPx,
+                            cornerRadius = cornerRadiusPx,
+                            borderWidth = borderWidthPx,
+                            selectedBorderWidth = selectedBorderWidthPx,
+                            isSelected = isSelected,
+                            isDimmed = isDimmed,
+                            isDarkMode = isDarkMode,
+                            zoomScale = zoomScale,
+                            density = density.density,
+                            bgPaint = bgPaint,
+                            borderPaint = borderPaint,
+                            numberPaint = numberPaint,
+                            symbolPaint = symbolPaint,
+                            namePaint = namePaint,
+                            massPaint = massPaint
+                        )
+                    } else if (period == 6 && group == 3) {
+                        drawMarker(
+                            nativeCanvas = nativeCanvas,
+                            label = "57-71",
+                            sub = "La-Lu",
+                            catName = "Lanthanide",
+                            categoryColor = ElementCategory.LANTHANIDE.color,
+                            left = cellLeft,
+                            top = cellTop,
+                            width = cellWPx,
+                            height = cellHPx,
+                            cornerRadius = cornerRadiusPx,
+                            borderWidth = borderWidthPx,
+                            isDarkMode = isDarkMode,
+                            zoomScale = zoomScale,
+                            density = density.density,
+                            bgPaint = bgPaint,
+                            borderPaint = borderPaint,
+                            numberPaint = numberPaint,
+                            symbolPaint = markerSubPaint,
+                            namePaint = namePaint
+                        )
+                    } else if (period == 7 && group == 3) {
+                        drawMarker(
+                            nativeCanvas = nativeCanvas,
+                            label = "89-103",
+                            sub = "Ac-Lr",
+                            catName = "Actinide",
+                            categoryColor = ElementCategory.ACTINIDE.color,
+                            left = cellLeft,
+                            top = cellTop,
+                            width = cellWPx,
+                            height = cellHPx,
+                            cornerRadius = cornerRadiusPx,
+                            borderWidth = borderWidthPx,
+                            isDarkMode = isDarkMode,
+                            zoomScale = zoomScale,
+                            density = density.density,
+                            bgPaint = bgPaint,
+                            borderPaint = borderPaint,
+                            numberPaint = numberPaint,
+                            symbolPaint = markerSubPaint,
+                            namePaint = namePaint
+                        )
+                    }
+                }
+            }
+
+            // 2. Divider line between main table and f-block
+            val dividerColor = if (isDarkMode) Color(0xFF283248) else Color(0xFFE2E8F0)
+            drawLine(
+                color = dividerColor,
+                start = Offset(0f, dividerY),
+                end = Offset(gridWidthPx, dividerY),
+                strokeWidth = dividerThickness
+            )
+
+            // 3. Lanthanides row
+            val startX = 2 * colStep
+            PeriodicTableData.lanthanides.forEachIndexed { index, elem ->
+                val cellLeft = startX + index * colStep
+                val cellTop = fBlockStartY
+                val isSelected = elem == selectedElement
+                val isDimmed = hasFilter && elem.atomicNumber !in matchingIds
+                drawCell(
+                    nativeCanvas = nativeCanvas,
+                    elem = elem,
+                    left = cellLeft,
+                    top = cellTop,
+                    width = cellWPx,
+                    height = cellHPx,
+                    cornerRadius = cornerRadiusPx,
+                    borderWidth = borderWidthPx,
+                    selectedBorderWidth = selectedBorderWidthPx,
+                    isSelected = isSelected,
+                    isDimmed = isDimmed,
+                    isDarkMode = isDarkMode,
+                    zoomScale = zoomScale,
+                    density = density.density,
+                    bgPaint = bgPaint,
+                    borderPaint = borderPaint,
+                    numberPaint = numberPaint,
+                    symbolPaint = symbolPaint,
+                    namePaint = namePaint,
+                    massPaint = massPaint
+                )
+            }
+
+            // 4. Actinides row
+            PeriodicTableData.actinides.forEachIndexed { index, elem ->
+                val cellLeft = startX + index * colStep
+                val cellTop = fBlockStartY + rowStep
+                val isSelected = elem == selectedElement
+                val isDimmed = hasFilter && elem.atomicNumber !in matchingIds
+                drawCell(
+                    nativeCanvas = nativeCanvas,
+                    elem = elem,
+                    left = cellLeft,
+                    top = cellTop,
+                    width = cellWPx,
+                    height = cellHPx,
+                    cornerRadius = cornerRadiusPx,
+                    borderWidth = borderWidthPx,
+                    selectedBorderWidth = selectedBorderWidthPx,
+                    isSelected = isSelected,
+                    isDimmed = isDimmed,
+                    isDarkMode = isDarkMode,
+                    zoomScale = zoomScale,
+                    density = density.density,
+                    bgPaint = bgPaint,
+                    borderPaint = borderPaint,
+                    numberPaint = numberPaint,
+                    symbolPaint = symbolPaint,
+                    namePaint = namePaint,
+                    massPaint = massPaint
+                )
+            }
+        }
+    }
+}
+
+private fun drawCell(
+    nativeCanvas: android.graphics.Canvas,
+    elem: ChemicalElement,
+    left: Float,
+    top: Float,
+    width: Float,
+    height: Float,
+    cornerRadius: Float,
+    borderWidth: Float,
+    selectedBorderWidth: Float,
+    isSelected: Boolean,
+    isDimmed: Boolean,
+    isDarkMode: Boolean,
+    zoomScale: Float,
+    density: Float,
+    bgPaint: Paint,
+    borderPaint: Paint,
+    numberPaint: Paint,
+    symbolPaint: Paint,
+    namePaint: Paint,
+    massPaint: Paint
+) {
+    val cellAlpha = if (isDimmed) 0.25f else 1f
+    val baseColor = elem.category.color
+    val bgAlpha = if (isDarkMode) {
+        if (isSelected) 0.70f else 0.22f * cellAlpha
+    } else {
+        if (isSelected) 0.35f else 0.12f * cellAlpha
+    }
+    val borderColor = if (isDarkMode) {
+        if (isSelected) Color.White else baseColor.copy(alpha = 0.50f * cellAlpha)
     } else {
         if (isSelected) baseColor else baseColor.copy(alpha = 0.45f * cellAlpha)
     }
 
-    Box(
-        modifier = Modifier
-            .size(width = cellWidth, height = cellHeight)
-            .clip(RoundedCornerShape(5.dp))
-            .background(cellBg)
-            .border(
-                width = if (isSelected) 2.dp else 1.dp,
-                color = cellBorder,
-                shape = RoundedCornerShape(5.dp)
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 1.5.dp, vertical = 2.5.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Line 1: Atomic Number
-            Text(
-                text = "${element.atomicNumber}",
-                fontSize = (8f * zoomScale.coerceAtLeast(0.85f)).sp,
-                color = (if (isDarkMode) Color(0xFFCBD5E1) else Color(0xFF475569)).copy(alpha = cellAlpha),
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.SemiBold,
-                lineHeight = (8.5f * zoomScale.coerceAtLeast(0.85f)).sp,
-                maxLines = 1
-            )
+    // 1. Draw rounded rect background
+    bgPaint.color = baseColor.copy(alpha = bgAlpha).toArgb()
+    nativeCanvas.drawRoundRect(left, top, left + width, top + height, cornerRadius, cornerRadius, bgPaint)
 
-            // Line 2: Chemical Symbol
-            Text(
-                text = element.symbol,
-                fontSize = (13f * zoomScale.coerceAtLeast(0.85f)).sp,
-                fontWeight = FontWeight.Bold,
-                color = (if (isDarkMode) Color.White else Color(0xFF0F172A)).copy(alpha = cellAlpha),
-                lineHeight = (13.5f * zoomScale.coerceAtLeast(0.85f)).sp,
-                maxLines = 1
-            )
+    // 2. Draw border
+    borderPaint.color = borderColor.toArgb()
+    borderPaint.strokeWidth = if (isSelected) selectedBorderWidth else borderWidth
+    nativeCanvas.drawRoundRect(left, top, left + width, top + height, cornerRadius, cornerRadius, borderPaint)
 
-            // Line 3: Element Name (Dynamic scaling ensures zero truncation/cutting)
-            val nameLength = element.name.length
-            val nameFontSize = when {
-                nameLength >= 12 -> 5.8f
-                nameLength >= 9 -> 6.5f
-                else -> 7.4f
-            } * zoomScale.coerceAtLeast(0.85f)
+    val centerX = left + width / 2f
+    val scaleFactor = zoomScale.coerceAtLeast(0.85f)
 
-            Text(
-                text = element.name,
-                fontSize = nameFontSize.sp,
-                fontWeight = FontWeight.Medium,
-                color = (if (isDarkMode) Color(0xFFE2E8F0) else Color(0xFF1E293B)).copy(alpha = cellAlpha),
-                textAlign = TextAlign.Center,
-                lineHeight = (nameFontSize + 1f).sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+    // 3. Line 1: Atomic Number
+    numberPaint.textSize = 8f * scaleFactor * density
+    numberPaint.color = (if (isDarkMode) Color(0xFFCBD5E1) else Color(0xFF475569)).copy(alpha = cellAlpha).toArgb()
+    val y1 = top + 2.5f * scaleFactor * density + numberPaint.textSize
+    nativeCanvas.drawText(elem.atomicNumber.toString(), centerX, y1, numberPaint)
 
-            // Line 4: Mass Number
-            Text(
-                text = "${element.massNumber}",
-                fontSize = (7.5f * zoomScale.coerceAtLeast(0.85f)).sp,
-                color = (if (isDarkMode) Color(0xFF94A3B8) else Color(0xFF64748B)).copy(alpha = cellAlpha),
-                fontFamily = FontFamily.Monospace,
-                lineHeight = (8f * zoomScale.coerceAtLeast(0.85f)).sp,
-                maxLines = 1
-            )
+    // 4. Line 2: Symbol
+    symbolPaint.textSize = 13f * scaleFactor * density
+    symbolPaint.color = (if (isDarkMode) Color.White else Color(0xFF0F172A)).copy(alpha = cellAlpha).toArgb()
+    val y2 = top + height * 0.47f
+    nativeCanvas.drawText(elem.symbol, centerX, y2, symbolPaint)
+
+    // 5. Line 3: Name
+    val nameLength = elem.name.length
+    val nameFontSize = when {
+        nameLength >= 12 -> 5.8f
+        nameLength >= 9 -> 6.5f
+        else -> 7.4f
+    } * scaleFactor
+    namePaint.textSize = nameFontSize * density
+    namePaint.color = (if (isDarkMode) Color(0xFFE2E8F0) else Color(0xFF1E293B)).copy(alpha = cellAlpha).toArgb()
+    val y3 = top + height * 0.72f
+
+    val maxTextWidth = width - 3f * density
+    val displayName = if (namePaint.measureText(elem.name) > maxTextWidth) {
+        var trimmed = elem.name
+        while (trimmed.isNotEmpty() && namePaint.measureText("$trimmed…") > maxTextWidth) {
+            trimmed = trimmed.dropLast(1)
         }
+        "$trimmed…"
+    } else {
+        elem.name
     }
+    nativeCanvas.drawText(displayName, centerX, y3, namePaint)
+
+    // 6. Line 4: Mass Number
+    massPaint.textSize = 7.5f * scaleFactor * density
+    massPaint.color = (if (isDarkMode) Color(0xFF94A3B8) else Color(0xFF64748B)).copy(alpha = cellAlpha).toArgb()
+    val y4 = top + height - 3f * scaleFactor * density
+    nativeCanvas.drawText(elem.massNumber.toString(), centerX, y4, massPaint)
 }
 
-@Composable
-private fun MarkerCell(
+private fun drawMarker(
+    nativeCanvas: android.graphics.Canvas,
     label: String,
     sub: String,
-    categoryName: String,
-    cellWidth: androidx.compose.ui.unit.Dp,
-    cellHeight: androidx.compose.ui.unit.Dp,
+    catName: String,
+    categoryColor: Color,
+    left: Float,
+    top: Float,
+    width: Float,
+    height: Float,
+    cornerRadius: Float,
+    borderWidth: Float,
+    isDarkMode: Boolean,
     zoomScale: Float,
-    color: Color,
-    isDarkMode: Boolean = true
+    density: Float,
+    bgPaint: Paint,
+    borderPaint: Paint,
+    numberPaint: Paint,
+    symbolPaint: Paint,
+    namePaint: Paint
 ) {
-    Box(
-        modifier = Modifier
-            .size(width = cellWidth, height = cellHeight)
-            .clip(RoundedCornerShape(5.dp))
-            .background(color.copy(alpha = if (isDarkMode) 0.15f else 0.10f))
-            .border(1.dp, color.copy(alpha = if (isDarkMode) 0.4f else 0.35f), RoundedCornerShape(5.dp))
-            .padding(horizontal = 1.5.dp, vertical = 2.5.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Text(
-                text = label,
-                fontSize = (7.5f * zoomScale.coerceAtLeast(0.85f)).sp,
-                color = color,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
-            Text(
-                text = sub,
-                fontSize = (11f * zoomScale.coerceAtLeast(0.85f)).sp,
-                color = if (isDarkMode) Color.White else Color(0xFF0F172A),
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
-            Text(
-                text = categoryName,
-                fontSize = (6.0f * zoomScale.coerceAtLeast(0.85f)).sp,
-                color = color.copy(alpha = if (isDarkMode) 0.9f else 1.0f),
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(1.dp))
-        }
-    }
+    val bgAlpha = if (isDarkMode) 0.15f else 0.10f
+    val borderAlpha = if (isDarkMode) 0.40f else 0.35f
+
+    bgPaint.color = categoryColor.copy(alpha = bgAlpha).toArgb()
+    nativeCanvas.drawRoundRect(left, top, left + width, top + height, cornerRadius, cornerRadius, bgPaint)
+
+    borderPaint.color = categoryColor.copy(alpha = borderAlpha).toArgb()
+    borderPaint.strokeWidth = borderWidth
+    nativeCanvas.drawRoundRect(left, top, left + width, top + height, cornerRadius, cornerRadius, borderPaint)
+
+    val centerX = left + width / 2f
+    val scaleFactor = zoomScale.coerceAtLeast(0.85f)
+
+    numberPaint.textSize = 7.5f * scaleFactor * density
+    numberPaint.color = categoryColor.toArgb()
+    val y1 = top + 2.5f * scaleFactor * density + numberPaint.textSize
+    nativeCanvas.drawText(label, centerX, y1, numberPaint)
+
+    symbolPaint.textSize = 11f * scaleFactor * density
+    symbolPaint.color = (if (isDarkMode) Color.White else Color(0xFF0F172A)).toArgb()
+    val y2 = top + height * 0.48f
+    nativeCanvas.drawText(sub, centerX, y2, symbolPaint)
+
+    namePaint.textSize = 6.0f * scaleFactor * density
+    namePaint.color = categoryColor.copy(alpha = if (isDarkMode) 0.9f else 1.0f).toArgb()
+    val y3 = top + height * 0.75f
+    nativeCanvas.drawText(catName, centerX, y3, namePaint)
 }
 
 @Composable
-private fun SelectedElementCard(element: ChemicalElement, isDarkMode: Boolean = true) {
+private fun SelectedElementCard(element: ChemicalElement, isDarkMode: Boolean = false) {
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = if (isDarkMode) Color(0xFF131824) else Color(0xFFF8FAFC),

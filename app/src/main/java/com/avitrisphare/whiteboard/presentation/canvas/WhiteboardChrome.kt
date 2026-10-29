@@ -2195,7 +2195,7 @@ fun AvitriSphareWhiteboardChrome(
                             }
                         }
                     }
-                    "utilities" -> DockPopover(maxWidth = 580.dp) {
+                    "utilities" -> DockPopover(maxWidth = 580.dp, scrollable = false) {
                         val utilityTools = setOf(
                             WhiteboardTool.SPOTLIGHT,
                             WhiteboardTool.SHADE,
