@@ -86,8 +86,11 @@ fun DrawScope.drawVectorInk(
         }
         if (selectedStrokes.isNotEmpty()) drawSelectionBox(selectedStrokes, scale)
         for (stroke in selectedStrokes) {
-            if (!stroke.isPlacedMedia()) {
-                renderStroke(context, stroke, scale, false)
+            renderStroke(context, stroke, scale, false)
+        }
+        for (stroke in strokes) {
+            if (stroke.isPlacedMedia()) {
+                renderStroke(context, stroke, scale, stroke.id in selectedIds)
             }
         }
     }

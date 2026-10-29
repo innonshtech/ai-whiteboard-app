@@ -305,6 +305,14 @@ fun formulaToMathMl(formula: Formula): String {
 fun formulaPadding(size: Float): Float = size * 0.45f
 
 fun strokeSelectionBounds(stroke: Stroke): Rect {
+    if (stroke.strokeType == StrokeType.TEXT && stroke.points.isNotEmpty()) {
+        val origin = stroke.points.first()
+        val size = stroke.strokeWidth.coerceIn(12f, 120f)
+        val textLen = stroke.text.length.coerceAtLeast(1)
+        val width = maxOf(textLen * (size * 0.65f), 48f)
+        val height = size * 1.3f
+        return Rect(origin.x, origin.y - height * 0.8f, origin.x + width, origin.y + height * 0.5f)
+    }
     if (stroke.strokeType == StrokeType.EQUATION && stroke.points.isNotEmpty()) {
         val origin = stroke.points.first()
         val size = stroke.strokeWidth.coerceAtLeast(28f)

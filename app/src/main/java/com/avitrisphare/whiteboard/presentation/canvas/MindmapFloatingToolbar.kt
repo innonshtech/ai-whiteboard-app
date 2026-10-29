@@ -177,23 +177,12 @@ fun MindmapNodeToolbar(
 
                 ToolbarButton(
                     icon = Icons.Default.Timeline,
-                    label = "Line",
-                    highlight = isLineConnecting || activeAction == "line",
+                    label = "Connect",
+                    highlight = isLineConnecting || activeAction == "connect",
                     onClick = {
-                        activeAction = "line"
+                        activeAction = "connect"
                         activePopover = null
                         onStartLineConnection()
-                    }
-                )
-
-                ToolbarButton(
-                    icon = Icons.Default.Straight,
-                    label = "Connector",
-                    highlight = activeAction == "connector",
-                    onClick = {
-                        activeAction = "connector"
-                        activePopover = null
-                        onWireStyleToggle()
                     }
                 )
 
@@ -263,25 +252,6 @@ fun MindmapNodeToolbar(
                         activeAction = "image"
                         activePopover = null
                         onInsertImage()
-                    }
-                )
-
-                // Divider
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .height(30.dp)
-                        .background(Color(0xFFE5E7EB))
-                )
-
-                ToolbarButton(
-                    icon = Icons.Default.ThumbUp,
-                    label = "React",
-                    highlight = activeAction == "react",
-                    onClick = {
-                        activeAction = "react"
-                        activePopover = null
-                        onOpenStickers()
                     }
                 )
 

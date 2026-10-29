@@ -1401,9 +1401,10 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun strokeAt(worldPoint: Offset): Stroke? {
-        return _state.value.strokes.lastOrNull { stroke ->
-            if (stroke.strokeType == StrokeType.STICKER) return@lastOrNull false
-            if (stroke.isPlacedMedia() ||
+        fun testStroke(stroke: Stroke): Boolean {
+            if (stroke.strokeType == StrokeType.STICKER) return false
+            if (stroke.strokeType == StrokeType.IMAGE && stroke.linkToId.isNotBlank()) return false
+            return if (stroke.isPlacedMedia() ||
                 isMindMapNode(stroke) ||
                 isFillableShape(stroke.strokeType) ||
                 stroke.fillColor != 0 ||
@@ -1434,6 +1435,17 @@ class CanvasViewModel @Inject constructor(
             } else {
                 CanvasTransform.strokeIntersectsPoint(stroke, worldPoint, thresholdRadius = 24f)
             }
+        }
+
+        // Check child / non-container strokes (images, text, handwriting) first so they can be selected independently
+        val hitChild = _state.value.strokes.lastOrNull { stroke ->
+            !isMindMapNode(stroke) && testStroke(stroke)
+        }
+        if (hitChild != null) return hitChild
+
+        // Fallback to container mind map nodes
+        return _state.value.strokes.lastOrNull { stroke ->
+            isMindMapNode(stroke) && testStroke(stroke)
         }
     }
 
@@ -1600,13 +1612,18 @@ class CanvasViewModel @Inject constructor(
 
         val scaledStrokes = snapshot.map { stroke ->
             if (stroke.stickerKind.contains(":locked")) return@map stroke
-            val newPoints = stroke.points.map { pt ->
-                Offset(
-                    anchor.x + (pt.x - anchor.x) * scaleX,
-                    anchor.y + (pt.y - anchor.y) * scaleY
-                )
+            val isMindMap = isMindMapNode(stroke) || stroke.strokeType == StrokeType.CONNECTOR
+            val newPoints = if (stroke.strokeType == StrokeType.CONNECTOR) {
+                stroke.points
+            } else {
+                stroke.points.map { pt ->
+                    Offset(
+                        anchor.x + (pt.x - anchor.x) * scaleX,
+                        anchor.y + (pt.y - anchor.y) * scaleY
+                    )
+                }
             }
-            val newWidth = (stroke.strokeWidth * avgScale).coerceIn(1f, 60f)
+            val newWidth = if (isMindMap) stroke.strokeWidth else (stroke.strokeWidth * avgScale).coerceIn(1f, 60f)
             stroke.copy(points = newPoints, strokeWidth = newWidth)
         }
 
@@ -1705,8 +1722,13 @@ class CanvasViewModel @Inject constructor(
         if (delta == Offset.Zero || _state.value.selectedStrokeIds.isEmpty()) return
         val selectedIds = _state.value.selectedStrokeIds
         _state.update { s ->
+            val selectedNodes = s.strokes.filter { it.id in selectedIds && isMindMapNode(it) }
             val movedStrokes = s.strokes.map { stroke ->
-                if (stroke.id in selectedIds && !stroke.stickerKind.contains(":locked")) {
+                val shouldMove = (stroke.id in selectedIds ||
+                    (stroke.linkToId.isNotEmpty() && stroke.linkToId in selectedIds && stroke.strokeType != StrokeType.CONNECTOR) ||
+                    (stroke.strokeType in HANDWRITING_TYPES && selectedNodes.any { node -> node.bounds.contains(stroke.bounds.center) })) &&
+                    !stroke.stickerKind.contains(":locked")
+                if (shouldMove) {
                     val newPoints = stroke.points.map { Offset(it.x + delta.x, it.y + delta.y) }
                     stroke.copy(points = newPoints)
                 } else {
@@ -1805,10 +1827,18 @@ class CanvasViewModel @Inject constructor(
                 val targetBox = _state.value.strokes.firstOrNull { it.id == targetBoxId }
                 if (targetBox != null) {
                     saveToUndoStack()
-                    val updated = _state.value.strokes.map {
-                        if (it.id == targetBoxId) it.copy(imageUri = stored) else it
+                    _state.update { s ->
+                        val cleaned = s.strokes.filterNot { it.linkToId == targetBoxId && it.strokeType == StrokeType.IMAGE }
+                        val updated = cleaned.map {
+                            if (it.id == targetBoxId) it.copy(imageUri = stored) else it
+                        }
+                        s.copy(
+                            strokes = updated,
+                            selectedStrokeIds = setOf(targetBoxId),
+                            canUndo = true,
+                            canRedo = false
+                        )
                     }
-                    _state.update { it.copy(strokes = updated, selectedStrokeIds = setOf(targetBoxId)) }
                     redoStack.clear()
                     scheduleSave()
                     return@launch
@@ -1851,15 +1881,26 @@ class CanvasViewModel @Inject constructor(
         val targetBox = targetMindmapBoxId?.let { id -> _state.value.strokes.firstOrNull { it.id == id } }
         targetMindmapBoxId = null
 
-        val (placedPoint, placedW, placedH) = if (targetBox != null && type == StrokeType.IMAGE) {
-            val b = strokeSelectionBounds(targetBox)
-            val pad = 12f
-            val w = (b.width - pad * 2f).coerceAtLeast(60f)
-            val h = (b.height - pad * 2f).coerceAtLeast(40f)
-            Triple(Offset(b.left + pad, b.top + pad), w, h)
-        } else {
-            Triple(worldPoint, width, height)
+        if (targetBox != null && type == StrokeType.IMAGE) {
+            saveToUndoStack()
+            _state.update { s ->
+                val cleaned = s.strokes.filterNot { it.linkToId == targetBox.id && it.strokeType == StrokeType.IMAGE }
+                val updated = cleaned.map {
+                    if (it.id == targetBox.id) it.copy(imageUri = imageUri) else it
+                }
+                s.copy(
+                    strokes = updated,
+                    selectedStrokeIds = setOf(targetBox.id),
+                    canUndo = true,
+                    canRedo = false
+                )
+            }
+            redoStack.clear()
+            scheduleSave()
+            return
         }
+
+        val (placedPoint, placedW, placedH) = Triple(worldPoint, width, height)
 
         saveToUndoStack()
         val newStroke = Stroke(
@@ -1867,7 +1908,8 @@ class CanvasViewModel @Inject constructor(
             strokeType = type,
             imageUri = imageUri,
             text = text,
-            colorValue = 0xFF6366F1.toInt()
+            colorValue = 0xFF6366F1.toInt(),
+            linkToId = targetBox?.id ?: ""
         )
         _state.update { s ->
             s.copy(
@@ -1925,7 +1967,8 @@ class CanvasViewModel @Inject constructor(
     fun updateStrokeText(id: String, newText: String) {
         saveToUndoStack()
         _state.update { s ->
-            val updated = s.strokes.map {
+            val cleaned = s.strokes.filterNot { it.linkToId == id && it.strokeType == StrokeType.TEXT }
+            val updated = cleaned.map {
                 if (it.id == id) it.copy(text = newText) else it
             }
             s.copy(strokes = updated, canUndo = true, canRedo = false)
@@ -1962,11 +2005,78 @@ class CanvasViewModel @Inject constructor(
 
     fun resizeStroke(id: String, hit: ShapeHandleHit, point: Offset) {
         _state.update { s ->
-            s.copy(
-                strokes = s.strokes.map { stroke ->
-                    if (stroke.id == id) resizeShape(stroke, hit, point) else stroke
-                }
-            )
+            val orig = s.strokes.find { it.id == id }
+            val isParentNode = orig != null && isMindMapNode(orig)
+            val isLinkedImage = orig != null && orig.strokeType == StrokeType.IMAGE && orig.linkToId.isNotBlank()
+            val parentNode = if (isLinkedImage) s.strokes.find { it.id == orig?.linkToId } else null
+
+            var resizedTarget = if (orig != null) resizeShape(orig, hit, point) else orig
+
+            // If resizing an image inside a parent box, clamp strictly within parent bounds
+            if (isLinkedImage && parentNode != null && resizedTarget != null && resizedTarget.points.size >= 2) {
+                val pb = parentNode.bounds
+                val p1 = resizedTarget.points.first()
+                val p2 = resizedTarget.points.last()
+                val left = minOf(p1.x, p2.x).coerceAtLeast(pb.left + 4f)
+                val top = minOf(p1.y, p2.y).coerceAtLeast(pb.top + 4f)
+                val right = maxOf(p1.x, p2.x).coerceAtMost(pb.right - 4f).coerceAtLeast(left + 16f)
+                val bottom = maxOf(p1.y, p2.y).coerceAtMost(pb.bottom - 4f).coerceAtLeast(top + 16f)
+                resizedTarget = resizedTarget.copy(points = listOf(Offset(left, top), Offset(right, bottom)))
+            }
+
+            val updated = s.strokes.map { stroke ->
+                if (stroke.id == id && resizedTarget != null) resizedTarget else stroke
+            }
+
+            // If parent node was resized, scale all linked child strokes proportionally
+            val fullyScaled = if (isParentNode && orig != null && resizedTarget != null) {
+                val oldB = orig.bounds
+                val newB = resizedTarget.bounds
+                if (oldB.width > 0f && oldB.height > 0f) {
+                    val sx = (newB.width / oldB.width).coerceIn(0.1f, 10f)
+                    val sy = (newB.height / oldB.height).coerceIn(0.1f, 10f)
+                    val avgS = (sx + sy) / 2f
+                    updated.map { stroke ->
+                        if (stroke.linkToId == id && stroke.strokeType != StrokeType.CONNECTOR) {
+                            val scaledPts = stroke.points.map { pt ->
+                                Offset(newB.left + (pt.x - oldB.left) * sx, newB.top + (pt.y - oldB.top) * sy)
+                            }
+                            val clampedPts = if (stroke.strokeType == StrokeType.IMAGE && scaledPts.size >= 2) {
+                                val pad = 4f
+                                val p1 = scaledPts.first()
+                                val p2 = scaledPts.last()
+                                val clLeft = minOf(p1.x, p2.x).coerceAtLeast(newB.left + pad)
+                                val clTop = minOf(p1.y, p2.y).coerceAtLeast(newB.top + pad)
+                                val clRight = maxOf(p1.x, p2.x).coerceAtMost(newB.right - pad).coerceAtLeast(clLeft + 16f)
+                                val clBottom = maxOf(p1.y, p2.y).coerceAtMost(newB.bottom - pad).coerceAtLeast(clTop + 16f)
+                                listOf(Offset(clLeft, clTop), Offset(clRight, clBottom))
+                            } else {
+                                scaledPts
+                            }
+                            val newW = if (stroke.strokeType == StrokeType.IMAGE) stroke.strokeWidth
+                                       else (stroke.strokeWidth * avgS).coerceIn(1f, 60f)
+                            stroke.copy(points = clampedPts, strokeWidth = newW)
+                        } else stroke
+                    }
+                } else updated
+            } else updated
+
+            val strokeMap = fullyScaled.associateBy { it.id }
+            val withConnectors = fullyScaled.map { stroke ->
+                if (stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId == id || stroke.linkToId == id)) {
+                    val from = strokeMap[stroke.linkFromId]
+                    val to = strokeMap[stroke.linkToId]
+                    if (from != null && to != null) {
+                        val (p1, p2) = if (stroke.stickerKind == "straight") {
+                            MindmapEngine.calculateStraightAnchors(from.bounds, to.bounds)
+                        } else {
+                            MindmapEngine.calculateAnchors(from.bounds, to.bounds)
+                        }
+                        stroke.copy(points = listOf(p1, p2))
+                    } else stroke
+                } else stroke
+            }
+            s.copy(strokes = withConnectors)
         }
         scheduleSave()
     }
@@ -2624,19 +2734,11 @@ class CanvasViewModel @Inject constructor(
     ) {
         saveToUndoStack()
 
-        // Position within visible viewport: If another root node exists at this exact center, cascade slightly
-        val existingRoots = _state.value.strokes.filter {
-            it.stickerKind == "mindmap:root" || (isMindMapNode(it) && it.strokeType == StrokeType.ROUND_RECT)
-        }
-        var effectiveCenter = center
-        val overlapping = existingRoots.filter {
-            kotlin.math.abs(it.bounds.center.x - effectiveCenter.x) < 50f &&
-                kotlin.math.abs(it.bounds.center.y - effectiveCenter.y) < 50f
-        }
-        if (overlapping.isNotEmpty()) {
-            val offsetStep = (overlapping.size * 48f)
-            effectiveCenter = Offset(center.x + offsetStep, center.y + offsetStep)
-        }
+        // Position within visible viewport avoiding collision with existing mind maps
+        val effectiveCenter = MindmapEngine.calculateNonOverlappingCenter(
+            existingStrokes = _state.value.strokes,
+            requestedCenter = center
+        )
 
         val templateStrokes = MindmapEngine.generateTemplate(kind, effectiveCenter)
         val rootNode = templateStrokes.firstOrNull { it.stickerKind == "mindmap:root" } ?: templateStrokes.firstOrNull()
@@ -2658,7 +2760,19 @@ class CanvasViewModel @Inject constructor(
         val parent = _state.value.strokes.find { it.id == parentId } ?: return
         saveToUndoStack()
         val branchIndex = _state.value.strokes.count { it.strokeType == StrokeType.CONNECTOR && it.linkFromId == parentId }
-        val (childNode, connector) = MindmapEngine.createBranchInDirection(parent, direction, branchIndex)
+        val parentWireStyle = _state.value.strokes
+            .find { it.strokeType == StrokeType.CONNECTOR && (it.linkToId == parentId || it.linkFromId == parentId) }
+            ?.stickerKind ?: "orthogonal"
+        val existingBoxes = _state.value.strokes.filter {
+            (isMindMapNode(it) || it.isPlacedMedia()) && it.id != parentId
+        }.map { it.bounds }
+        val (childNode, connector) = MindmapEngine.createBranchInDirection(
+            parent,
+            direction,
+            branchIndex,
+            existingBounds = existingBoxes,
+            wireStyle = parentWireStyle
+        )
         _state.update { s ->
             s.copy(
                 strokes = s.strokes + listOf(childNode, connector),
@@ -2749,18 +2863,7 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun setNodeText(nodeId: String, text: String) {
-        saveToUndoStack()
-        _state.update { s ->
-            s.copy(
-                strokes = s.strokes.map {
-                    if (it.id == nodeId) it.copy(text = text) else it
-                },
-                canUndo = true,
-                canRedo = false
-            )
-        }
-        redoStack.clear()
-        scheduleSave()
+        updateStrokeText(nodeId, text)
     }
 
     fun connectMindmapBoxes(boxAId: String, boxBId: String) {
