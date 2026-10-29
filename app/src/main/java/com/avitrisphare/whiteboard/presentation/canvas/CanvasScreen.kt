@@ -512,6 +512,8 @@ fun List<Offset>.toSmoothedPath(): Path {
 
     path.lineTo(last().x, last().y)
 
+    path.close()  // close the lasso loop so fill and dashed stroke join start to end
+
     return path
 
 }
@@ -2708,6 +2710,15 @@ fun CanvasScreen(
 
     }
 
+    // Clear stale lasso preview whenever the user switches away from LASSO tool
+    LaunchedEffect(state.currentTool) {
+        if (state.currentTool != WhiteboardTool.LASSO) {
+            lassoPoints = emptyList()
+        }
+        viewModel.dismissSmartWrite()
+    }
+
+
 
 
     fun placeMathTool(kind: MathToolKind, center: Offset, isDrag: Boolean = false) {
@@ -3355,6 +3366,7 @@ fun CanvasScreen(
                         var down = awaitFirstDown(requireUnconsumed = false)
 
                         dockDismissNonce++
+                        viewModel.dismissSmartWrite()
 
                         while (down.rejectedPalm(stylusDrawing = false)) {
 
@@ -6259,6 +6271,12 @@ fun CanvasScreen(
 
                         }
 
+                        // Lasso cleanup: always clear the lasso preview path regardless of
+                        // whether the gesture was cancelled by multi-touch or palm rejection.
+                        if (wasMultiTouch && lassoPoints.isNotEmpty()) {
+                            lassoPoints = emptyList()
+                        }
+
                         if (wasMultiTouch) {
 
                             viewModel.setMathTools(mathTools)
@@ -8527,6 +8545,13 @@ fun CanvasScreen(
 
         val smartOffer = state.smartWriteOffer
 
+        LaunchedEffect(smartOffer) {
+            if (smartOffer != null) {
+                delay(5000L)
+                viewModel.dismissSmartWrite()
+            }
+        }
+
         if (smartOffer != null) {
 
             val anchor = CanvasTransform.worldToScreen(
@@ -8541,7 +8566,7 @@ fun CanvasScreen(
 
             val dockTop = chromeBounds.dock?.top ?: Float.MAX_VALUE
 
-            val targetY = if (anchor.y + 70f >= dockTop) {
+            val rawY = if (anchor.y + 70f >= dockTop) {
 
                 (anchor.y - 70f).coerceAtLeast(80f)
 
@@ -8551,13 +8576,17 @@ fun CanvasScreen(
 
             }
 
+            val safeX = anchor.x.coerceIn(16f, (canvasSize.width - 500f).coerceAtLeast(16f))
+
+            val safeY = rawY.coerceIn(80f, (dockTop - 65f).coerceAtLeast(80f))
+
             Surface(
 
                 modifier = Modifier
 
-                    .offset { IntOffset(anchor.x.roundToInt().coerceAtLeast(8), targetY.roundToInt()) }
+                    .offset { IntOffset(safeX.roundToInt(), safeY.roundToInt()) }
 
-                    .widthIn(max = 520.dp),
+                    .widthIn(max = 480.dp),
 
                 shape = RoundedCornerShape(16.dp),
 
@@ -10964,4 +10993,3 @@ private fun frostUnchanged(current: List<Rect>, next: List<Rect>): Boolean {
     return true
 
 }
-
