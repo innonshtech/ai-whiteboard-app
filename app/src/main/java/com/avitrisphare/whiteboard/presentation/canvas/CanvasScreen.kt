@@ -1729,6 +1729,9 @@ fun CanvasScreen(
                     state.selectedColor,
                     state.secondaryColor,
                     state.strokeWidth,
+                    state.secondaryStrokeWidth,
+                    state.secondaryInkTool,
+                    state.inkTool,
                     state.eraserMode,
                     state.eraserSize,
                     state.isToolLocked,
@@ -1768,9 +1771,7 @@ fun CanvasScreen(
                             if (isStylusPointer() || isMousePointer()) return false
                             if (tool != WhiteboardTool.ERASER && tool !in WRITING_TOOLS) return false
                             if (isPalmTouch()) return true
-                            // A finger or palm after the pen has written should erase, not draw.
-                            // The eraser tool itself keeps the size the user picked.
-                            return touchContacts.sawStylus && tool in WRITING_TOOLS
+                            return false
                         }
                         var down = awaitFirstDown(requireUnconsumed = false)
                         dockDismissNonce++
@@ -1817,11 +1818,10 @@ fun CanvasScreen(
                         val isStylusType = rawToolType == MotionEvent.TOOL_TYPE_STYLUS || down.type == PointerType.Stylus
                         val majorPx = touchContacts.majorPx(down.position)
                         val minorPx = touchContacts.minorPx(down.position)
-                        val isPenNib = isPenNibContact(
+                        val isPenNib = touchContacts.isPenNib(
+                            position = down.position,
                             isEraser = isEraserType,
                             isStylus = isStylusType || stylusDraw,
-                            majorPx = majorPx,
-                            minorPx = minorPx,
                             xdpi = xdpi
                         )
 
@@ -1830,7 +1830,9 @@ fun CanvasScreen(
                         } else {
                             0f
                         }
-                        val secondaryStrokeWidth = if (contactSizePx > 0f) {
+                        val secondaryStrokeWidth = if (state.secondaryStrokeWidth > 0f) {
+                            state.secondaryStrokeWidth
+                        } else if (contactSizePx > 0f) {
                             if (contactSizePx <= 5.0f) {
                                 (contactSizePx * 5f).coerceIn(14f, 32f)
                             } else {
@@ -1852,10 +1854,14 @@ fun CanvasScreen(
                             } else if (isShapeActive) {
                                 state.currentTool
                             } else {
-                                latestState.inkTool
+                                if (isPenNib) latestState.inkTool else latestState.secondaryInkTool
                             }
                         } else {
-                            latestState.currentTool
+                            if (latestState.currentTool in WRITING_TOOLS) {
+                                if (isPenNib) latestState.inkTool else latestState.secondaryInkTool
+                            } else {
+                                latestState.currentTool
+                            }
                         }
                         fun handRadius(pointerId: androidx.compose.ui.input.pointer.PointerId): Float {
                             val major = touchContacts.majorPx(pointerId)
@@ -2293,7 +2299,7 @@ fun CanvasScreen(
                                 }
                             }
                             WhiteboardTool.LASER -> {
-                                viewModel.addLaserPoint(downWorld)
+                                viewModel.startLaser(downWorld)
                             }
                             WhiteboardTool.TEXT -> {
                                 pendingWorldPoint = downWorld
@@ -3167,6 +3173,9 @@ fun CanvasScreen(
                                 val next = pageStep(latest.pageIndex, latest.pageCount, 1)
                                 if (next != latest.pageIndex) viewModel.selectPage(next)
                             }
+                            if (activeTool == WhiteboardTool.LASER) {
+                                viewModel.finishLaser()
+                            }
                             if (activeTool == WhiteboardTool.LASSO) {
                                 if (isDraggingSelection) {
                                     viewModel.endSelectionMove()
@@ -3197,7 +3206,9 @@ fun CanvasScreen(
                                     val curMajor = touchContacts.majorPx(down.position)
                                     val curMinor = touchContacts.minorPx(down.position)
                                     val curContact = if (curMajor > 0f) (if (curMinor > 0f) (curMajor + curMinor) / 2f else curMajor) else 0f
-                                    if (curContact > 0f) {
+                                    if (state.secondaryStrokeWidth > 0f) {
+                                        state.secondaryStrokeWidth
+                                    } else if (curContact > 0f) {
                                         if (curContact <= 5.0f) (curContact * 5f).coerceIn(14f, 32f) else curContact.coerceIn(12f, 44f)
                                     } else activeInkWidth
                                 }
@@ -3339,10 +3350,45 @@ fun CanvasScreen(
                     scale(canvasScale, canvasScale, pivot = Offset.Zero)
                 }) {
                     if (state.laserPoints.isNotEmpty()) {
+                        val scale = canvasScale.coerceAtLeast(0.5f)
+                        if (state.laserPoints.size >= 2) {
+                            val laserPath = state.laserPoints.toSmoothedPath()
+                            // Outer laser glow
+                            drawPath(
+                                path = laserPath,
+                                color = Color(0x55FF2A2A),
+                                style = DrawStroke(
+                                    width = 14f / scale,
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
+                            // Intense laser core beam
+                            drawPath(
+                                path = laserPath,
+                                color = Color(0xFFFF2A2A),
+                                style = DrawStroke(
+                                    width = 6f / scale,
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
+                            // Bright white center line
+                            drawPath(
+                                path = laserPath,
+                                color = Color(0xFFFFF0F0),
+                                style = DrawStroke(
+                                    width = 2.5f / scale,
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
+                        }
                         val center = state.laserPoints.last()
-                        val radius = 10f / canvasScale.coerceAtLeast(0.5f)
-                        drawCircle(Color(0x55FF2A2A), radius * 2.2f, center)
+                        val radius = 9f / scale
+                        drawCircle(Color(0x55FF2A2A), radius * 2.4f, center)
                         drawCircle(Color(0xFFFF2A2A), radius, center)
+                        drawCircle(Color.White, radius * 0.45f, center)
                     }
                     if (lassoPoints.size >= 2) {
                         val lassoPath = lassoPoints.toSmoothedPath()
@@ -3719,9 +3765,17 @@ fun CanvasScreen(
             },
             isPeriodicTableVisible = periodicTableState.isVisible,
             onTogglePeriodicTable = {
-                val next = !periodicTableState.isVisible
-                periodicTableState = periodicTableState.copy(isVisible = next)
-                if (next) bringToolToFront(UtilityToolKind.PERIODIC_TABLE)
+                if (periodicTableState.isVisible && periodicTableState.isMinimized) {
+                    periodicTableState = periodicTableState.copy(isMinimized = false)
+                    bringToolToFront(UtilityToolKind.PERIODIC_TABLE)
+                } else {
+                    val next = !periodicTableState.isVisible
+                    periodicTableState = periodicTableState.copy(
+                        isVisible = next,
+                        isMinimized = if (next) false else periodicTableState.isMinimized
+                    )
+                    if (next) bringToolToFront(UtilityToolKind.PERIODIC_TABLE)
+                }
             },
             onOpenStickerEmoji = {
                 viewModel.clearSelection()

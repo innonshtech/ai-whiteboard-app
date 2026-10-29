@@ -34,6 +34,7 @@ import com.avitrisphare.whiteboard.presentation.canvas.export.ExportDestination
 import com.avitrisphare.whiteboard.presentation.canvas.export.ExportFormat
 import com.avitrisphare.whiteboard.presentation.canvas.export.ExportResult
 import com.avitrisphare.whiteboard.presentation.canvas.export.WhiteboardExportManager
+import com.avitrisphare.whiteboard.presentation.canvas.utility.PeriodicTableData
 import com.avitrisphare.whiteboard.presentation.entry.PanelSessionStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -403,6 +404,7 @@ class CanvasViewModel @Inject constructor(
         }
         viewModelScope.launch(Dispatchers.IO) {
             handwritingReader.prefetch(SmartWriteLanguage("en", "English", SmartWriteScript.LATIN))
+            PeriodicTableData.elements
         }
     }
 
@@ -1391,11 +1393,32 @@ class CanvasViewModel @Inject constructor(
 
     private fun smartPrefs() = context.getSharedPreferences(SHAPE_PREFS, Context.MODE_PRIVATE)
 
-    fun addLaserPoint(point: Offset) {
+    fun startLaser(point: Offset) {
         laserJob?.cancel()
         _state.update { it.copy(laserPoints = listOf(point)) }
+    }
+
+    fun addLaserPoint(point: Offset) {
+        laserJob?.cancel()
+        _state.update { s ->
+            val last = s.laserPoints.lastOrNull()
+            if (last != null && (last - point).getDistanceSquared() < 9f) {
+                s
+            } else {
+                val list = if (s.laserPoints.size > 500) s.laserPoints.drop(1) else s.laserPoints
+                s.copy(laserPoints = list + point)
+            }
+        }
         laserJob = viewModelScope.launch {
-            delay(900)
+            delay(2000L)
+            _state.update { it.copy(laserPoints = emptyList()) }
+        }
+    }
+
+    fun finishLaser() {
+        laserJob?.cancel()
+        laserJob = viewModelScope.launch {
+            delay(2000L)
             _state.update { it.copy(laserPoints = emptyList()) }
         }
     }

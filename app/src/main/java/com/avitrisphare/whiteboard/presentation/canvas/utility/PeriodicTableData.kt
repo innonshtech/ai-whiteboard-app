@@ -133,6 +133,13 @@ object PeriodicTableData {
         ChemicalElement(118, "Og", "Oganesson", 294.0, 7, 18, ElementCategory.UNKNOWN, "Solid", "[Rn] 5f¹⁴ 6d¹⁰ 7s² 7p⁶", "Heaviest element known to science; named after nuclear physicist Yuri Oganessian.")
     )
 
+    val elementByGridPosition: Map<Pair<Int, Int>, ChemicalElement> = elements
+        .filter { it.period != null && it.group != null }
+        .associateBy { it.period to it.group!! }
+
+    val lanthanides: List<ChemicalElement> = elements.filter { it.category == ElementCategory.LANTHANIDE }
+    val actinides: List<ChemicalElement> = elements.filter { it.category == ElementCategory.ACTINIDE }
+
     fun search(query: String, category: ElementCategory?): List<ChemicalElement> {
         val q = query.trim().lowercase()
         return elements.filter { elem ->

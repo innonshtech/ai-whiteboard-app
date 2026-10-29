@@ -1,5 +1,6 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
+import android.content.Context
 import android.view.MotionEvent
 import android.view.View
 import androidx.compose.ui.geometry.Offset
@@ -50,36 +51,205 @@ fun isPalmContact(
 /** Maximum diameter in millimetres for an infrared/passive whiteboard pen nib. */
 const val PEN_NIB_MAX_MM = 9.0f
 
+/**
+ * Universal adaptive touch classifier that automatically differentiates between
+ * fine pen nib (Tip 1 / Primary Color) and blunt back of pen / finger (Tip 2 / Secondary Color).
+ *
+ * It works across all interactive whiteboard panels (MAXHUB, ViewSonic, Promethean, SMART, etc.)
+ * by dynamically learning the panel's bimodal contact size distribution using 1D Otsu clustering
+ * and persisting the calibrated threshold across restarts.
+ */
+class AdaptiveTouchClassifier(private val context: Context?) {
+    private val prefs = context?.applicationContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private val recentSamples = ArrayList<Float>(SAMPLE_CAPACITY)
+
+    var dynamicThreshold: Float = prefs?.getFloat(KEY_THRESHOLD, -1f) ?: -1f
+        private set
+
+    var hasCalibrated: Boolean = dynamicThreshold > 0f
+        private set
+
+    private var minObserved: Float = prefs?.getFloat(KEY_MIN_SIZE, -1f) ?: -1f
+    private var maxObserved: Float = prefs?.getFloat(KEY_MAX_SIZE, -1f) ?: -1f
+
+    companion object {
+        private const val PREFS_NAME = "avitri_touch_calibration"
+        private const val KEY_THRESHOLD = "learned_touch_threshold"
+        private const val KEY_MIN_SIZE = "learned_min_touch_size"
+        private const val KEY_MAX_SIZE = "learned_max_touch_size"
+        private const val SAMPLE_CAPACITY = 32
+
+        @Volatile
+        var defaultInstance = AdaptiveTouchClassifier(null)
+            private set
+
+        @Volatile
+        private var instance: AdaptiveTouchClassifier? = null
+
+        fun get(context: Context): AdaptiveTouchClassifier {
+            return instance ?: synchronized(this) {
+                instance ?: AdaptiveTouchClassifier(context.applicationContext).also {
+                    instance = it
+                    defaultInstance = it
+                }
+            }
+        }
+
+        fun effectiveContactSize(major: Float, minor: Float, size: Float): Float {
+            return when {
+                major > 0f && minor > 0f -> (major + minor) / 2f
+                major > 0f -> major
+                minor > 0f -> minor
+                size > 0f -> size * 100f
+                else -> 0f
+            }
+        }
+    }
+
+    @Synchronized
+    fun recordDown(major: Float, minor: Float, size: Float, tool: Int) {
+        if (tool == MotionEvent.TOOL_TYPE_ERASER) return
+        val contactSize = effectiveContactSize(major, minor, size)
+        // Ignore unmeasured contacts or large palm/fist touches (> 150px)
+        if (contactSize <= 0f || contactSize > 150f) return
+
+        if (recentSamples.size >= SAMPLE_CAPACITY) {
+            recentSamples.removeAt(0)
+        }
+        recentSamples.add(contactSize)
+
+        if (minObserved <= 0f || contactSize < minObserved) {
+            minObserved = contactSize
+        }
+        if (maxObserved <= 0f || contactSize > maxObserved) {
+            maxObserved = contactSize
+        }
+
+        // Fast 2-touch immediate adaptation:
+        // On any panel, the thick tip / finger is at least 1.25x larger than the fine pen nib.
+        if (maxObserved >= minObserved * 1.25f && (maxObserved - minObserved) >= 0.3f) {
+            val split = if (recentSamples.size >= 4) {
+                calculateOtsuSplit(recentSamples) ?: ((minObserved + maxObserved) / 2f)
+            } else {
+                (minObserved + maxObserved) / 2f
+            }
+
+            dynamicThreshold = if (hasCalibrated && dynamicThreshold > 0f) {
+                0.6f * dynamicThreshold + 0.4f * split
+            } else {
+                split
+            }
+            hasCalibrated = true
+            prefs?.edit()
+                ?.putFloat(KEY_THRESHOLD, dynamicThreshold)
+                ?.putFloat(KEY_MIN_SIZE, minObserved)
+                ?.putFloat(KEY_MAX_SIZE, maxObserved)
+                ?.apply()
+            android.util.Log.i("AvitriTouch", "ADAPTED THRESHOLD -> $dynamicThreshold (min=$minObserved, max=$maxObserved, sample=$contactSize)")
+        }
+    }
+
+    private fun calculateOtsuSplit(samples: List<Float>): Float? {
+        val sorted = samples.sorted()
+        val n = sorted.size
+        if (n < 2) return null
+
+        var totalSum = 0.0
+        for (v in sorted) totalSum += v
+
+        var sumB = 0.0
+        var wB = 0
+        var maxVariance = -1.0
+        var bestSplit: Float? = null
+
+        for (i in 0 until n - 1) {
+            wB++
+            val wF = n - wB
+            if (wF == 0) break
+
+            sumB += sorted[i]
+            val mB = sumB / wB
+            val mF = (totalSum - sumB) / wF
+
+            val varianceBetween = wB.toDouble() * wF.toDouble() * (mB - mF) * (mB - mF)
+            if (varianceBetween > maxVariance) {
+                maxVariance = varianceBetween
+                bestSplit = (sorted[i] + sorted[i + 1]) / 2f
+            }
+        }
+        return if (maxVariance > 0.0) bestSplit else null
+    }
+
+    fun isPenNib(
+        isEraser: Boolean,
+        isStylus: Boolean,
+        majorPx: Float,
+        minorPx: Float,
+        xdpi: Float,
+        size: Float = 0f
+    ): Boolean {
+        if (isEraser) return false
+        if (isStylus) return true
+
+        val contactSize = effectiveContactSize(majorPx, minorPx, size)
+        if (contactSize <= 0f) return true // Unreported contact defaults to primary pen
+
+        // 1. If learned/calibrated threshold exists, use it
+        if (hasCalibrated && dynamicThreshold > 0f) {
+            return contactSize <= dynamicThreshold
+        }
+
+        // 2. Cold-start heuristic before two distinct tools are observed on this board:
+        // A) Normalized IR scale (e.g. MAXHUB / SmartSchool telemetry: fine tip ~1.37, thick tip ~3.20)
+        if (contactSize <= 5.0f) {
+            return contactSize <= 2.25f
+        }
+
+        // B) Pixel scale with sensible DPI
+        // A physical fine pen nib is typically <= 3.5mm; fingers are 8mm-15mm
+        val dpi = xdpi.coerceAtLeast(1f)
+        val contactMm = (contactSize / dpi) * 25.4f
+        if (dpi > 50f && dpi < 500f && contactMm in 0.1f..30f) {
+            return contactMm <= 4.0f
+        }
+
+        // C) Generic pixel scale fallback for fine nib
+        return contactSize <= 18f
+    }
+
+    fun calibrateManual(tip1Size: Float, tip2Size: Float) {
+        val split = (tip1Size + tip2Size) / 2f
+        dynamicThreshold = split
+        minObserved = minOf(tip1Size, tip2Size)
+        maxObserved = maxOf(tip1Size, tip2Size)
+        hasCalibrated = true
+        prefs?.edit()
+            ?.putFloat(KEY_THRESHOLD, dynamicThreshold)
+            ?.putFloat(KEY_MIN_SIZE, minObserved)
+            ?.putFloat(KEY_MAX_SIZE, maxObserved)
+            ?.apply()
+    }
+}
+
 fun isPenNibContact(
     isEraser: Boolean,
     isStylus: Boolean,
     majorPx: Float,
     minorPx: Float,
-    xdpi: Float
+    xdpi: Float,
+    size: Float = 0f,
+    classifier: AdaptiveTouchClassifier? = null
 ): Boolean {
-    if (isEraser) return false
-
-    // On interactive whiteboard panels with normalized IR touch scale:
-    // Telemetry from SmartSchool / MAXHUB IFP:
-    // Pen nib (Tip 1): major ≈ 1.37
-    // Back of pen / Finger (Tip 2): major ≈ 3.20
-    if (majorPx in 0.1f..5.0f) {
-        return majorPx <= 2.25f
-    }
-
-    if (isStylus) return true
-
-    val contactSizePx = if (majorPx > 0f) {
-        if (minorPx > 0f) (majorPx + minorPx) / 2f else majorPx
-    } else {
-        0f
-    }
-    if (contactSizePx <= 0f) return true
-    val dpi = xdpi.coerceAtLeast(1f)
-    val majorMm = (majorPx / dpi) * 25.4f
-    val minorMm = if (minorPx > 0f) (minorPx / dpi) * 25.4f else 0f
-    val contactMm = (contactSizePx / dpi) * 25.4f
-    return majorMm <= PEN_NIB_MAX_MM || (minorMm in 0.1f..8.0f) || (contactMm in 0.1f..PEN_NIB_MAX_MM)
+    val targetClassifier = classifier ?: AdaptiveTouchClassifier.defaultInstance
+    return targetClassifier.isPenNib(
+        isEraser = isEraser,
+        isStylus = isStylus,
+        majorPx = majorPx,
+        minorPx = minorPx,
+        xdpi = xdpi,
+        size = size
+    )
 }
 
 /**
@@ -88,6 +258,8 @@ fun isPenNibContact(
  */
 class TouchContacts(view: View) {
     private val predictor = MotionEventPredictor.newInstance(view)
+    val classifier: AdaptiveTouchClassifier = AdaptiveTouchClassifier.get(view.context)
+
     data class ContactData(
         val x: Float,
         val y: Float,
@@ -99,6 +271,7 @@ class TouchContacts(view: View) {
     private val activeContacts = ArrayList<ContactData>()
     private val majorPxById = HashMap<Long, Float>()
     private val minorPxById = HashMap<Long, Float>()
+    private val sizeById = HashMap<Long, Float>()
     private val toolById = HashMap<Long, Int>()
     var lastDownMajor: Float = 0f
         private set
@@ -137,6 +310,7 @@ class TouchContacts(view: View) {
             toolById[id] = tool
             majorPxById[id] = major
             minorPxById[id] = minor
+            sizeById[id] = size
             activeContacts.add(ContactData(x, y, major, minor, size, tool))
             if (tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER) {
                 stylus = true
@@ -148,10 +322,12 @@ class TouchContacts(view: View) {
                 lastDownTool = tool
                 lastDownSize = size
                 android.util.Log.i("AvitriTouch", "ACTION_DOWN idx=$index id=$id tool=$tool major=$major minor=$minor size=$size")
+                classifier.recordDown(major, minor, size, tool)
             }
         }
         majorPxById.keys.retainAll(seen)
         minorPxById.keys.retainAll(seen)
+        sizeById.keys.retainAll(seen)
         toolById.keys.retainAll(seen)
         stylusActive = stylus
         activeCount = seen.size
@@ -200,9 +376,28 @@ class TouchContacts(view: View) {
 
     fun majorPx(position: Offset): Float = getContact(position).major
     fun minorPx(position: Offset): Float = getContact(position).minor
+    fun size(position: Offset): Float = getContact(position).size
     fun toolType(position: Offset): Int = getContact(position).tool
 
     fun majorPx(id: PointerId): Float = majorPxById[id.value] ?: lastDownMajor
     fun minorPx(id: PointerId): Float = minorPxById[id.value] ?: lastDownMinor
+    fun size(id: PointerId): Float = sizeById[id.value] ?: lastDownSize
     fun toolType(id: PointerId): Int = toolById[id.value] ?: lastDownTool
+
+    fun isPenNib(
+        position: Offset,
+        isEraser: Boolean,
+        isStylus: Boolean,
+        xdpi: Float
+    ): Boolean {
+        val contact = getContact(position)
+        return classifier.isPenNib(
+            isEraser = isEraser,
+            isStylus = isStylus,
+            majorPx = contact.major,
+            minorPx = contact.minor,
+            xdpi = xdpi,
+            size = contact.size
+        )
+    }
 }
