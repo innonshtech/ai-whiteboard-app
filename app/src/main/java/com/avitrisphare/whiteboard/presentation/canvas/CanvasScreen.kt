@@ -1729,6 +1729,9 @@ fun CanvasScreen(
                     state.selectedColor,
                     state.secondaryColor,
                     state.strokeWidth,
+                    state.secondaryStrokeWidth,
+                    state.secondaryInkTool,
+                    state.inkTool,
                     state.eraserMode,
                     state.eraserSize,
                     state.isToolLocked,
@@ -1768,9 +1771,7 @@ fun CanvasScreen(
                             if (isStylusPointer() || isMousePointer()) return false
                             if (tool != WhiteboardTool.ERASER && tool !in WRITING_TOOLS) return false
                             if (isPalmTouch()) return true
-                            // A finger or palm after the pen has written should erase, not draw.
-                            // The eraser tool itself keeps the size the user picked.
-                            return touchContacts.sawStylus && tool in WRITING_TOOLS
+                            return false
                         }
                         var down = awaitFirstDown(requireUnconsumed = false)
                         dockDismissNonce++
@@ -1817,11 +1818,10 @@ fun CanvasScreen(
                         val isStylusType = rawToolType == MotionEvent.TOOL_TYPE_STYLUS || down.type == PointerType.Stylus
                         val majorPx = touchContacts.majorPx(down.position)
                         val minorPx = touchContacts.minorPx(down.position)
-                        val isPenNib = isPenNibContact(
+                        val isPenNib = touchContacts.isPenNib(
+                            position = down.position,
                             isEraser = isEraserType,
                             isStylus = isStylusType || stylusDraw,
-                            majorPx = majorPx,
-                            minorPx = minorPx,
                             xdpi = xdpi
                         )
 
@@ -1830,7 +1830,9 @@ fun CanvasScreen(
                         } else {
                             0f
                         }
-                        val secondaryStrokeWidth = if (contactSizePx > 0f) {
+                        val secondaryStrokeWidth = if (state.secondaryStrokeWidth > 0f) {
+                            state.secondaryStrokeWidth
+                        } else if (contactSizePx > 0f) {
                             if (contactSizePx <= 5.0f) {
                                 (contactSizePx * 5f).coerceIn(14f, 32f)
                             } else {
@@ -1852,10 +1854,14 @@ fun CanvasScreen(
                             } else if (isShapeActive) {
                                 state.currentTool
                             } else {
-                                latestState.inkTool
+                                if (isPenNib) latestState.inkTool else latestState.secondaryInkTool
                             }
                         } else {
-                            latestState.currentTool
+                            if (latestState.currentTool in WRITING_TOOLS) {
+                                if (isPenNib) latestState.inkTool else latestState.secondaryInkTool
+                            } else {
+                                latestState.currentTool
+                            }
                         }
                         fun handRadius(pointerId: androidx.compose.ui.input.pointer.PointerId): Float {
                             val major = touchContacts.majorPx(pointerId)
@@ -3197,7 +3203,9 @@ fun CanvasScreen(
                                     val curMajor = touchContacts.majorPx(down.position)
                                     val curMinor = touchContacts.minorPx(down.position)
                                     val curContact = if (curMajor > 0f) (if (curMinor > 0f) (curMajor + curMinor) / 2f else curMajor) else 0f
-                                    if (curContact > 0f) {
+                                    if (state.secondaryStrokeWidth > 0f) {
+                                        state.secondaryStrokeWidth
+                                    } else if (curContact > 0f) {
                                         if (curContact <= 5.0f) (curContact * 5f).coerceIn(14f, 32f) else curContact.coerceIn(12f, 44f)
                                     } else activeInkWidth
                                 }
