@@ -1989,10 +1989,52 @@ class CanvasViewModel @Inject constructor(
         saveToUndoStack()
         _state.update { s ->
             val cleaned = s.strokes.filterNot { it.linkToId == id && it.strokeType == StrokeType.TEXT }
-            val updated = cleaned.map {
-                if (it.id == id) it.copy(text = newText) else it
+            val updated = cleaned.map { stroke ->
+                if (stroke.id == id) {
+                    val rawLines = newText.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+                    val maxLineLen = rawLines.maxOfOrNull { it.length } ?: 0
+                    val lineCount = maxOf(rawLines.size, 1)
+
+                    val currW = stroke.bounds.width
+                    val currH = stroke.bounds.height
+
+                    val minNeededW = if (maxLineLen > 0) (maxLineLen * 11.5f + 40f) else currW
+                    val minNeededH = (lineCount * 26f + 28f)
+
+                    val newW = maxOf(currW, minNeededW).coerceIn(160f, 900f)
+                    val newH = maxOf(currH, minNeededH).coerceIn(64f, 700f)
+
+                    val newPoints = if (stroke.points.size >= 2 && (newW > currW || newH > currH)) {
+                        val cx = stroke.bounds.center.x
+                        val cy = stroke.bounds.center.y
+                        listOf(
+                            Offset(cx - newW / 2f, cy - newH / 2f),
+                            Offset(cx + newW / 2f, cy + newH / 2f)
+                        )
+                    } else {
+                        stroke.points
+                    }
+                    stroke.copy(text = newText, points = newPoints)
+                } else stroke
             }
-            s.copy(strokes = updated, canUndo = true, canRedo = false)
+
+            val strokeMap = updated.associateBy { it.id }
+            val withConnectors = updated.map { stroke ->
+                if (stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId == id || stroke.linkToId == id)) {
+                    val from = strokeMap[stroke.linkFromId]
+                    val to = strokeMap[stroke.linkToId]
+                    if (from != null && to != null) {
+                        val (p1, p2) = if (stroke.stickerKind == "straight") {
+                            MindmapEngine.calculateStraightAnchors(from.bounds, to.bounds)
+                        } else {
+                            MindmapEngine.calculateAnchors(from.bounds, to.bounds)
+                        }
+                        stroke.copy(points = listOf(p1, p2))
+                    } else stroke
+                } else stroke
+            }
+
+            s.copy(strokes = withConnectors, canUndo = true, canRedo = false)
         }
         scheduleSave()
     }
@@ -2762,12 +2804,11 @@ class CanvasViewModel @Inject constructor(
         )
 
         val templateStrokes = MindmapEngine.generateTemplate(kind, effectiveCenter)
-        val rootNode = templateStrokes.firstOrNull { it.stickerKind == "mindmap:root" } ?: templateStrokes.firstOrNull()
 
         _state.update { s ->
             s.copy(
                 strokes = s.strokes + templateStrokes,
-                selectedStrokeIds = rootNode?.let { setOf(it.id) } ?: emptySet(),
+                selectedStrokeIds = emptySet(),
                 currentTool = WhiteboardTool.SELECT,
                 canUndo = true,
                 canRedo = false
