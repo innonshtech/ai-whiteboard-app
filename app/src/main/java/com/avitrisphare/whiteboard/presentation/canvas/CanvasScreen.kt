@@ -49,6 +49,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -302,10 +303,13 @@ private fun DrawScope.drawCenteredNodeText(
         val isLight = fillColor == 0 || (0.299f * r + 0.587f * g + 0.114f * b) > 130f
         val resolvedColor = if (isLight) 0xFF0F172A.toInt() else 0xFFFFFFFF.toInt()
 
-        // Size directly scales up with the box dimensions: both height and width
-        val hTarget = (maxHeight * 0.44f).coerceAtLeast(16f)
-        val wTarget = if (text.isNotBlank()) ((maxWidth * 0.88f) / (text.length.coerceAtLeast(1) * 0.52f)).coerceAtLeast(14f) else hTarget
-        val baseSize = minOf(hTarget, wTarget * 1.5f).coerceIn(16f, 96f)
+        val rawParagraphs = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        val lineCount = maxOf(rawParagraphs.size, 1)
+
+        val hTarget = ((maxHeight * 0.70f) / lineCount).coerceIn(12f, 48f)
+        val maxLen = rawParagraphs.maxOfOrNull { it.length }?.coerceAtLeast(1) ?: 1
+        val wTarget = if (text.isNotBlank()) ((maxWidth * 0.90f) / (maxLen * 0.55f)).coerceAtLeast(12f) else hTarget
+        val baseSize = minOf(hTarget, wTarget).coerceIn(12f, 60f)
 
         val tPaint = Paint().apply {
             color = resolvedColor
@@ -317,36 +321,58 @@ private fun DrawScope.drawCenteredNodeText(
 
         fun wrapTextForSize(size: Float): List<String> {
             tPaint.textSize = size
-            val words = text.split(" ")
             val wrappedLines = mutableListOf<String>()
-            var currentLine = ""
-            for (word in words) {
-                val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
-                if (tPaint.measureText(testLine) <= maxWidth) {
-                    currentLine = testLine
-                } else {
-                    if (currentLine.isNotEmpty()) wrappedLines.add(currentLine)
-                    currentLine = word
+            for (para in rawParagraphs) {
+                if (para.isEmpty()) {
+                    wrappedLines.add("")
+                    continue
                 }
+                val words = para.split(" ")
+                var currentLine = ""
+                for (word in words) {
+                    val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
+                    if (tPaint.measureText(testLine) <= maxWidth) {
+                        currentLine = testLine
+                    } else {
+                        if (currentLine.isNotEmpty()) {
+                            wrappedLines.add(currentLine)
+                            currentLine = ""
+                        }
+                        if (tPaint.measureText(word) > maxWidth) {
+                            var chunk = ""
+                            for (char in word) {
+                                if (tPaint.measureText(chunk + char) <= maxWidth) {
+                                    chunk += char
+                                } else {
+                                    if (chunk.isNotEmpty()) wrappedLines.add(chunk)
+                                    chunk = char.toString()
+                                }
+                            }
+                            currentLine = chunk
+                        } else {
+                            currentLine = word
+                        }
+                    }
+                }
+                if (currentLine.isNotEmpty()) wrappedLines.add(currentLine)
             }
-            if (currentLine.isNotEmpty()) wrappedLines.add(currentLine)
-            return if (wrappedLines.isEmpty()) text.split("\n") else wrappedLines
+            return if (wrappedLines.isEmpty()) listOf("") else wrappedLines
         }
 
         var candidateSize = baseSize
         var lines = wrapTextForSize(candidateSize)
         var totalH = lines.size * candidateSize * 1.25f
 
-        val minAllowed = (maxHeight * 0.22f).coerceIn(14f, 40f)
-        while (candidateSize > minAllowed && (totalH > maxHeight || lines.any { tPaint.measureText(it) > maxWidth * 1.05f })) {
-            candidateSize -= 1.5f
+        val minAllowed = 12f
+        while (candidateSize > minAllowed && (totalH > maxHeight || lines.any { tPaint.measureText(it) > maxWidth * 1.02f })) {
+            candidateSize -= 1.0f
             lines = wrapTextForSize(candidateSize)
             totalH = lines.size * candidateSize * 1.25f
         }
 
         tPaint.textSize = candidateSize
         val lineH = candidateSize * 1.25f
-        val startY = cy - ((lines.size - 1) * lineH) / 2f + candidateSize * 0.35f
+        val startY = cy - ((lines.size - 1) * lineH) / 2f + (candidateSize * 0.35f)
         lines.forEachIndexed { i, line ->
             drawText(line, cx, startY + i * lineH, tPaint)
         }
@@ -850,7 +876,7 @@ fun DrawScope.renderStroke(
                 } else 0f
                 val paint = Paint().apply {
                     color = stroke.colorValue
-                    textSize = if (isMeasurement) (if (stroke.strokeWidth >= 16f) stroke.strokeWidth else 30f) else if (stroke.strokeWidth >= 12f) stroke.strokeWidth else 20f
+                    textSize = if (isMeasurement) (stroke.strokeWidth).coerceIn(13f, 20f) else if (stroke.strokeWidth >= 12f) stroke.strokeWidth else 20f
                     isAntiAlias = true
                     typeface = if (isMeasurement) Typeface.DEFAULT_BOLD else Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                     textAlign = if (isMeasurement) Paint.Align.CENTER else Paint.Align.LEFT
@@ -2064,7 +2090,11 @@ fun CanvasScreen(
                                 mathGesture.startSpan = tool.span
                                 mathGesture.startToolScale = tool.toolScale
                                 mathGesture.startAngleDeg = tool.rotationDeg
-                                mathGesture.startDist = hypot(down.position.x - tool.center.x, down.position.y - tool.center.y).coerceAtLeast(10f)
+                                val initX = down.position.x - tool.center.x
+                                val initY = down.position.y - tool.center.y
+                                val initDist = hypot(initX, initY).coerceAtLeast(15f)
+                                mathGesture.startDist = initDist
+                                mathGesture.initialRay = Offset(initX / initDist, initY / initDist)
                                 val angle = protractorAngle(tool, down.position)
                                 if (angle != null) replaceMathTool(tool.copy(markedAngleDeg = angle))
                             }
@@ -2601,15 +2631,23 @@ fun CanvasScreen(
                                                     }
                                                 }
                                                 MathToolZone.SCALE -> {
-                                                    val curDist = hypot(change.position.x - tool.center.x, change.position.y - tool.center.y)
-                                                    val ratio = if (mathGesture.startDist > 10f) curDist / mathGesture.startDist else 1f
+                                                    val curX = change.position.x - tool.center.x
+                                                    val curY = change.position.y - tool.center.y
+                                                    val u = mathGesture.initialRay
+                                                    val projDist = if (mathGesture.startDist > 15f && (u.x != 0f || u.y != 0f)) {
+                                                        curX * u.x + curY * u.y
+                                                    } else {
+                                                        hypot(curX, curY)
+                                                    }
+                                                    val effectiveDist = projDist.coerceAtLeast(0f)
+                                                    val ratio = if (mathGesture.startDist > 15f) effectiveDist / mathGesture.startDist else 1f
                                                     if (tool.kind == MathToolKind.COMPASS) {
                                                         val newScale = (mathGesture.startToolScale * ratio).coerceIn(0.6f, 3.5f)
                                                         replaceMathTool(tool.copy(toolScale = newScale))
                                                     } else {
                                                         val maxSpan = when (tool.kind) {
                                                             MathToolKind.SET_SQUARE -> 1000f
-                                                            MathToolKind.TRIANGLE -> 900f
+                                                            MathToolKind.TRIANGLE -> 1000f
                                                             MathToolKind.PROTRACTOR -> 800f
                                                             MathToolKind.RULER -> 1800f
                                                             else -> 800f
@@ -2950,7 +2988,7 @@ fun CanvasScreen(
                                 }
 
                                 val mid = Offset((start.x + end.x) / 2f, (start.y + end.y) / 2f)
-                                val labelOffsetWorld = normal * (30f / canvasScale.coerceAtLeast(0.001f))
+                                val labelOffsetWorld = normal * (38f / canvasScale.coerceAtLeast(0.001f))
                                 val labelAt = mid + labelOffsetWorld
 
                                 val lengthText = formatCentimetres(lengthPx, pxPerCm)
@@ -5335,7 +5373,12 @@ fun CanvasScreen(
                 onValueChange = { editingNodeText = it },
                 placeholder = { Text("Type text for this mind map shape…") },
                 colors = boardFieldColors(),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 120.dp, max = 280.dp),
+                singleLine = false,
+                minLines = 3,
+                maxLines = 10
             )
         }
     }

@@ -83,6 +83,7 @@ class MathGesture {
     var draggingPositiveEnd: Boolean = true
     var startSpan: Float = 0f
     var startDist: Float = 0f
+    var initialRay: Offset = Offset.Zero
     var startToolScale: Float = 1.0f
     var startAngleDeg: Float = 0f
     var lastAngleDeg: Float = 0f
@@ -101,6 +102,7 @@ class MathGesture {
         draggingPositiveEnd = true
         startSpan = 0f
         startDist = 0f
+        initialRay = Offset.Zero
         startToolScale = 1.0f
         startAngleDeg = 0f
         lastAngleDeg = 0f
@@ -762,13 +764,13 @@ private fun hitTestSetSquare(tool: PlacedMathTool, point: Offset): MathToolZone 
     val rotPos = Offset(-half, -half - 28f)
     if (near(local, rotPos, touchR * 1.2f)) return MathToolZone.ROTATE
 
-    // 2. Close [X] inside near 90° corner
-    val closePos = Offset(-half * 0.55f, -half * 0.45f)
+    // 2. Close [X] inside
+    val closePos = Offset(-half * 0.50f, -half * 0.30f)
     if (near(local, closePos, touchR)) return MathToolZone.CLOSE
 
-    // 3. Middle Scale handle [⤡] (in centroid area)
-    val scalePos = Offset(-half * 0.30f, half * 0.30f)
-    if (near(local, scalePos, touchR)) return MathToolZone.SCALE
+    // 3. Middle Scale handle [⤡] (comfortably inside the set square interior)
+    val scalePos = Offset(half * 0.10f, half * 0.55f)
+    if (near(local, scalePos, touchR) || near(local, Offset(half * 0.40f, half * 0.40f), touchR)) return MathToolZone.SCALE
 
     // 4. Edges: If touching near ANY of the 3 edges (Base, Height, Hypotenuse),
     // return NONE so edge drawing triggers seamlessly exactly like a ruler!
@@ -803,12 +805,12 @@ private fun hitTestTriangle(tool: PlacedMathTool, point: Offset): MathToolZone {
     if (near(local, rotatePos, touchR * 1.2f)) return MathToolZone.ROTATE
 
     // 2. Close button [X]
-    val closePos = Offset(0f, -h * 0.35f)
-    if (near(local, closePos, touchR)) return MathToolZone.CLOSE
+    val closePos = Offset(0f, -h * 0.25f)
+    if (near(local, closePos, touchR * 1.2f)) return MathToolZone.CLOSE
 
-    // 3. Middle Scale handle [⤡] (below center)
-    val scalePos = Offset(0f, 20f)
-    if (near(local, scalePos, touchR)) return MathToolZone.SCALE
+    // 3. Middle Scale handle [⤡] (in lower-right body)
+    val scalePos = Offset(side * 0.22f, h * 0.08f)
+    if (near(local, scalePos, touchR * 1.2f)) return MathToolZone.SCALE
 
     // 4. Edges: If touching near ANY of the 3 edges (Bottom, Left, Right slant),
     // return NONE so edge drawing triggers seamlessly exactly like a ruler!
@@ -1063,7 +1065,7 @@ fun measurementLabel(text: String, at: Offset, color: Int, angleDeg: Float = 0f)
     return Stroke(
         points = listOf(at),
         colorValue = safeColor,
-        strokeWidth = 30f,
+        strokeWidth = 16f,
         strokeType = StrokeType.TEXT,
         stickerKind = kind,
         text = text
@@ -1377,9 +1379,9 @@ private fun DrawScope.drawSetSquareTool(tool: PlacedMathTool, isDark: Boolean, p
         drawPath(triPath, bodyColor)
         drawPath(triPath, borderColor, style = DrawStroke(2f))
 
-        // 2. 90° Right Angle Marker at corner
+        // 2. 90° Right Angle Marker at corner (indicator lines stay strictly inside boundary, no angle text)
         val s = (tool.span / defaultMathSpan(tool.kind)).coerceIn(0.85f, 3.5f)
-        val sqSize = 22f * s.coerceIn(1f, 2.2f)
+        val sqSize = 14f * s.coerceIn(1f, 1.4f)
         val rightAnglePath = Path().apply {
             moveTo(pCorner.x, pCorner.y - sqSize)
             lineTo(pCorner.x + sqSize, pCorner.y - sqSize)
@@ -1387,17 +1389,13 @@ private fun DrawScope.drawSetSquareTool(tool: PlacedMathTool, isDark: Boolean, p
         }
         drawPath(rightAnglePath, borderColor, style = DrawStroke(1.4f))
         drawCircle(borderColor, 2f * s.coerceIn(1f, 2f), pCorner + Offset(sqSize / 2f, -sqSize / 2f))
-        drawLabel("90°", pCorner + Offset(sqSize + 16f * s.coerceIn(1f, 1.8f), -sqSize + 2f), tickColorInt, (13.5f * s).coerceIn(11f, 32f), isBold = true)
 
-        // 3. 45° Angle Markers at Base and Top
-        val arcR = 36f * s.coerceIn(1f, 2f)
+        // 3. 45° Angle Corner Arcs at Base and Top (strictly interior between edges and hypotenuse, no angle text)
+        val arcR = 22f * s.coerceIn(1f, 1.4f)
         drawArc(borderColor, 180f, 45f, false, topLeft = Offset(pBase.x - arcR, pBase.y - arcR), size = Size(arcR * 2f, arcR * 2f), style = DrawStroke(1.2f))
-        drawLabel("45°", pBase + Offset(-32f * s.coerceIn(1f, 1.8f), -14f * s.coerceIn(1f, 1.8f)), tickColorInt, (13f * s).coerceIn(10.5f, 30f), isBold = true)
-
         drawArc(borderColor, 45f, 45f, false, topLeft = Offset(pTop.x - arcR, pTop.y - arcR), size = Size(arcR * 2f, arcR * 2f), style = DrawStroke(1.2f))
-        drawLabel("45°", pTop + Offset(16f * s.coerceIn(1f, 1.8f), 32f * s.coerceIn(1f, 1.8f)), tickColorInt, (13f * s).coerceIn(10.5f, 30f), isBold = true)
 
-        // 4. Centimeter markings along Base (pCorner -> pBase)
+        // 4. Centimeter markings along Base (pCorner -> pBase) - ALL numbers 1..maxCm
         val mm = (pxPerCm / 10f).coerceAtLeast(2.5f)
         var mmIdx = 0
         val legCm = span / pxPerCm.coerceAtLeast(1f)
@@ -1407,13 +1405,13 @@ private fun DrawScope.drawSetSquareTool(tool: PlacedMathTool, isDark: Boolean, p
             val is5 = mmIdx % 5 == 0
             val tH = if (isCm) 14f else if (is5) 9f else 5f
             drawLine(tickCompose, Offset(pCorner.x + dist, pCorner.y), Offset(pCorner.x + dist, pCorner.y - tH), if (isCm) 1.5f else 1f)
-            if (isCm && mmIdx > 0 && dist < span - 16f) {
-                drawLabel("${mmIdx / 10}", Offset(pCorner.x + dist, pCorner.y - 20f * s.coerceIn(1f, 1.8f)), tickColorInt, (13f * s).coerceIn(10.5f, 30f), isBold = true)
+            if (isCm && mmIdx > 0 && dist < span - 10f) {
+                drawLabel("${mmIdx / 10}", Offset(pCorner.x + dist, pCorner.y - 20f * s.coerceIn(1f, 1.8f)), tickColorInt, (12f * s).coerceIn(10f, 18f), isBold = true)
             }
             mmIdx++
         }
 
-        // 5. Centimeter markings along Vertical Height (pCorner -> pTop)
+        // 5. Centimeter markings along Vertical Height (pCorner -> pTop) - ALL numbers 1..maxCm
         mmIdx = 0
         while (mmIdx * mm <= span - 4f) {
             val dist = mmIdx * mm
@@ -1421,31 +1419,45 @@ private fun DrawScope.drawSetSquareTool(tool: PlacedMathTool, isDark: Boolean, p
             val is5 = mmIdx % 5 == 0
             val tW = if (isCm) 14f else if (is5) 9f else 5f
             drawLine(tickCompose, Offset(pCorner.x, pCorner.y - dist), Offset(pCorner.x + tW, pCorner.y - dist), if (isCm) 1.5f else 1f)
-            if (isCm && mmIdx > 0 && dist < span - 16f) {
-                drawLabel("${mmIdx / 10}", Offset(pCorner.x + 22f * s.coerceIn(1f, 1.8f), pCorner.y - dist + 3f), tickColorInt, (13f * s).coerceIn(10.5f, 30f), isBold = true)
+            if (isCm && mmIdx > 0 && dist < span - 10f) {
+                drawLabel("${mmIdx / 10}", Offset(pCorner.x + 22f * s.coerceIn(1f, 1.8f), pCorner.y - dist + 3f), tickColorInt, (12f * s).coerceIn(10f, 18f), isBold = true)
             }
             mmIdx++
         }
 
         // 6. Side Labels
-        val sideFontSize = (13.5f * s).coerceIn(11f, 32f)
-        drawLabel(String.format(Locale.US, "Base: %.1f cm", legCm), Offset(cx, pCorner.y + 16f * s.coerceIn(1f, 1.8f)), tickColorInt, sideFontSize, isBold = true)
-        drawLabel(String.format(Locale.US, "Height: %.1f cm", legCm), Offset(pCorner.x - 26f * s.coerceIn(1f, 1.8f), cy), tickColorInt, sideFontSize, isBold = true)
+        val sideFontSize = (12f * s.coerceIn(1f, 1.4f)).coerceIn(11f, 18f)
+        drawLabel(String.format(Locale.US, "Base: %.1f cm", legCm), Offset(cx, pCorner.y + 24f * s.coerceIn(1f, 1.4f)), tickColorInt, sideFontSize, isBold = true)
+        drawLabel(
+            String.format(Locale.US, "Height: %.1f cm", legCm),
+            Offset(pCorner.x - 14f * s.coerceIn(1f, 1.4f), cy),
+            tickColorInt,
+            sideFontSize,
+            isBold = true,
+            align = Paint.Align.RIGHT
+        )
         val hypCm = legCm * 1.4142f
-        drawLabel(String.format(Locale.US, "Hyp: %.1f cm", hypCm), Offset(cx + 20f * s.coerceIn(1f, 1.8f), cy - 14f * s.coerceIn(1f, 1.8f)), tickColorInt, sideFontSize, isBold = true)
+        rotate(45f, pivot = Offset(cx, cy)) {
+            drawLabel(
+                String.format(Locale.US, "Hyp: %.1f cm", hypCm),
+                Offset(cx, cy - 24f * s.coerceIn(1f, 1.4f)),
+                tickColorInt,
+                sideFontSize,
+                isBold = true
+            )
+        }
 
-        // 7. Middle Controls
-        val btnR = 21f
+        // 7. Middle Controls (responsive sizing, no extra RESIZE text)
+        val btnR = (20f * (span / 280f).coerceIn(0.75f, 1.2f)).coerceIn(15f, 22f)
         val iconColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
 
-        // Middle Scale Handle [⤡]
-        val scalePos = Offset(cx - half * 0.30f, cy + half * 0.30f)
+        // Middle Scale Handle [⤡] (positioned comfortably inside the set square interior)
+        val scalePos = Offset(cx + half * 0.10f, cy + half * 0.55f)
         drawButtonCircle(scalePos, btnR, borderColor, isDark)
         drawScaleIcon(scalePos, btnR * 0.5f, iconColor)
-        drawLabel("RESIZE", scalePos + Offset(0f, btnR + 10f), tickColorInt, 8f)
 
         // Close [X] Button
-        val closePos = Offset(cx - half * 0.55f, cy - half * 0.45f)
+        val closePos = Offset(cx - half * 0.50f, cy - half * 0.30f)
         drawStandardCloseButton(closePos, btnR, isDark)
 
         // Floating Rotate [⟳] Button outside the figure above top apex
@@ -1700,7 +1712,7 @@ private fun DrawScope.drawTriangleTool(tool: PlacedMathTool, isDark: Boolean, px
         drawPath(triPath, bodyColor)
         drawPath(triPath, borderColor, style = DrawStroke(2f))
 
-        // 2. Centimeter measurements and ruler markings along Base (vLeft -> vRight)
+        // 2. Centimeter measurements and ruler markings along Base (vLeft -> vRight) - ALL numbers 1..maxCm
         val s = (tool.span / defaultMathSpan(tool.kind)).coerceIn(0.85f, 3.5f)
         val sideCm = side / pxPerCm.coerceAtLeast(1f)
         val labelStr = String.format(Locale.US, "%.1f cm", sideCm)
@@ -1714,39 +1726,42 @@ private fun DrawScope.drawTriangleTool(tool: PlacedMathTool, isDark: Boolean, px
             val tH = if (isCm) 14f else if (is5) 9f else 5f
             val xPos = vLeft.x + dist
             drawLine(tickCompose, Offset(xPos, vLeft.y), Offset(xPos, vLeft.y - tH), if (isCm) 1.5f else 1f)
-            if (isCm && mmIdx > 0 && dist < side - 16f) {
-                drawLabel("${mmIdx / 10}", Offset(xPos, vLeft.y - 20f * s.coerceIn(1f, 1.8f)), tickColorInt, (12f * s).coerceIn(9f, 28f), isBold = true)
+            if (isCm && mmIdx > 0 && dist < side - 10f) {
+                drawLabel("${mmIdx / 10}", Offset(xPos, vLeft.y - 20f * s.coerceIn(1f, 1.8f)), tickColorInt, (12f * s).coerceIn(9f, 18f), isBold = true)
             }
             mmIdx++
         }
 
         // Side Lengths in cm clearly shown for all 3 sides:
-        val sideFontSize = (14f * s).coerceIn(11f, 32f)
-        drawLabel("Length: $labelStr", Offset(cx, vLeft.y + 18f * s.coerceIn(1f, 1.8f)), tickColorInt, sideFontSize, isBold = true)
+        val sideFontSize = (12f * s.coerceIn(1f, 1.4f)).coerceIn(11f, 18f)
+        drawLabel("Length: $labelStr", Offset(cx, vLeft.y + 26f * s.coerceIn(1f, 1.4f)), tickColorInt, sideFontSize, isBold = true)
 
-        // Side B (Left slant: vTop -> vLeft)
+        // Side B (Left slant: vTop -> vLeft) rotated parallel to edge outside
         val midLeft = Offset((vTop.x + vLeft.x) / 2f, (vTop.y + vLeft.y) / 2f)
-        drawLabel("Side: $labelStr", midLeft - Offset(32f * s.coerceIn(1f, 1.8f), 0f), tickColorInt, (13.5f * s).coerceIn(10.5f, 30f), isBold = true)
+        rotate(-60f, pivot = midLeft) {
+            drawLabel("Side: $labelStr", midLeft - Offset(0f, 18f * s.coerceIn(1f, 1.4f)), tickColorInt, sideFontSize, isBold = true)
+        }
 
-        // Side C (Right slant: vTop -> vRight)
+        // Side C (Right slant: vTop -> vRight) rotated parallel to edge outside
         val midRight = Offset((vTop.x + vRight.x) / 2f, (vTop.y + vRight.y) / 2f)
-        drawLabel("Side: $labelStr", midRight + Offset(32f * s.coerceIn(1f, 1.8f), 0f), tickColorInt, (13.5f * s).coerceIn(10.5f, 30f), isBold = true)
+        rotate(60f, pivot = midRight) {
+            drawLabel("Side: $labelStr", midRight - Offset(0f, 18f * s.coerceIn(1f, 1.4f)), tickColorInt, sideFontSize, isBold = true)
+        }
 
-        // Interior angle markers (60° at each vertex)
-        val angleFontSize = (13f * s).coerceIn(10f, 30f)
-        drawLabel("60°", vTop + Offset(0f, 30f * s.coerceIn(1f, 1.8f)), tickColorInt, angleFontSize, isBold = true)
-        drawLabel("60°", vLeft + Offset(30f * s.coerceIn(1f, 1.8f), -16f * s.coerceIn(1f, 1.8f)), tickColorInt, angleFontSize, isBold = true)
-        drawLabel("60°", vRight + Offset(-30f * s.coerceIn(1f, 1.8f), -16f * s.coerceIn(1f, 1.8f)), tickColorInt, angleFontSize, isBold = true)
+        // Interior angle corner arcs (60° at each vertex), strictly inside the triangle boundary (no angle text)
+        val triArcR = 20f * s.coerceIn(1f, 1.3f)
+        drawArc(borderColor, 60f, 60f, false, topLeft = Offset(vTop.x - triArcR, vTop.y - triArcR), size = Size(triArcR * 2f, triArcR * 2f), style = DrawStroke(1.4f))
+        drawArc(borderColor, 300f, 60f, false, topLeft = Offset(vLeft.x - triArcR, vLeft.y - triArcR), size = Size(triArcR * 2f, triArcR * 2f), style = DrawStroke(1.4f))
+        drawArc(borderColor, 180f, 60f, false, topLeft = Offset(vRight.x - triArcR, vRight.y - triArcR), size = Size(triArcR * 2f, triArcR * 2f), style = DrawStroke(1.4f))
 
         // 3. Middle Controls:
-        val btnR = 21f
+        val btnR = (20f * (span / 220f).coerceIn(0.75f, 1.2f)).coerceIn(15f, 22f)
         val iconColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
 
-        // Middle Scale Handle [⤡] (centered in body)
-        val scalePos = Offset(cx, cy + 20f)
+        // Middle Scale Handle [⤡] (positioned towards lower-right for ample runway)
+        val scalePos = Offset(cx + side * 0.22f, cy + h * 0.08f)
         drawButtonCircle(scalePos, btnR, borderColor, isDark)
         drawScaleIcon(scalePos, btnR * 0.5f, iconColor)
-        drawLabel("RESIZE", scalePos + Offset(0f, btnR + 10f), tickColorInt, 8f)
 
         // Floating Rotate [⟳] Button above top apex outside the figure
         val rotPos = Offset(vTop.x, vTop.y - 28f)
@@ -1755,7 +1770,7 @@ private fun DrawScope.drawTriangleTool(tool: PlacedMathTool, isDark: Boolean, px
         drawRotateIcon(rotPos, btnR * 0.5f, iconColor)
 
         // Close [X] Button
-        val closePos = Offset(cx, cy - h * 0.35f)
+        val closePos = Offset(cx, cy - h * 0.25f)
         drawStandardCloseButton(closePos, btnR, isDark)
     }
 }
@@ -1884,7 +1899,14 @@ private fun DrawScope.drawSpreadIcon(center: Offset, size: Float, iconColor: Col
     drawLine(iconColor, rightEnd, rightEnd + Offset(5f, 4f), strokeWidth = 2.2f)
 }
 
-private fun DrawScope.drawLabel(text: String, at: Offset, color: Int, textSize: Float, isBold: Boolean = true) {
+private fun DrawScope.drawLabel(
+    text: String,
+    at: Offset,
+    color: Int,
+    textSize: Float,
+    isBold: Boolean = true,
+    align: Paint.Align = Paint.Align.CENTER
+) {
     val displayScale = 1.45f
     val paint = Paint().apply {
         this.color = color
@@ -1892,7 +1914,7 @@ private fun DrawScope.drawLabel(text: String, at: Offset, color: Int, textSize: 
         this.isAntiAlias = true
         this.isFakeBoldText = isBold
         this.typeface = if (isBold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-        this.textAlign = Paint.Align.CENTER
+        this.textAlign = align
     }
     drawContext.canvas.nativeCanvas.drawText(
         text,
