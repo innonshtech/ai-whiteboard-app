@@ -255,10 +255,11 @@ fun List<Offset>.toSmoothedPath(): Path {
 private class PointerInkTrack(
     val id: Long,
     val isStylus: Boolean,
-    val color: Int,
-    val baseWidth: Float,
-    val strokeType: StrokeType,
-    val isHighlighter: Boolean,
+    var color: Int,
+    var baseWidth: Float,
+    var strokeType: StrokeType,
+    var isHighlighter: Boolean,
+    var tipResolved: Boolean = true,
     initialWorld: Offset,
     initialPressure: Float
 ) {
@@ -1891,6 +1892,8 @@ fun CanvasScreen(
                         val isStylusType = rawToolType == MotionEvent.TOOL_TYPE_STYLUS || down.type == PointerType.Stylus
                         val majorPx = touchContacts.majorPx(down.position)
                         val minorPx = touchContacts.minorPx(down.position)
+                        val contactSizePx = touchContacts.size(down.position)
+                        val hasContactData = (majorPx > 0.1f || contactSizePx > 0f)
                         val isPenNib = touchContacts.isPenNib(
                             position = down.position,
                             isEraser = isEraserType,
@@ -1898,7 +1901,7 @@ fun CanvasScreen(
                             xdpi = xdpi
                         )
 
-                        val isSecondaryPen = if (majorPx in 0.1f..5.0f) {
+                        val isSecondaryPen = if (hasContactData) {
                             if (state.useSecondaryPenColor) isPenNib else !isPenNib
                         } else {
                             state.useSecondaryPenColor
@@ -1951,6 +1954,7 @@ fun CanvasScreen(
                                 baseWidth = activeInkWidth,
                                 strokeType = activeTool.toStrokeType(),
                                 isHighlighter = activeTool == WhiteboardTool.HIGHLIGHTER,
+                                tipResolved = hasContactData,
                                 initialWorld = downWorld,
                                 initialPressure = downPressure
                             )
@@ -2463,9 +2467,9 @@ fun CanvasScreen(
                                     if (!erasing && writingNow && !penCommittedForPalm) {
                                         if (inkPoints.size >= 2 && inkTemplate != null) {
                                             val finishedWidth = if (stylusDraw) {
-                                                stylusPressureWidth(state.strokeWidth, inkPressures.average().toFloat())
+                                                stylusPressureWidth(activeInkWidth, inkPressures.average().toFloat())
                                             } else {
-                                                state.strokeWidth
+                                                activeInkWidth
                                             }
                                             viewModel.commitStroke(
                                                 inkTemplate.copy(
@@ -2503,14 +2507,17 @@ fun CanvasScreen(
                                             val ptrStylus = change.isStylusPointer()
                                             val ptrMajor = touchContacts.majorPx(change.id)
                                             val ptrMinor = touchContacts.minorPx(change.id)
+                                            val ptrSize = touchContacts.size(change.id)
+                                            val ptrHasContact = (ptrMajor > 0.1f || ptrSize > 0f)
                                             val ptrNib = isPenNibContact(
                                                 isEraser = false,
                                                 isStylus = ptrStylus,
                                                 majorPx = ptrMajor,
                                                 minorPx = ptrMinor,
-                                                xdpi = xdpi
+                                                xdpi = xdpi,
+                                                size = ptrSize
                                             )
-                                            val ptrSecondary = if (ptrMajor in 0.1f..5.0f) {
+                                            val ptrSecondary = if (ptrHasContact) {
                                                 if (state.useSecondaryPenColor) ptrNib else !ptrNib
                                             } else {
                                                 state.useSecondaryPenColor
@@ -2521,6 +2528,7 @@ fun CanvasScreen(
                                             } else {
                                                 if (state.secondaryStrokeWidth > 0f) state.secondaryStrokeWidth else 12f
                                             }
+                                            val ptrTool = if (!ptrSecondary) latestState.inkTool else latestState.secondaryInkTool
                                             val ptrPressure = if (ptrStylus) stylusPressure(change.pressure) else change.inkPressure()
                                             val ptrWorld = CanvasTransform.screenToWorld(
                                                 screenPoint = change.position,
@@ -2532,13 +2540,40 @@ fun CanvasScreen(
                                                 isStylus = ptrStylus,
                                                 color = ptrColor,
                                                 baseWidth = ptrWidth,
-                                                strokeType = activeTool.toStrokeType(),
-                                                isHighlighter = activeTool == WhiteboardTool.HIGHLIGHTER,
+                                                strokeType = ptrTool.toStrokeType(),
+                                                isHighlighter = ptrTool == WhiteboardTool.HIGHLIGHTER,
+                                                tipResolved = ptrHasContact,
                                                 initialWorld = ptrWorld,
                                                 initialPressure = ptrPressure
                                             )
                                             activeTracks[change.id.value] = track
                                         } else {
+                                            if (!track.tipResolved && track.points.size <= 5) {
+                                                val curMajor = touchContacts.majorPx(change.id)
+                                                val curMinor = touchContacts.minorPx(change.id)
+                                                val curSize = touchContacts.size(change.id)
+                                                if (curMajor > 0.1f || curSize > 0f) {
+                                                    val curNib = isPenNibContact(
+                                                        isEraser = false,
+                                                        isStylus = track.isStylus,
+                                                        majorPx = curMajor,
+                                                        minorPx = curMinor,
+                                                        xdpi = xdpi,
+                                                        size = curSize
+                                                    )
+                                                    val curSecondary = if (latestState.useSecondaryPenColor) curNib else !curNib
+                                                    track.color = if (!curSecondary) latestState.selectedColor else latestState.secondaryColor
+                                                    track.baseWidth = if (!curSecondary) {
+                                                        latestState.strokeWidth
+                                                    } else {
+                                                        if (latestState.secondaryStrokeWidth > 0f) latestState.secondaryStrokeWidth else 12f
+                                                    }
+                                                    val curTool = if (!curSecondary) latestState.inkTool else latestState.secondaryInkTool
+                                                    track.strokeType = curTool.toStrokeType()
+                                                    track.isHighlighter = curTool == WhiteboardTool.HIGHLIGHTER
+                                                    track.tipResolved = true
+                                                }
+                                            }
                                             val pressure = if (track.isStylus) stylusPressure(change.pressure) else change.inkPressure()
                                             if (track.isStylus) {
                                                 change.historical.forEach { sample ->
