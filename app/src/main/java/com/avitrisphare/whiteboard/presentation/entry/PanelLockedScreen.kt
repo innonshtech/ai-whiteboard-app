@@ -30,6 +30,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -98,7 +100,7 @@ fun PanelLockedScreen(
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Lock,
-                    contentDescription = "Panel Locked",
+                    contentDescription = stringResource(R.string.panel_locked_title),
                     tint = Color(0xFFEF4444),
                     modifier = Modifier.size(34.dp)
                 )
@@ -108,7 +110,7 @@ fun PanelLockedScreen(
 
             // Title
             Text(
-                text = "Panel Locked",
+                text = stringResource(R.string.panel_locked_title),
                 color = EntryText,
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold
@@ -118,7 +120,7 @@ fun PanelLockedScreen(
 
             // Subtitle
             Text(
-                text = "This panel's licence has expired. Please contact your school administrator to reactivate access.",
+                text = stringResource(R.string.panel_locked_sub),
                 color = Color(0xFF475569),
                 fontSize = 15.sp,
                 textAlign = TextAlign.Center,
@@ -142,18 +144,18 @@ fun PanelLockedScreen(
                     .padding(horizontal = 24.dp, vertical = 6.dp)
             ) {
                 // School Row
-                InfoRow(label = "School", value = schoolName.ifBlank { "Delhi Public School" })
+                InfoRow(label = stringResource(R.string.label_school), value = schoolName.ifBlank { "Delhi Public School" })
 
                 Divider(color = Color(0xFFF1F5F9), thickness = 1.dp)
 
                 // Device UUID Row
-                InfoRow(label = "Device UUID", value = deviceUuid)
+                InfoRow(label = stringResource(R.string.license_device_uuid), value = deviceUuid)
 
                 Divider(color = Color(0xFFF1F5F9), thickness = 1.dp)
 
                 // Support Row
                 InfoRow(
-                    label = "Support",
+                    label = stringResource(R.string.label_support),
                     value = "$supportEmail · $supportPhone"
                 )
             }
@@ -206,7 +208,7 @@ fun PanelLockedScreen(
                     )
                 } else {
                     Text(
-                        text = "Contact Administrator",
+                        text = stringResource(R.string.btn_contact_admin),
                         color = Color.White,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 15.sp
@@ -218,7 +220,7 @@ fun PanelLockedScreen(
 
             // Secondary Option: Enter New Licence Key
             Text(
-                text = "Enter New Licence Key",
+                text = stringResource(R.string.btn_enter_new_key),
                 color = BrandOrange,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,

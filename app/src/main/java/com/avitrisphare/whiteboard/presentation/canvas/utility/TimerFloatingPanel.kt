@@ -43,6 +43,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -368,7 +370,7 @@ fun TimerFloatingPanel(
                             ),
                             modifier = Modifier.weight(1f).height(38.dp)
                         ) {
-                            Text("Cancel", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text(stringResource(R.string.cancel), fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         }
 
                         Button(
@@ -398,7 +400,7 @@ fun TimerFloatingPanel(
                         ) {
                             Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(15.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Set Timer", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.timer_set_timer), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -449,7 +451,7 @@ fun TimerFloatingPanel(
                         Spacer(Modifier.height(2.dp))
                         Text(
                             text = when {
-                                isFinished -> "TIME UP!"
+                                isFinished -> stringResource(R.string.timer_finished)
                                 isRunning -> "COUNTING DOWN"
                                 remainingSeconds < totalSeconds -> "PAUSED"
                                 else -> "READY"
@@ -569,7 +571,7 @@ fun TimerFloatingPanel(
                         )
                         Spacer(Modifier.width(5.dp))
                         Text(
-                            text = "Reset",
+                            text = stringResource(R.string.timer_reset),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1
@@ -618,7 +620,7 @@ fun TimerFloatingPanel(
                         )
                         Spacer(Modifier.width(5.dp))
                         Text(
-                            text = if (isRunning) "Pause" else "Start",
+                            text = if (isRunning) stringResource(R.string.timer_pause) else stringResource(R.string.timer_start),
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             maxLines = 1

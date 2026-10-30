@@ -21,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
@@ -143,7 +145,7 @@ fun CalculatorFloatingPanel(
                             .clickable { onStateChange(state.copy(isScientific = false)) }
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
-                        Text("Basic", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        Text(stringResource(R.string.calc_basic), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                     }
                     Box(
                         modifier = Modifier
@@ -152,7 +154,7 @@ fun CalculatorFloatingPanel(
                             .clickable { onStateChange(state.copy(isScientific = true)) }
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
-                        Text("Scientific", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        Text(stringResource(R.string.calc_scientific), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                     }
                 }
 

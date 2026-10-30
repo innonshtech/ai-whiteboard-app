@@ -22,9 +22,26 @@
 -keep class javax.inject.** { *; }
 -keep @dagger.hilt.android.lifecycle.HiltViewModel class * { *; }
 
+# Keep ML Kit
 -keep class com.google.mlkit.** { *; }
 -dontwarn com.google.mlkit.**
 
 # Keep Kotlin
 -keep class kotlin.Metadata { *; }
 -dontwarn kotlin.**
+
+# OkHttp & Okio
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-keep class okhttp3.** { *; }
+
+# ZXing
+-dontwarn com.google.zxing.**
+-keep class com.google.zxing.** { *; }
+
+# Coroutines
+-dontwarn kotlinx.coroutines.**
+
+# Motion prediction & DataStore
+-dontwarn androidx.input.motionprediction.**
+-dontwarn androidx.datastore.**

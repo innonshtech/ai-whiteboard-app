@@ -1298,8 +1298,8 @@ fun AvitriSphareWhiteboardChrome(
                     containerColor = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
                     titleContentColor = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF111827),
                     textContentColor = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF4B5563),
-                    title = { Text("Delete $pageTitle?", fontWeight = FontWeight.SemiBold) },
-                    text = { Text("Are you sure you want to remove $pageTitle? All drawings on this page will be deleted.") },
+                    title = { Text(stringResource(R.string.dialog_delete_page_title, pageTitle), fontWeight = FontWeight.SemiBold) },
+                    text = { Text(stringResource(R.string.dialog_delete_page_msg, pageTitle)) },
                     confirmButton = {
                         androidx.compose.material3.Button(
                             onClick = {
@@ -1311,12 +1311,12 @@ fun AvitriSphareWhiteboardChrome(
                                 containerColor = Color(0xFFEF4444)
                             )
                         ) {
-                            Text("Delete", color = Color.White)
+                            Text(stringResource(R.string.delete), color = Color.White)
                         }
                     },
                     dismissButton = {
                         androidx.compose.material3.TextButton(onClick = { pageToDeleteIndex = null }) {
-                            Text("Cancel", color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF6B7280))
+                            Text(stringResource(R.string.cancel), color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF6B7280))
                         }
                     }
                 )
@@ -2108,7 +2108,7 @@ fun AvitriSphareWhiteboardChrome(
                             value = state.userName,
                             onValueChange = { viewModel.setUserName(it) },
                             singleLine = true,
-                            label = { Text("Your name") },
+                            label = { Text(stringResource(R.string.label_your_name)) },
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF1E293B),
@@ -2204,7 +2204,7 @@ fun AvitriSphareWhiteboardChrome(
                             ) { onToggleShadeSide() }
                         }
                         if (state.currentTool == WhiteboardTool.SPOTLIGHT) {
-                            Text("Spotlight size", fontSize = 12.sp, color = Color(0xFF6B7280))
+                            Text(stringResource(R.string.label_spotlight_size), fontSize = 12.sp, color = Color(0xFF6B7280))
                             Slider(
                                 value = spotlightRadius.coerceIn(60f, 360f),
                                 onValueChange = onSpotlightRadius,
@@ -2617,7 +2617,7 @@ fun AvitriSphareWhiteboardChrome(
                         )
                     }
                     "background" -> DockPopover(title = "Background", onClose = { panel = null }) {
-                        Text("Board Styles", fontSize = 11.sp, color = Color(0xFF6B7280), fontWeight = FontWeight.Medium)
+                        Text(stringResource(R.string.bg_board_styles), fontSize = 11.sp, color = Color(0xFF6B7280), fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(6.dp))
 
                         Row(
@@ -2685,7 +2685,7 @@ fun AvitriSphareWhiteboardChrome(
                         Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFE5E7EB)))
                         Spacer(Modifier.height(8.dp))
 
-                        Text("Selected Image Background", fontSize = 11.sp, color = Color(0xFF6B7280), fontWeight = FontWeight.Medium)
+                        Text(stringResource(R.string.bg_selected_image_title), fontSize = 11.sp, color = Color(0xFF6B7280), fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(6.dp))
 
                         val hasSelectedImage = state.strokes.any { it.id in state.selectedStrokeIds && it.strokeType == StrokeType.IMAGE && it.imageUri.isNotBlank() }
@@ -2717,21 +2717,21 @@ fun AvitriSphareWhiteboardChrome(
                             Spacer(Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Selected Image",
+                                    text = stringResource(R.string.bg_selected_image),
                                     color = if (hasSelectedImage) Color(0xFF1D4ED8) else Color(0xFF1F2937),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Text(
-                                    text = if (hasSelectedImage) "Apply selected image as canvas background"
-                                    else if (hasAnyImage) "Use image from this board as background"
-                                    else "Select or insert an image to set as background",
+                                    text = if (hasSelectedImage) stringResource(R.string.bg_apply_selected_hint)
+                                    else if (hasAnyImage) stringResource(R.string.bg_use_board_image_hint)
+                                    else stringResource(R.string.bg_select_insert_hint),
                                     color = Color(0xFF6B7280),
                                     fontSize = 10.sp
                                 )
                             }
                             if (state.canvasBackground == CanvasBackground.CUSTOM) {
-                                Text("Active", color = Color(0xFF16A34A), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.bg_active), color = Color(0xFF16A34A), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
 
@@ -2758,13 +2758,13 @@ fun AvitriSphareWhiteboardChrome(
                             Spacer(Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Choose Image from Device",
+                                    text = stringResource(R.string.bg_choose_from_device),
                                     color = Color(0xFF1F2937),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Text(
-                                    text = "Pick a picture from storage / gallery",
+                                    text = stringResource(R.string.bg_pick_storage_hint),
                                     color = Color(0xFF6B7280),
                                     fontSize = 10.sp
                                 )

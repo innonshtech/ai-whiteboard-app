@@ -53,6 +53,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -492,7 +494,7 @@ fun LayoutPopover(
             ) {
                 Icon(Icons.Default.AccountTree, contentDescription = "Horizontal", tint = Color(0xFF2563EB), modifier = Modifier.size(24.dp))
                 Spacer(Modifier.height(4.dp))
-                Text("Horizontal", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+                Text(stringResource(R.string.mindmap_horizontal), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
             }
 
             Column(
@@ -505,7 +507,7 @@ fun LayoutPopover(
             ) {
                 Icon(Icons.Default.Straight, contentDescription = "Vertical", tint = Color(0xFF059669), modifier = Modifier.size(24.dp))
                 Spacer(Modifier.height(4.dp))
-                Text("Vertical", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
+                Text(stringResource(R.string.mindmap_vertical), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1F2937))
             }
         }
     }
@@ -531,7 +533,7 @@ fun OutlinePopover(
         modifier = Modifier.width(240.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            Text("Border Color", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
+            Text(stringResource(R.string.mindmap_border_color), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
             Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -549,7 +551,7 @@ fun OutlinePopover(
                 }
             }
             Spacer(Modifier.height(14.dp))
-            Text("Thickness: ${currentWidth.toInt()}px", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
+            Text(stringResource(R.string.mindmap_thickness, currentWidth.toInt()), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
             Slider(
                 value = currentWidth.coerceIn(1f, 16f),
                 onValueChange = onWidthSelected,

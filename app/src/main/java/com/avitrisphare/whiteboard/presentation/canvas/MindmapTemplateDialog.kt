@@ -34,6 +34,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -124,13 +126,13 @@ fun MindmapTemplateDialog(
                     ) {
                         Column {
                             Text(
-                                text = "Mindmap Template",
+                                text = stringResource(R.string.mindmap_template_title),
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF111827)
                             )
                             Text(
-                                text = "Select a preset structure or create a custom wired mind map",
+                                text = stringResource(R.string.mindmap_template_sub),
                                 fontSize = 12.sp,
                                 color = Color(0xFF6B7280)
                             )
