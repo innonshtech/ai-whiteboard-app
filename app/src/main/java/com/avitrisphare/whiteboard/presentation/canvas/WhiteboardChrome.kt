@@ -1507,10 +1507,17 @@ fun AvitriSphareWhiteboardChrome(
                                             active = activeDockTool == ActiveDockTool.PEN,
                                             modifier = Modifier.onGloballyPositioned { toolIconBounds["ink"] = it.boundsInRoot() },
                                             onPenClick = {
-                                                if (state.useSecondaryPenColor) {
-                                                    viewModel.setSecondaryInkTool(state.secondaryInkTool)
+                                                if (activeDockTool == ActiveDockTool.PEN) {
+                                                    val nextSlot = if (state.useSecondaryPenColor) 1 else 2
+                                                    viewModel.setActivePenSlot(nextSlot)
+                                                    val label = if (nextSlot == 1) "Slot A" else "Slot B"
+                                                    Toast.makeText(context, "$label active", Toast.LENGTH_SHORT).show()
                                                 } else {
-                                                    viewModel.setTool(state.inkTool)
+                                                    if (state.useSecondaryPenColor) {
+                                                        viewModel.setSecondaryInkTool(state.secondaryInkTool)
+                                                    } else {
+                                                        viewModel.setTool(state.inkTool)
+                                                    }
                                                 }
                                                 panel = null
                                             },
@@ -2425,7 +2432,7 @@ fun AvitriSphareWhiteboardChrome(
                             onClose = { panel = null }
                         )
                     }
-                    "ink" -> DockPopover(maxWidth = 380.dp, maxHeight = 560.dp, scrollable = false) {
+                    "ink" -> DockPopover(maxWidth = 360.dp, maxHeight = 400.dp, scrollable = false) {
                         InkToolPanel(state = state, viewModel = viewModel, onClose = {
                             panel = null
                         })

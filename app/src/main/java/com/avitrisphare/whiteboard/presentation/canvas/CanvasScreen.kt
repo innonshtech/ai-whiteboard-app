@@ -1,4 +1,4 @@
-﻿package com.avitrisphare.whiteboard.presentation.canvas
+package com.avitrisphare.whiteboard.presentation.canvas
 
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.ui.window.DialogProperties
@@ -1795,6 +1795,7 @@ fun CanvasScreen(
                     state.secondaryStrokeWidth,
                     state.secondaryInkTool,
                     state.inkTool,
+                    state.useSecondaryPenColor,
                     state.eraserMode,
                     state.eraserSize,
                     state.isToolLocked,
@@ -1897,40 +1898,32 @@ fun CanvasScreen(
                             xdpi = xdpi
                         )
 
-                        val contactSizePx = if (majorPx > 0f) {
-                            if (minorPx > 0f) (majorPx + minorPx) / 2f else majorPx
+                        val isSecondaryPen = if (majorPx in 0.1f..5.0f) {
+                            if (state.useSecondaryPenColor) isPenNib else !isPenNib
                         } else {
-                            0f
+                            state.useSecondaryPenColor
                         }
-                        val secondaryStrokeWidth = if (state.secondaryStrokeWidth > 0f) {
-                            state.secondaryStrokeWidth
-                        } else if (contactSizePx > 0f) {
-                            if (contactSizePx <= 5.0f) {
-                                (contactSizePx * 5f).coerceIn(14f, 32f)
-                            } else {
-                                contactSizePx.coerceIn(12f, 44f)
-                            }
+                        val activeInkColor = if (!isSecondaryPen) state.selectedColor else state.secondaryColor
+                        val activeInkWidth = if (!isSecondaryPen) {
+                            state.strokeWidth
                         } else {
-                            if (isEraserType) 16f else 20f
+                            if (state.secondaryStrokeWidth > 0f) state.secondaryStrokeWidth else 12f
                         }
-
-                        val activeInkColor = if (isPenNib) state.selectedColor else state.secondaryColor
-                        val activeInkWidth = if (isPenNib) state.strokeWidth else secondaryStrokeWidth
-                        android.util.Log.i("AvitriTouch", "DECISION down.id=${down.id.value} pos=${down.position} tool=$rawToolType stylusDraw=$stylusDraw majorPx=$majorPx minorPx=$minorPx xdpi=$xdpi -> isPenNib=$isPenNib (color=${if (isPenNib) "PRIMARY" else "SECONDARY"}, width=$activeInkWidth)")
+                        android.util.Log.i("AvitriTouch", "DECISION down.id=${down.id.value} pos=${down.position} tool=$rawToolType stylusDraw=$stylusDraw majorPx=$majorPx minorPx=$minorPx xdpi=$xdpi -> isPenNib=$isPenNib isSecondary=$isSecondaryPen (color=${if (!isSecondaryPen) "PRIMARY" else "SECONDARY"}, width=$activeInkWidth)")
 
                         val activeTool = if (isPalmEraser) {
                             WhiteboardTool.ERASER
                         } else if (stylusDraw) {
-                            if (isEraserType) {
+                            if (isEraserType && latestState.currentTool == WhiteboardTool.ERASER) {
                                 WhiteboardTool.ERASER
                             } else if (isShapeActive) {
                                 state.currentTool
                             } else {
-                                if (isPenNib) latestState.inkTool else latestState.secondaryInkTool
+                                if (!isSecondaryPen) latestState.inkTool else latestState.secondaryInkTool
                             }
                         } else {
                             if (latestState.currentTool in WRITING_TOOLS) {
-                                if (isPenNib) latestState.inkTool else latestState.secondaryInkTool
+                                if (!isSecondaryPen) latestState.inkTool else latestState.secondaryInkTool
                             } else {
                                 latestState.currentTool
                             }
@@ -2006,25 +1999,15 @@ fun CanvasScreen(
                                 val safeScale = canvasScale.coerceAtLeast(0.001f)
                                 Offset(last.x + dx / safeScale, last.y + dy / safeScale)
                             }
-                            liveInk.stroke = if (isPenNib) {
-                                if (stylusDraw) {
-                                    template.copy(
-                                        strokeWidth = stylusPressureWidth(
-                                            activeInkWidth,
-                                            inkPressures.lastOrNull() ?: 1f
-                                        )
+                            liveInk.stroke = if (stylusDraw) {
+                                template.copy(
+                                    strokeWidth = stylusPressureWidth(
+                                        activeInkWidth,
+                                        inkPressures.lastOrNull() ?: 1f
                                     )
-                                } else {
-                                    template
-                                }
+                                )
                             } else {
-                                val curMajor = touchContacts.majorPx(down.position)
-                                val curMinor = touchContacts.minorPx(down.position)
-                                val curContact = if (curMajor > 0f) (if (curMinor > 0f) (curMajor + curMinor) / 2f else curMajor) else 0f
-                                val liveWidth = if (curContact > 0f) {
-                                    if (curContact <= 5.0f) (curContact * 5f).coerceIn(14f, 32f) else curContact.coerceIn(12f, 44f)
-                                } else activeInkWidth
-                                template.copy(strokeWidth = liveWidth)
+                                template
                             }
                             boardStage?.setLiveInk(liveInk)
                         }
@@ -2527,8 +2510,17 @@ fun CanvasScreen(
                                                 minorPx = ptrMinor,
                                                 xdpi = xdpi
                                             )
-                                            val ptrColor = if (ptrNib) state.selectedColor else state.secondaryColor
-                                            val ptrWidth = if (ptrNib) state.strokeWidth else secondaryStrokeWidth
+                                            val ptrSecondary = if (ptrMajor in 0.1f..5.0f) {
+                                                if (state.useSecondaryPenColor) ptrNib else !ptrNib
+                                            } else {
+                                                state.useSecondaryPenColor
+                                            }
+                                            val ptrColor = if (!ptrSecondary) state.selectedColor else state.secondaryColor
+                                            val ptrWidth = if (!ptrSecondary) {
+                                                state.strokeWidth
+                                            } else {
+                                                if (state.secondaryStrokeWidth > 0f) state.secondaryStrokeWidth else 12f
+                                            }
                                             val ptrPressure = if (ptrStylus) stylusPressure(change.pressure) else change.inkPressure()
                                             val ptrWorld = CanvasTransform.screenToWorld(
                                                 screenPoint = change.position,
