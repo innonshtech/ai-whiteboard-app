@@ -128,8 +128,6 @@ val DEFAULT_TOOLBAR_TOOLS: List<String> = listOf(
 val ALL_CUSTOMIZABLE_TOOLS: List<String> = listOf(
     "select",
     "pen",
-    "smart_write",
-    "shape_rec",
     "flowchart",
     "stickers",
     "shapes",

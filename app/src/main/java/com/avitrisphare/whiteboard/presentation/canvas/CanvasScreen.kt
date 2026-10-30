@@ -1341,6 +1341,7 @@ fun CanvasScreen(
     var textInputValue by remember { mutableStateOf("") }
     var exportedUri by remember { mutableStateOf<Uri?>(null) }
     var lassoPoints by remember { mutableStateOf(listOf<Offset>()) }
+    var lassoSelectionPath by remember { mutableStateOf<List<Offset>?>(null) }
     var timerState by remember { mutableStateOf(TimerUiState()) }
     var stopwatchState by remember { mutableStateOf(StopwatchUiState()) }
     var calculatorState by remember { mutableStateOf(CalculatorUiState()) }
@@ -1399,6 +1400,8 @@ fun CanvasScreen(
     LaunchedEffect(state.selectedStrokeIds) {
         if (state.selectedStrokeIds.isNotEmpty()) {
             selectionToolbarDismissed = false
+        } else {
+            lassoSelectionPath = null
         }
     }
 
@@ -1519,6 +1522,7 @@ fun CanvasScreen(
     LaunchedEffect(state.currentTool) {
         if (state.currentTool != WhiteboardTool.LASSO) {
             lassoPoints = emptyList()
+            lassoSelectionPath = null
         }
         viewModel.dismissSmartWrite()
     }
@@ -1931,6 +1935,9 @@ fun CanvasScreen(
                                 WhiteboardTool.ERASER
                             } else if (isShapeActive) {
                                 state.currentTool
+                            } else if (latestState.currentTool !in WRITING_TOOLS) {
+                                // SELECT, HAND, LASSO, ERASER, etc. — honour the current tool even for stylus
+                                latestState.currentTool
                             } else {
                                 if (!isSecondaryPen) latestState.inkTool else latestState.secondaryInkTool
                             }
@@ -2377,15 +2384,17 @@ fun CanvasScreen(
                                                 lassoPoints = listOf(downWorld)
                                             }
                                         } else {
-                                            val hitSelected = selectedStrokes.isNotEmpty() && selectedStrokes.any { stroke ->
+                                            val hitInsideLasso = lassoSelectionPath != null && LassoCutEngine.pointInPolygon(downWorld, lassoSelectionPath!!)
+                                            val hitSelected = hitInsideLasso || (selectedStrokes.isNotEmpty() && selectedStrokes.any { stroke ->
                                                 val b = strokeSelectionBounds(stroke)
                                                 downWorld.x >= b.left - moveSlop && downWorld.x <= b.right + moveSlop &&
                                                 downWorld.y >= b.top - moveSlop && downWorld.y <= b.bottom + moveSlop
-                                            }
+                                            })
                                             if (hitSelected) {
                                                 if (!isLocked) isDraggingSelection = true
                                             } else {
                                                 viewModel.clearSelection()
+                                                lassoSelectionPath = null
                                                 lassoPoints = listOf(downWorld)
                                             }
                                         }
@@ -2854,12 +2863,51 @@ fun CanvasScreen(
                                         )
                                     } else if (groupResizeHandle != null && groupResizeInitialBounds != null) {
                                         viewModel.scaleSelectedStrokes(groupResizeInitialBounds!!, groupResizeHandle!!, curWorld)
+                                        val cur = viewModel.state.value
+                                        boardStage?.syncPage(
+                                            strokes = cur.strokes,
+                                            background = cur.canvasBackground,
+                                            showGrid = cur.showGrid,
+                                            dark = cur.isDarkCanvas,
+                                            scale = cur.scale,
+                                            offsetX = cur.offsetX,
+                                            offsetY = cur.offsetY,
+                                            selected = cur.selectedStrokeIds,
+                                            customBackgroundUri = cur.pageCustomBackgroundUris.getOrElse(cur.pageIndex) { "" },
+                                            pageIndex = cur.pageIndex
+                                        )
                                     } else if (resizeStrokeId != null && resizeHandle != null && resizeInitialBounds != null) {
                                         viewModel.beginSelectionMove()
                                         viewModel.resizeStrokeWithInitialBounds(resizeStrokeId, resizeHandle, curWorld, resizeInitialBounds!!)
+                                        val cur = viewModel.state.value
+                                        boardStage?.syncPage(
+                                            strokes = cur.strokes,
+                                            background = cur.canvasBackground,
+                                            showGrid = cur.showGrid,
+                                            dark = cur.isDarkCanvas,
+                                            scale = cur.scale,
+                                            offsetX = cur.offsetX,
+                                            offsetY = cur.offsetY,
+                                            selected = cur.selectedStrokeIds,
+                                            customBackgroundUri = cur.pageCustomBackgroundUris.getOrElse(cur.pageIndex) { "" },
+                                            pageIndex = cur.pageIndex
+                                        )
                                     } else if (resizeStrokeId != null && resizeHandle != null) {
                                         viewModel.beginSelectionMove()
                                         viewModel.resizeStroke(resizeStrokeId, resizeHandle, curWorld)
+                                        val cur = viewModel.state.value
+                                        boardStage?.syncPage(
+                                            strokes = cur.strokes,
+                                            background = cur.canvasBackground,
+                                            showGrid = cur.showGrid,
+                                            dark = cur.isDarkCanvas,
+                                            scale = cur.scale,
+                                            offsetX = cur.offsetX,
+                                            offsetY = cur.offsetY,
+                                            selected = cur.selectedStrokeIds,
+                                            customBackgroundUri = cur.pageCustomBackgroundUris.getOrElse(cur.pageIndex) { "" },
+                                            pageIndex = cur.pageIndex
+                                        )
                                     } else if (activeTool == WhiteboardTool.SELECT && selectingBox) {
                                         boardStage?.setMarquee(downWorld, curWorld)
                                     } else if ((activeTool == WhiteboardTool.SELECT || activeTool == WhiteboardTool.LASSO) && isDraggingSelection) {
@@ -2871,6 +2919,23 @@ fun CanvasScreen(
                                         val delta = Offset(curWorld.x - prevWorld.x, curWorld.y - prevWorld.y)
                                         viewModel.beginSelectionMove()
                                         viewModel.moveSelectedStrokes(delta)
+                                        if (lassoSelectionPath != null) {
+                                            lassoSelectionPath = lassoSelectionPath!!.map { it + delta }
+                                        }
+                                        val cur = viewModel.state.value
+                                        boardStage?.syncPage(
+                                            strokes = cur.strokes,
+                                            background = cur.canvasBackground,
+                                            showGrid = cur.showGrid,
+                                            dark = cur.isDarkCanvas,
+                                            scale = cur.scale,
+                                            offsetX = cur.offsetX,
+                                            offsetY = cur.offsetY,
+                                            selected = cur.selectedStrokeIds,
+                                            customBackgroundUri = cur.pageCustomBackgroundUris.getOrElse(cur.pageIndex) { "" },
+                                            pageIndex = cur.pageIndex,
+                                            hasLassoSelection = lassoSelectionPath != null
+                                        )
                                     } else if (activeTool == WhiteboardTool.LASER) {
                                         viewModel.addLaserPoint(curWorld)
                                     } else if (activeTool == WhiteboardTool.LASSO && !isDraggingSelection && resizeStrokeId == null) {
@@ -3327,8 +3392,11 @@ fun CanvasScreen(
                                     viewModel.endSelectionMove()
                                 } else if (lassoPoints.size >= 3) {
                                     viewModel.lassoSelect(lassoPoints)
+                                    val curSelected = viewModel.state.value.selectedStrokeIds
+                                    lassoSelectionPath = if (curSelected.isNotEmpty()) lassoPoints else null
                                 } else if (resizeStrokeId == null && moved < 10f) {
                                     viewModel.clearSelection()
+                                    lassoSelectionPath = null
                                 }
                                 lassoPoints = emptyList()
                                 isDraggingSelection = false
@@ -3427,7 +3495,8 @@ fun CanvasScreen(
                         offsetY = page.offsetY,
                         selected = page.selectedStrokeIds,
                         customBackgroundUri = page.pageCustomBackgroundUris.getOrElse(page.pageIndex) { "" },
-                        pageIndex = page.pageIndex
+                        pageIndex = page.pageIndex,
+                        hasLassoSelection = lassoSelectionPath != null
                     )
                     stage.currentStroke = page.currentStroke
                     val document = page.document
@@ -3528,8 +3597,9 @@ fun CanvasScreen(
                         drawCircle(Color(0xFFFF2A2A), radius, center)
                         drawCircle(Color.White, radius * 0.45f, center)
                     }
-                    if (lassoPoints.size >= 2) {
-                        val lassoPath = lassoPoints.toSmoothedPath()
+                    val activeLasso = if (lassoPoints.size >= 2) lassoPoints else if (state.selectedStrokeIds.isNotEmpty()) lassoSelectionPath else null
+                    if (activeLasso != null && activeLasso.size >= 2) {
+                        val lassoPath = activeLasso.toSmoothedPath()
                         drawPath(
                             path = lassoPath,
                             color = Color(0x206366F1)
