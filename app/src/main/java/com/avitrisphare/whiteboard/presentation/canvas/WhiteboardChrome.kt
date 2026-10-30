@@ -2023,7 +2023,7 @@ fun AvitriSphareWhiteboardChrome(
                             }
                         )
                     }
-                    "geometry" -> DockPopover(maxWidth = 460.dp, scrollable = false) {
+                    "geometry" -> DockPopover(maxWidth = 380.dp, maxHeight = 240.dp, scrollable = false) {
 
                         GeometryToolPanel(
                             state = state,
@@ -2432,7 +2432,7 @@ fun AvitriSphareWhiteboardChrome(
                             onClose = { panel = null }
                         )
                     }
-                    "ink" -> DockPopover(maxWidth = 360.dp, maxHeight = 400.dp, scrollable = false) {
+                    "ink" -> DockPopover(maxWidth = 360.dp, maxHeight = 210.dp, scrollable = false) {
                         InkToolPanel(state = state, viewModel = viewModel, onClose = {
                             panel = null
                         })

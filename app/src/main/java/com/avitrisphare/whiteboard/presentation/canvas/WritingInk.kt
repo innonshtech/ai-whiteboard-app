@@ -258,7 +258,7 @@ fun InkToolPanel(
     Column(
         modifier = Modifier
             .width(340.dp)
-            .heightIn(max = 380.dp)
+            .heightIn(max = 210.dp)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 2.dp, vertical = 2.dp)
     ) {
