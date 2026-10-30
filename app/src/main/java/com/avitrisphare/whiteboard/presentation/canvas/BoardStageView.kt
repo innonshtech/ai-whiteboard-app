@@ -21,6 +21,7 @@ import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
+import android.webkit.WebSettings
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -77,6 +78,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
     private var selected: Set<String> = emptySet()
     private var hasLassoSelection: Boolean = false
     private var activeLive: LiveInk? = null
+    var onMoveMedia: ((strokeId: String, deltaX: Float, deltaY: Float) -> Unit)? = null
 
     private val activeLiveStrokes = ArrayList<Stroke>()
     private var documentBitmap: Bitmap? = null
@@ -220,6 +222,8 @@ class BoardStageView(context: Context) : FrameLayout(context) {
 
         if (inkChanged || pageChanged) {
             bindMedia(this.strokes)
+        } else {
+            layoutMedia()
         }
         if (pageChanged || moved) {
             grid.invalidate()
@@ -629,8 +633,59 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         }
         header.addView(titleView)
 
+        var downRawX = 0f
+        var downRawY = 0f
+        var startLeftMargin = 0
+        var startTopMargin = 0
+        var isDragging = false
+
+        header.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    val lp = container.layoutParams as? LayoutParams
+                    startLeftMargin = lp?.leftMargin ?: 0
+                    startTopMargin = lp?.topMargin ?: 0
+                    isDragging = false
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downRawX
+                    val dy = event.rawY - downRawY
+                    if (!isDragging && (dx * dx + dy * dy) > 16f) {
+                        isDragging = true
+                    }
+                    if (isDragging) {
+                        val lp = container.layoutParams as? LayoutParams
+                        if (lp != null) {
+                            lp.leftMargin = (startLeftMargin + dx).toInt()
+                            lp.topMargin = (startTopMargin + dy).toInt()
+                            container.layoutParams = lp
+                            container.requestLayout()
+                        }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                    if (isDragging) {
+                        val totalDx = event.rawX - downRawX
+                        val totalDy = event.rawY - downRawY
+                        if (scale > 0.001f) {
+                            onMoveMedia?.invoke(stroke.id, totalDx / scale, totalDy / scale)
+                        }
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+
         val web = WebView(context).apply {
-            setBackgroundColor(android.graphics.Color.WHITE)
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            setBackgroundColor(android.graphics.Color.BLACK)
             isVerticalScrollBarEnabled = true
             isHorizontalScrollBarEnabled = true
             settings.javaScriptEnabled = true
@@ -642,8 +697,9 @@ class BoardStageView(context: Context) : FrameLayout(context) {
             settings.setSupportZoom(true)
             settings.builtInZoomControls = true
             settings.displayZoomControls = false
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             settings.userAgentString =
-                "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
+                "Mozilla/5.0 (Linux; Android 13; Tablet) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
             val cookieManager = CookieManager.getInstance()
             cookieManager.setAcceptCookie(true)
@@ -672,9 +728,21 @@ class BoardStageView(context: Context) : FrameLayout(context) {
 
                 private fun handleExternal(uri: Uri): Boolean {
                     val urlStr = uri.toString()
-                    if (urlStr.contains("/embed/") || urlStr.contains("googlevideo.com") ||
-                        urlStr.contains("ytimg.com") || urlStr.contains("doubleclick.net") ||
-                        urlStr.startsWith("about:") || urlStr.startsWith("data:")) {
+                    val host = uri.host?.lowercase().orEmpty()
+                    if (host.contains("youtube.com") ||
+                        host.contains("youtube-nocookie.com") ||
+                        host.contains("googlevideo.com") ||
+                        host.contains("ytimg.com") ||
+                        host.contains("ggpht.com") ||
+                        host.contains("google.com") ||
+                        host.contains("googleusercontent.com") ||
+                        host.contains("googleapis.com") ||
+                        host.contains("gstatic.com") ||
+                        host.contains("doubleclick.net") ||
+                        urlStr.contains("/embed/") ||
+                        urlStr.startsWith("about:") ||
+                        urlStr.startsWith("data:") ||
+                        urlStr.startsWith("blob:")) {
                         return false
                     }
                     return try {
@@ -690,11 +758,13 @@ class BoardStageView(context: Context) : FrameLayout(context) {
             }
 
             if (isYouTube && videoId != null) {
+                val originUrl = "https://www.youtube-nocookie.com"
                 val iframeHtml = """
                     <!DOCTYPE html>
                     <html>
                     <head>
                     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                    <meta name="referrer" content="strict-origin-when-cross-origin">
                     <style>
                       * { box-sizing: border-box; }
                       html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; }
@@ -702,16 +772,16 @@ class BoardStageView(context: Context) : FrameLayout(context) {
                     </style>
                     </head>
                     <body>
-                    <iframe 
-                      src="https://www.youtube.com/embed/$videoId?autoplay=1&playsinline=1&rel=0&modestbranding=1" 
+                    <iframe
+                      src="$originUrl/embed/$videoId?autoplay=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&origin=$originUrl"
                       referrerpolicy="strict-origin-when-cross-origin"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                       allowfullscreen>
                     </iframe>
                     </body>
                     </html>
                 """.trimIndent()
-                loadDataWithBaseURL("https://www.youtube.com", iframeHtml, "text/html", "UTF-8", null)
+                loadDataWithBaseURL(originUrl, iframeHtml, "text/html", "UTF-8", null)
             } else {
                 val headers = mapOf("Referer" to "https://www.google.com")
                 loadUrl(stroke.text, headers)

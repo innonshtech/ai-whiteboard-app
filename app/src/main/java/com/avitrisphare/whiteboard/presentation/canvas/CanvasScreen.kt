@@ -2238,7 +2238,7 @@ fun CanvasScreen(
                                 val groupHit = if (selectedStrokes.isNotEmpty() && !isLockedSelection) {
                                     hitSelectionBoundsHandle(selectedStrokes, downWorld, 18f / canvasScale.coerceAtLeast(0.001f))
                                 } else null
-                                val headerH = 38f / canvasScale.coerceAtLeast(0.001f)
+                                val headerH = (44f * context.resources.displayMetrics.density) / canvasScale.coerceAtLeast(0.001f)
 
                                 fun beginWebOrDrag(hit: com.avitrisphare.whiteboard.domain.model.Stroke) {
                                     if (hit.strokeType == StrokeType.WEB_EMBED || hit.strokeType == StrokeType.VIDEO) {
@@ -2360,7 +2360,7 @@ fun CanvasScreen(
                                         selectionToolbarDismissed = true
                                     } else {
                                         val selectedWeb = selectedStrokes.singleOrNull { it.strokeType == StrokeType.WEB_EMBED || it.strokeType == StrokeType.VIDEO }
-                                        val headerH = 38f / canvasScale.coerceAtLeast(0.001f)
+                                        val headerH = (44f * context.resources.displayMetrics.density) / canvasScale.coerceAtLeast(0.001f)
                                         if (selectedWeb != null) {
                                             val b = strokeSelectionBounds(selectedWeb)
                                             val inBounds = downWorld.x >= b.left && downWorld.x <= b.right && downWorld.y >= b.top && downWorld.y <= b.bottom
@@ -3481,10 +3481,18 @@ fun CanvasScreen(
         ) {
             AndroidView(
                 factory = { context ->
-                    BoardStageView(context).also { boardStage = it }
+                    BoardStageView(context).also {
+                        it.onMoveMedia = { id, dx, dy ->
+                            viewModel.moveStroke(id, Offset(dx, dy))
+                        }
+                        boardStage = it
+                    }
                 },
                 update = { stage ->
-                    val page = state
+                    stage.onMoveMedia = { id, dx, dy ->
+                        viewModel.moveStroke(id, Offset(dx, dy))
+                    }
+                    val page = viewModel.state.value
                     stage.syncPage(
                         strokes = if (eraserSession.active) eraserSession.strokes else page.strokes,
                         background = page.canvasBackground,
