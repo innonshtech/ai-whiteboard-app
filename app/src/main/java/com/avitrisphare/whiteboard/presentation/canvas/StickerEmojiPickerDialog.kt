@@ -36,6 +36,8 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -182,7 +184,7 @@ fun StickerEmojiPanelContent(
                 onClick = { selectedTab = 0 },
                 text = {
                     Text(
-                        text = "⭐ Stickers",
+                        text = "⭐ " + stringResource(R.string.stickers_tab),
                         fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
                         color = if (selectedTab == 0) Color(0xFFD97706) else Color(0xFF64748B),
                         fontSize = 11.5.sp
@@ -194,7 +196,7 @@ fun StickerEmojiPanelContent(
                 onClick = { selectedTab = 1 },
                 text = {
                     Text(
-                        text = "😀 Emoji",
+                        text = "😀 " + stringResource(R.string.emoji_tab),
                         fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
                         color = if (selectedTab == 1) Color(0xFF2563EB) else Color(0xFF64748B),
                         fontSize = 11.5.sp
@@ -300,7 +302,7 @@ fun StickerEmojiPanelContent(
                 .padding(horizontal = 8.dp, vertical = 6.dp)
         ) {
             Text(
-                text = "💡 Tap sticker or emoji to place on board",
+                text = "💡 " + stringResource(R.string.stickers_tap_hint),
                 color = Color(0xFF64748B),
                 fontSize = 10.5.sp,
                 textAlign = TextAlign.Center,

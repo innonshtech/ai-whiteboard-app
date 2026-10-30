@@ -4343,7 +4343,7 @@ fun CanvasScreen(
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 TextButton(onClick = { viewModel.cancelPdfOcr() }) {
-                                    Text("Stop", color = Color(0xFFFF6B6B))
+                                    Text(stringResource(R.string.pdf_stop), color = Color(0xFFFF6B6B))
                                 }
                             }
                         } else {
@@ -4367,7 +4367,7 @@ fun CanvasScreen(
                                     onClick = { viewModel.makePdfEditableCurrentPage() },
                                     colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF60A5FA))
                                 ) {
-                                    Text("OCR this page", fontWeight = FontWeight.SemiBold)
+                                    Text(stringResource(R.string.pdf_ocr_page), fontWeight = FontWeight.SemiBold)
                                 }
                             }
                             if (currentOcrDoc == null || currentOcrDoc.pages.size < state.pageCount) {
@@ -4503,14 +4503,14 @@ fun CanvasScreen(
                             viewModel.resetDocumentFrame()
                         }
                     }) {
-                        Text("Fit PDF", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                        Text(stringResource(R.string.pdf_fit), color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
                     }
                     TextButton(onClick = {
                         viewModel.exportAnnotatedPdf { uri ->
                             exportedUri = uri
                             showExportDialog = true
                         }
-                    }) { Text("Export PDF", color = Color.White) }
+                    }) { Text(stringResource(R.string.pdf_export), color = Color.White) }
                     TextButton(onClick = { viewModel.closeDocument() }) {
                         Text("Close", color = Color.White)
                     }
@@ -4567,7 +4567,7 @@ fun CanvasScreen(
                         OutlinedTextField(
                             value = state.pdfSearchQuery,
                             onValueChange = { viewModel.setPdfSearchQuery(it) },
-                            placeholder = { Text("Search within PDF...", fontSize = 13.sp, color = Color.Gray) },
+                            placeholder = { Text(stringResource(R.string.pdf_search_placeholder), fontSize = 13.sp, color = Color.Gray) },
                             singleLine = true,
                             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.Gray) },
                             modifier = Modifier.fillMaxWidth(),
@@ -4582,7 +4582,7 @@ fun CanvasScreen(
                         if (state.pdfSearchQuery.isNotBlank()) {
                             Spacer(Modifier.height(6.dp))
                             if (searchResults.isEmpty()) {
-                                Text("No matches found", color = Color(0xFFF87171), fontSize = 12.sp)
+                                Text(stringResource(R.string.pdf_no_matches), color = Color(0xFFF87171), fontSize = 12.sp)
                             } else {
                                 Text(
                                     "Found in ${searchResults.size} page(s):",
@@ -4651,7 +4651,7 @@ fun CanvasScreen(
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
                             ) {
-                                Text("Copy to Canvas", fontSize = 12.sp, maxLines = 1)
+                                Text(stringResource(R.string.pdf_copy_to_canvas), fontSize = 12.sp, maxLines = 1)
                             }
                             Button(
                                 onClick = { viewModel.copyPdfTextToClipboard(currentPageText) },
@@ -4659,7 +4659,7 @@ fun CanvasScreen(
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
                             ) {
-                                Text("Copy for AI", fontSize = 12.sp, maxLines = 1)
+                                Text(stringResource(R.string.pdf_copy_for_ai), fontSize = 12.sp, maxLines = 1)
                             }
                         }
                     }
@@ -5589,7 +5589,7 @@ fun CanvasScreen(
                             value = imageQuery,
                             onValueChange = { imageQuery = it },
                             singleLine = true,
-                            placeholder = { Text("Search images on Google...", color = if (isDark) Color(0xFF94A3B8) else Color(0xFF9CA3AF)) },
+                            placeholder = { Text(stringResource(R.string.search_google_images), color = if (isDark) Color(0xFF94A3B8) else Color(0xFF9CA3AF)) },
                             leadingIcon = {
                                 Icon(
                                     Icons.Default.Search,
@@ -5835,7 +5835,7 @@ fun CanvasScreen(
                             value = youtubeQuery,
                             onValueChange = { youtubeQuery = it },
                             singleLine = true,
-                            placeholder = { Text("Search YouTube videos or paste link...", color = if (isDark) Color(0xFF94A3B8) else Color(0xFF9CA3AF)) },
+                            placeholder = { Text(stringResource(R.string.search_youtube_videos), color = if (isDark) Color(0xFF94A3B8) else Color(0xFF9CA3AF)) },
                             leadingIcon = {
                                 Icon(
                                     Icons.Default.Search,

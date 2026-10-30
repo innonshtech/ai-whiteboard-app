@@ -24,6 +24,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -74,7 +76,7 @@ fun IFPScreenHeader(
             )
             Spacer(Modifier.width(6.dp))
             Text(
-                text = "Back",
+                text = stringResource(R.string.back),
                 color = Color(0xFF1E293B),
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 13.sp

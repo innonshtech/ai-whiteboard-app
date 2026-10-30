@@ -298,4 +298,136 @@
     <string name="release_to_move_more">Release to move to More</string>
     <string name="action_add">Add</string>
     <string name="tool_color_swap">Color Swap</string>
+
+    <!-- Class Home & Greetings -->
+    <string name="greeting_good_morning">Good Morning</string>
+    <string name="greeting_good_afternoon">Good Afternoon</string>
+    <string name="greeting_good_evening">Good Evening</string>
+    <string name="greeting_teacher">Teacher</string>
+    <string name="badge_interactive">Interactive</string>
+    <string name="launch_board">Launch Board</string>
+    <string name="action_attendance_sub">Student presence for current period</string>
+    <string name="status_not_marked">Not marked</string>
+    <string name="status_marked">Marked</string>
+    <string name="action_timetable_sub">Today\'s scheduled periods</string>
+    <string name="status_class_schedule">Class schedule</string>
+    <string name="action_homework_sub">Class assignments &amp; tasks</string>
+    <string name="status_nothing_to_review">Nothing to review</string>
+    <string name="action_doubts_sub">Questions raised by students</string>
+    <string name="status_class_queries">Class queries</string>
+    <string name="action_tests_grading_sub">Assessment scores, question papers &amp; academic analytics</string>
+    <string name="recent_boards">Recent boards</string>
+    <string name="boards_saved_count">%d saved</string>
+    <string name="search_boards_placeholder">Search boards by title, class, subject...</string>
+    <string name="view_all_arrow">View all ›</string>
+    <string name="interactive_whiteboard">Interactive whiteboard</string>
+    <string name="untitled_board">Untitled Board</string>
+    <string name="dialog_edit_board_title">Edit Board Details</string>
+    <string name="label_board_title_hint">Board Title (e.g., Grade 11-C · Physics)</string>
+    <string name="label_subject_tag_hint">Subject Tag (e.g., Physics, Maths, Chemistry)</string>
+    <string name="label_notes_subtitle_hint">Notes / Subtitle (optional)</string>
+    <string name="save_changes">Save Changes</string>
+    <string name="logout_confirm_msg">Are you sure you want to log out?</string>
+
+    <!-- License Activation & Panel Lock -->
+    <string name="license_activate_panel_title">Activate this Panel</string>
+    <string name="license_enter_key_sub">Enter the 16-character licence key from your administrator</string>
+    <string name="license_btn_activate">Activate Panel</string>
+    <string name="license_err_full_key">Enter the full key in the form GYSH-XXXX-XXXX-XXXX.</string>
+    <string name="license_err_expired">This licence has expired. Contact your administrator.</string>
+    <string name="license_err_school_inactive">School subscription is inactive. Contact your administrator.</string>
+    <string name="license_err_network">Unable to connect to school server. Check internet connection.</string>
+    <string name="license_device_uuid">Device UUID</string>
+    <string name="key_space">space</string>
+    <string name="panel_locked_title">Panel Locked</string>
+    <string name="panel_locked_sub">This panel\'s licence has expired. Please contact your school administrator to reactivate access.</string>
+    <string name="label_school">School</string>
+    <string name="label_support">Support</string>
+    <string name="btn_contact_admin">Contact Administrator</string>
+    <string name="btn_check_status">Check Status</string>
+    <string name="btn_enter_new_key">Enter New Licence Key</string>
+    <string name="reach_out_to_support">Please reach out to %s</string>
+
+    <!-- QR & Teacher Login -->
+    <string name="qr_change_license">Change License</string>
+    <string name="qr_status_connecting">Connecting to school server…</string>
+    <string name="qr_status_waiting">Waiting for a teacher to scan</string>
+    <string name="qr_status_refreshing">Refreshing login code…</string>
+    <string name="qr_auto_refresh_hint">Refreshes automatically every 60 seconds</string>
+    <string name="qr_scan_title">Scan to log in</string>
+    <string name="qr_scan_sub">Use your phone no password needed</string>
+    <string name="qr_step_1">Open the GYOASH Teacher App</string>
+    <string name="qr_step_2">Tap \'Scan to Login\'</string>
+    <string name="qr_step_3">Point your camera at this QR code</string>
+    <string name="qr_login_with_email">Or log in with Email &amp; Password</string>
+    <string name="login_teacher_title">Teacher Login</string>
+    <string name="label_email">Email</string>
+    <string name="label_password">Password</string>
+    <string name="btn_log_in">Log In</string>
+
+    <!-- Backgrounds & Board Styles -->
+    <string name="bg_board_styles">Board Styles</string>
+    <string name="bg_white">White</string>
+    <string name="bg_dark">Dark</string>
+    <string name="bg_lined">Lined</string>
+    <string name="bg_dotted">Dotted</string>
+    <string name="bg_grid">Grid</string>
+    <string name="bg_graph">Graph</string>
+    <string name="bg_football">Football</string>
+    <string name="bg_image">Image</string>
+    <string name="bg_selected_image_title">Selected Image Background</string>
+    <string name="bg_selected_image">Selected Image</string>
+    <string name="bg_apply_selected_hint">Apply selected image as canvas background</string>
+    <string name="bg_use_board_image_hint">Use image from this board as background</string>
+    <string name="bg_select_insert_hint">Select or insert an image to set as background</string>
+    <string name="bg_active">Active</string>
+    <string name="bg_choose_from_device">Choose Image from Device</string>
+    <string name="bg_pick_storage_hint">Pick a picture from storage / gallery</string>
+    <string name="dialog_delete_page_title">Delete %s?</string>
+    <string name="dialog_delete_page_msg">Are you sure you want to remove %s? All drawings on this page will be deleted.</string>
+    <string name="label_spotlight_size">Spotlight size</string>
+    <string name="label_your_name">Your name</string>
+
+    <!-- PDF, Search & Canvas Overlays -->
+    <string name="pdf_stop">Stop</string>
+    <string name="pdf_ocr_page">OCR this page</string>
+    <string name="pdf_fit">Fit PDF</string>
+    <string name="pdf_export">Export PDF</string>
+    <string name="pdf_search_placeholder">Search within PDF...</string>
+    <string name="pdf_no_matches">No matches found</string>
+    <string name="pdf_copy_to_canvas">Copy to Canvas</string>
+    <string name="pdf_copy_for_ai">Copy for AI</string>
+    <string name="search_google_images">Search images on Google...</string>
+    <string name="search_youtube_videos">Search YouTube videos or paste link...</string>
+    <string name="action_yes">Yes</string>
+    <string name="action_no">No</string>
+
+    <!-- Export Dialog Details -->
+    <string name="export_step3">3. FILE NAME</string>
+    <string name="export_destination">Destination:</string>
+    <string name="export_file_name">File Name:</string>
+    <string name="export_format">Format:</string>
+    <string name="export_total_pages">Total Pages:</string>
+    <string name="export_size_speed">Size &amp; Speed:</string>
+    <string name="export_as_format">Export as %s</string>
+    <string name="export_share_send">Share / Send</string>
+    <string name="export_done">Done</string>
+
+    <!-- Stickers & Mindmap & Floating Tools -->
+    <string name="stickers_emoji_title">Stickers &amp; Emoji</string>
+    <string name="stickers_tab">Stickers</string>
+    <string name="emoji_tab">Emoji</string>
+    <string name="stickers_tap_hint">Tap sticker or emoji to place on board</string>
+    <string name="mindmap_template_title">Mindmap Template</string>
+    <string name="mindmap_template_sub">Select a preset structure or create a custom wired mind map</string>
+    <string name="mindmap_horizontal">Horizontal</string>
+    <string name="mindmap_vertical">Vertical</string>
+    <string name="mindmap_border_color">Border Color</string>
+    <string name="mindmap_thickness">Thickness: %dpx</string>
+    <string name="calc_basic">Basic</string>
+    <string name="calc_scientific">Scientific</string>
+    <string name="timer_set_timer">Set Timer</string>
+    <string name="theme_light_short">Light</string>
+    <string name="theme_dark_short">Dark</string>
+
 </resources>

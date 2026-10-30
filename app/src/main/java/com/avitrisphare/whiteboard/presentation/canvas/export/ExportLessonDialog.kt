@@ -48,6 +48,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -115,7 +117,7 @@ fun ExportLessonDialog(
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "Export Whiteboard Lesson",
+                                stringResource(R.string.export_title),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1E293B)
@@ -129,7 +131,7 @@ fun ExportLessonDialog(
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    "$pageCount Pages",
+                                    stringResource(R.string.export_pages, pageCount),
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isDark) Color(0xFF93C5FD) else Color(0xFF2563EB)
@@ -138,7 +140,7 @@ fun ExportLessonDialog(
                         }
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            "Save locally, backup to cloud, or export for GYOASH",
+                            stringResource(R.string.export_subtitle),
                             fontSize = 11.5.sp,
                             color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
                         )
@@ -177,7 +179,7 @@ fun ExportLessonDialog(
                 } else {
                     // Configuration & In-progress view
                     Text(
-                        "1. CHOOSE EXPORT FORMAT",
+                        stringResource(R.string.export_step1),
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF64748B),
@@ -220,7 +222,7 @@ fun ExportLessonDialog(
                     Spacer(Modifier.height(14.dp))
 
                     Text(
-                        "2. SELECT DESTINATION",
+                        stringResource(R.string.export_step2),
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF64748B),
@@ -284,7 +286,7 @@ fun ExportLessonDialog(
 
                     // Lesson Title Input
                     Text(
-                        "3. FILE NAME",
+                        stringResource(R.string.export_step3),
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF64748B),
@@ -372,7 +374,7 @@ fun ExportLessonDialog(
                                     .clickable(onClick = onDismiss),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("Cancel", color = Color(0xFF475569), fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                                Text(stringResource(R.string.cancel), color = Color(0xFF475569), fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
                             }
 
                             Box(
@@ -595,7 +597,7 @@ private fun ExportSuccessView(
         Spacer(Modifier.height(10.dp))
 
         Text(
-            "Export Successful!",
+            stringResource(R.string.export_success_title),
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF1E293B)
@@ -625,7 +627,7 @@ private fun ExportSuccessView(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Lesson Title:", fontSize = 11.5.sp, color = Color(0xFF64748B))
+                Text(stringResource(R.string.export_lesson_title_label), fontSize = 11.5.sp, color = Color(0xFF64748B))
                 Text(lessonTitle, fontSize = 11.5.sp, color = Color(0xFF1E293B), fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(5.dp))
@@ -633,7 +635,7 @@ private fun ExportSuccessView(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("File Name:", fontSize = 11.5.sp, color = Color(0xFF64748B))
+                Text(stringResource(R.string.export_file_name), fontSize = 11.5.sp, color = Color(0xFF64748B))
                 Text(result.file.name, fontSize = 11.5.sp, color = Color(0xFF1E293B), fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(5.dp))
@@ -641,7 +643,7 @@ private fun ExportSuccessView(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Format:", fontSize = 11.5.sp, color = Color(0xFF64748B))
+                Text(stringResource(R.string.export_format), fontSize = 11.5.sp, color = Color(0xFF64748B))
                 Text(result.format.displayName, fontSize = 11.5.sp, color = Color(0xFF2563EB), fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(5.dp))
@@ -649,7 +651,7 @@ private fun ExportSuccessView(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Total Pages:", fontSize = 11.5.sp, color = Color(0xFF64748B))
+                Text(stringResource(R.string.export_total_pages), fontSize = 11.5.sp, color = Color(0xFF64748B))
                 Text("${result.pageCount} pages", fontSize = 11.5.sp, color = Color(0xFF1E293B), fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(5.dp))
@@ -657,7 +659,7 @@ private fun ExportSuccessView(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Size & Speed:", fontSize = 11.5.sp, color = Color(0xFF64748B))
+                Text(stringResource(R.string.export_size_speed), fontSize = 11.5.sp, color = Color(0xFF64748B))
                 Text("${result.fileSizeFormatted} • ${result.durationMs} ms", fontSize = 11.5.sp, color = Color(0xFF059669), fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(5.dp))
@@ -665,7 +667,7 @@ private fun ExportSuccessView(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Destination:", fontSize = 11.5.sp, color = Color(0xFF64748B))
+                Text(stringResource(R.string.export_destination), fontSize = 11.5.sp, color = Color(0xFF64748B))
                 Text(result.destination.displayName, fontSize = 11.5.sp, color = Color(0xFFD97706), fontWeight = FontWeight.SemiBold)
             }
         }
@@ -694,7 +696,7 @@ private fun ExportSuccessView(
                         modifier = Modifier.size(15.dp)
                     )
                     Spacer(Modifier.width(5.dp))
-                    Text("Open File", color = Color(0xFF1E293B), fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.export_open_file), color = Color(0xFF1E293B), fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
 
@@ -733,7 +735,7 @@ private fun ExportSuccessView(
                     .clickable(onClick = onDismiss),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Done", color = Color(0xFF1E293B), fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+                Text(stringResource(R.string.export_done), color = Color(0xFF1E293B), fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
             }
         }
     }

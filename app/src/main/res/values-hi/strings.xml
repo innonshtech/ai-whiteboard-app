@@ -298,4 +298,136 @@
     <string name="release_to_move_more">\'अधिक\' में भेजने के लिए छोड़ें</string>
     <string name="action_add">जोड़ें</string>
     <string name="tool_color_swap">रंग बदलें</string>
+
+    <!-- Class Home & Greetings -->
+    <string name="greeting_good_morning">सुप्रभात</string>
+    <string name="greeting_good_afternoon">शुभ दोपहर</string>
+    <string name="greeting_good_evening">शुभ संध्या</string>
+    <string name="greeting_teacher">शिक्षक</string>
+    <string name="badge_interactive">इंटरएक्टिव</string>
+    <string name="launch_board">बोर्ड शुरू करें</string>
+    <string name="action_attendance_sub">वर्तमान पीरियड के लिए छात्रों की उपस्थिति</string>
+    <string name="status_not_marked">दर्ज नहीं</string>
+    <string name="status_marked">दर्ज</string>
+    <string name="action_timetable_sub">आज के निर्धारित पीरियड</string>
+    <string name="status_class_schedule">कक्षा समय सारणी</string>
+    <string name="action_homework_sub">कक्षा असाइनमेंट और कार्य</string>
+    <string name="status_nothing_to_review">समीक्षा के लिए कुछ नहीं</string>
+    <string name="action_doubts_sub">छात्रों द्वारा पूछे गए प्रश्न</string>
+    <string name="status_class_queries">कक्षा प्रश्न</string>
+    <string name="action_tests_grading_sub">मूल्यांकन अंक, प्रश्न पत्र और शैक्षणिक विश्लेषण</string>
+    <string name="recent_boards">हाल के बोर्ड</string>
+    <string name="boards_saved_count">%d सहेजे गए</string>
+    <string name="search_boards_placeholder">शीर्षक, कक्षा, विषय से बोर्ड खोजें...</string>
+    <string name="view_all_arrow">सभी देखें ›</string>
+    <string name="interactive_whiteboard">इंटरएक्टिव व्हाइटबोर्ड</string>
+    <string name="untitled_board">बिना शीर्षक का बोर्ड</string>
+    <string name="dialog_edit_board_title">बोर्ड विवरण संपादित करें</string>
+    <string name="label_board_title_hint">बोर्ड शीर्षक (उदा. कक्षा 11-सी · भौतिक विज्ञान)</string>
+    <string name="label_subject_tag_hint">विषय टैग (उदा. भौतिक विज्ञान, गणित, रसायन विज्ञान)</string>
+    <string name="label_notes_subtitle_hint">नोट्स / उपशीर्षक (वैकल्पिक)</string>
+    <string name="save_changes">परिवर्तन सहेजें</string>
+    <string name="logout_confirm_msg">क्या आप निश्चित रूप से लॉग आउट करना चाहते हैं?</string>
+
+    <!-- License Activation & Panel Lock -->
+    <string name="license_activate_panel_title">इस पैनल को सक्रिय करें</string>
+    <string name="license_enter_key_sub">अपने प्रशासक से प्राप्त 16-अक्षरों की लाइसेंस कुंजी दर्ज करें</string>
+    <string name="license_btn_activate">पैनल सक्रिय करें</string>
+    <string name="license_err_full_key">GYSH-XXXX-XXXX-XXXX प्रारूप में पूरी कुंजी दर्ज करें।</string>
+    <string name="license_err_expired">यह लाइसेंस समाप्त हो गया है। अपने प्रशासक से संपर्क करें।</string>
+    <string name="license_err_school_inactive">स्कूल सदस्यता निष्क्रिय है। अपने प्रशासक से संपर्क करें।</string>
+    <string name="license_err_network">स्कूल सर्वर से कनेक्ट करने में असमर्थ। इंटरनेट कनेक्शन जांचें।</string>
+    <string name="license_device_uuid">डिवाइस UUID</string>
+    <string name="key_space">स्पेस</string>
+    <string name="panel_locked_title">पैनल लॉक है</string>
+    <string name="panel_locked_sub">इस पैनल का लाइसेंस समाप्त हो गया है। एक्सेस पुनः सक्रिय करने के लिए कृपया अपने स्कूल प्रशासक से संपर्क करें।</string>
+    <string name="label_school">स्कूल</string>
+    <string name="label_support">सहायता</string>
+    <string name="btn_contact_admin">प्रशासक से संपर्क करें</string>
+    <string name="btn_check_status">स्थिति जांचें</string>
+    <string name="btn_enter_new_key">नई लाइसेंस कुंजी दर्ज करें</string>
+    <string name="reach_out_to_support">कृपया %s से संपर्क करें</string>
+
+    <!-- QR & Teacher Login -->
+    <string name="qr_change_license">लाइसेंस बदलें</string>
+    <string name="qr_status_connecting">स्कूल सर्वर से कनेक्ट हो रहा है…</string>
+    <string name="qr_status_waiting">शिक्षक द्वारा स्कैन करने की प्रतीक्षा है</string>
+    <string name="qr_status_refreshing">लॉगिन कोड रीफ्रेश हो रहा है…</string>
+    <string name="qr_auto_refresh_hint">हर 60 सेकंड में स्वतः रीफ्रेश होता है</string>
+    <string name="qr_scan_title">लॉग इन करने के लिए स्कैन करें</string>
+    <string name="qr_scan_sub">अपने फ़ोन का उपयोग करें, पासवर्ड की आवश्यकता नहीं</string>
+    <string name="qr_step_1">GYOASH टीचर ऐप खोलें</string>
+    <string name="qr_step_2">\'लॉग इन करने के लिए स्कैन करें\' पर टैप करें</string>
+    <string name="qr_step_3">अपना कैमरा इस क्यूआर कोड पर रखें</string>
+    <string name="qr_login_with_email">या ईमेल और पासवर्ड से लॉग इन करें</string>
+    <string name="login_teacher_title">शिक्षक लॉगिन</string>
+    <string name="label_email">ईमेल</string>
+    <string name="label_password">पासवर्ड</string>
+    <string name="btn_log_in">लॉग इन करें</string>
+
+    <!-- Backgrounds & Board Styles -->
+    <string name="bg_board_styles">बोर्ड शैलियाँ</string>
+    <string name="bg_white">सफेद</string>
+    <string name="bg_dark">डार्क</string>
+    <string name="bg_lined">पंक्तिबद्ध</string>
+    <string name="bg_dotted">बिंदुमय</string>
+    <string name="bg_grid">ग्रिड</string>
+    <string name="bg_graph">ग्राफ़</string>
+    <string name="bg_football">फुटबॉल</string>
+    <string name="bg_image">छवि</string>
+    <string name="bg_selected_image_title">चयनित छवि पृष्ठभूमि</string>
+    <string name="bg_selected_image">चयनित छवि</string>
+    <string name="bg_apply_selected_hint">चयनित छवि को कैनवास पृष्ठभूमि के रूप में लागू करें</string>
+    <string name="bg_use_board_image_hint">इस बोर्ड की छवि को पृष्ठभूमि के रूप में उपयोग करें</string>
+    <string name="bg_select_insert_hint">पृष्ठभूमि के रूप में सेट करने के लिए छवि चुनें या डालें</string>
+    <string name="bg_active">सक्रिय</string>
+    <string name="bg_choose_from_device">डिवाइस से छवि चुनें</string>
+    <string name="bg_pick_storage_hint">स्टोरेज / गैलरी से चित्र चुनें</string>
+    <string name="dialog_delete_page_title">%s हटाएं?</string>
+    <string name="dialog_delete_page_msg">क्या आप निश्चित रूप से %s को हटाना चाहते हैं? इस पृष्ठ के सभी चित्र हटा दिए जाएंगे।</string>
+    <string name="label_spotlight_size">स्पॉटलाइट आकार</string>
+    <string name="label_your_name">आपका नाम</string>
+
+    <!-- PDF, Search & Canvas Overlays -->
+    <string name="pdf_stop">रोकें</string>
+    <string name="pdf_ocr_page">इस पृष्ठ का OCR करें</string>
+    <string name="pdf_fit">PDF फ़िट करें</string>
+    <string name="pdf_export">PDF निर्यात करें</string>
+    <string name="pdf_search_placeholder">PDF में खोजें...</string>
+    <string name="pdf_no_matches">कोई परिणाम नहीं मिला</string>
+    <string name="pdf_copy_to_canvas">कैनवास पर कॉपी करें</string>
+    <string name="pdf_copy_for_ai">AI के लिए कॉपी करें</string>
+    <string name="search_google_images">Google पर छवियां खोजें...</string>
+    <string name="search_youtube_videos">YouTube वीडियो खोजें या लिंक पेस्ट करें...</string>
+    <string name="action_yes">हाँ</string>
+    <string name="action_no">नहीं</string>
+
+    <!-- Export Dialog Details -->
+    <string name="export_step3">3. फ़ाइल का नाम</string>
+    <string name="export_destination">गंतव्य:</string>
+    <string name="export_file_name">फ़ाइल का नाम:</string>
+    <string name="export_format">प्रारूप:</string>
+    <string name="export_total_pages">कुल पृष्ठ:</string>
+    <string name="export_size_speed">आकार और गति:</string>
+    <string name="export_as_format">%s के रूप में निर्यात करें</string>
+    <string name="export_share_send">साझा करें / भेजें</string>
+    <string name="export_done">पूर्ण</string>
+
+    <!-- Stickers & Mindmap & Floating Tools -->
+    <string name="stickers_emoji_title">स्टिकर्स और इमोजी</string>
+    <string name="stickers_tab">स्टिकर्स</string>
+    <string name="emoji_tab">इमोजी</string>
+    <string name="stickers_tap_hint">बोर्ड पर लगाने के लिए स्टिकर या इमोजी पर टैप करें</string>
+    <string name="mindmap_template_title">माइंडमैप टेम्पलेट</string>
+    <string name="mindmap_template_sub">एक पूर्व-निर्धारित संरचना चुनें या कस्टम माइंड मैप बनाएं</string>
+    <string name="mindmap_horizontal">क्षैतिज (Horizontal)</string>
+    <string name="mindmap_vertical">ऊर्ध्वाधर (Vertical)</string>
+    <string name="mindmap_border_color">बॉर्डर का रंग</string>
+    <string name="mindmap_thickness">मोटाई: %dpx</string>
+    <string name="calc_basic">सामान्य</string>
+    <string name="calc_scientific">वैज्ञानिक</string>
+    <string name="timer_set_timer">टाइमर सेट करें</string>
+    <string name="theme_light_short">लाइट</string>
+    <string name="theme_dark_short">डार्क</string>
+
 </resources>

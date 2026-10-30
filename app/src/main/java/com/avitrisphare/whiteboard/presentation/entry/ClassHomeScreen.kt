@@ -371,7 +371,7 @@ fun ClassHomeScreen(
                                     .padding(horizontal = 9.dp, vertical = 3.dp)
                             ) {
                                 Text(
-                                    text = "Interactive",
+                                    text = stringResource(R.string.badge_interactive),
                                     color = Color.White,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold
@@ -399,7 +399,7 @@ fun ClassHomeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Launch Board",
+                            text = stringResource(R.string.launch_board),
                             color = Color(0xFF0F172A),
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
@@ -428,8 +428,8 @@ fun ClassHomeScreen(
                     containerBg = Color(0xFFFFF7ED),
                     containerBorder = Color(0xFFFFEDD5),
                     title = stringResource(R.string.mark_attendance),
-                    subtitle = "Student presence for current period",
-                    statusText = briefing.attendance.ifBlank { "Not marked" },
+                    subtitle = stringResource(R.string.action_attendance_sub),
+                    statusText = briefing.attendance.ifBlank { stringResource(R.string.status_not_marked) },
                     statusBg = if (briefing.attendance.contains("Marked", ignoreCase = true)) Color(0xFFDCFCE7) else Color(0xFFFEF3C7),
                     statusTextColor = if (briefing.attendance.contains("Marked", ignoreCase = true)) Color(0xFF15803D) else Color(0xFFB45309),
                     onClick = onOpenAttendance,
@@ -442,8 +442,8 @@ fun ClassHomeScreen(
                     containerBg = Color(0xFFF5F3FF),
                     containerBorder = Color(0xFFEDE9FE),
                     title = stringResource(R.string.weekly_timetable),
-                    subtitle = "Today's scheduled periods",
-                    statusText = "Class schedule",
+                    subtitle = stringResource(R.string.action_timetable_sub),
+                    statusText = stringResource(R.string.status_class_schedule),
                     statusBg = Color(0xFFF5F3FF),
                     statusTextColor = Color(0xFF7C3AED),
                     onClick = onOpenTimetable,
@@ -461,8 +461,8 @@ fun ClassHomeScreen(
                     containerBg = Color(0xFFECFDF5),
                     containerBorder = Color(0xFFD1FAE5),
                     title = stringResource(R.string.assign_homework),
-                    subtitle = "Class assignments & tasks",
-                    statusText = briefing.homework.ifBlank { "Nothing to review" },
+                    subtitle = stringResource(R.string.action_homework_sub),
+                    statusText = briefing.homework.ifBlank { stringResource(R.string.status_nothing_to_review) },
                     statusBg = Color(0xFFECFDF5),
                     statusTextColor = Color(0xFF059669),
                     onClick = onOpenHomework,
@@ -475,8 +475,8 @@ fun ClassHomeScreen(
                     containerBg = Color(0xFFF0F9FF),
                     containerBorder = Color(0xFFE0F2FE),
                     title = stringResource(R.string.student_doubts),
-                    subtitle = "Questions raised by students",
-                    statusText = "Class queries",
+                    subtitle = stringResource(R.string.action_doubts_sub),
+                    statusText = stringResource(R.string.status_class_queries),
                     statusBg = Color(0xFFF0F9FF),
                     statusTextColor = Color(0xFF0284C7),
                     onClick = onOpenDoubts,
@@ -524,7 +524,7 @@ fun ClassHomeScreen(
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = "Assessment scores, question papers & academic analytics",
+                        text = stringResource(R.string.action_tests_grading_sub),
                         color = Color(0xFF64748B),
                         fontSize = 13.sp
                     )
@@ -559,14 +559,14 @@ fun ClassHomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Recent boards",
+                    text = stringResource(R.string.recent_boards),
                     color = Color(0xFF0F172A),
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "· ${boards.size} saved",
+                    text = "· " + stringResource(R.string.boards_saved_count, boards.size),
                     color = Color(0xFF64748B),
                     fontSize = 13.sp
                 )
@@ -603,7 +603,7 @@ fun ClassHomeScreen(
                         decorationBox = { innerTextField ->
                             if (boardSearchQuery.isEmpty()) {
                                 Text(
-                                    text = "Search boards by title, class, subject...",
+                                    text = stringResource(R.string.search_boards_placeholder),
                                     color = Color(0xFF94A3B8),
                                     fontSize = 12.sp
                                 )
@@ -625,7 +625,7 @@ fun ClassHomeScreen(
 
                 // View All Link
                 Text(
-                    text = "View all ›",
+                    text = stringResource(R.string.view_all_arrow),
                     color = Color(0xFFEA580C),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -653,7 +653,7 @@ fun ClassHomeScreen(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = "New board",
+                        text = stringResource(R.string.new_board),
                         color = Color.White,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
@@ -679,8 +679,8 @@ fun ClassHomeScreen(
                     displayBoards.forEach { note ->
                         val tag = note.tags.firstOrNull() ?: subject.ifBlank { "Board" }
                         BoardCard(
-                            title = note.title.ifBlank { "Untitled Board" },
-                            subtitle = note.subtitle.ifBlank { "Interactive whiteboard" },
+                            title = note.title.ifBlank { stringResource(R.string.untitled_board) },
+                            subtitle = note.subtitle.ifBlank { stringResource(R.string.interactive_whiteboard) },
                             tag = tag,
                             tagColor = boardTagColor(tag),
                             pageCount = 1,
@@ -732,7 +732,7 @@ Spacer(Modifier.height(12.dp))
                 onDismissRequest = { editingBoard = null },
                 title = {
                     Text(
-                        text = "Edit Board Details",
+                        text = stringResource(R.string.dialog_edit_board_title),
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF0F172A),
                         fontSize = 18.sp
@@ -742,7 +742,7 @@ Spacer(Modifier.height(12.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Column {
                             Text(
-                                text = "Board Title (e.g., Grade 11-C · Physics)",
+                                text = stringResource(R.string.label_board_title_hint),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF475569)
@@ -784,7 +784,7 @@ Spacer(Modifier.height(12.dp))
 
                         Column {
                             Text(
-                                text = "Subject / Tag",
+                                text = stringResource(R.string.label_subject_tag_hint),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF475569)
@@ -814,7 +814,7 @@ Spacer(Modifier.height(12.dp))
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF26A1B)),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Save Changes", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(stringResource(R.string.save_changes), fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 },
                 dismissButton = {
@@ -832,14 +832,14 @@ Spacer(Modifier.height(12.dp))
                 onDismissRequest = { showLogoutConfirm = false },
                 title = {
                     Text(
-                        text = "End Session?",
+                        text = stringResource(R.string.log_out),
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF0F172A)
                     )
                 },
                 text = {
                     Text(
-                        text = "You will be logged out of this classroom panel. Saved whiteboards will remain intact.",
+                        text = stringResource(R.string.logout_confirm_msg),
                         color = Color(0xFF475569)
                     )
                 },
@@ -859,7 +859,7 @@ Spacer(Modifier.height(12.dp))
                 },
                 dismissButton = {
                     TextButton(onClick = { showLogoutConfirm = false }) {
-                        Text(text = "Cancel", color = Color(0xFF64748B))
+                        Text(text = stringResource(R.string.cancel), color = Color(0xFF64748B))
                     }
                 },
                 containerColor = Color.White,
@@ -982,7 +982,7 @@ private fun BoardRow(note: Note, onClick: () -> Unit) {
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = note.title.ifBlank { "Untitled Board" },
+                text = note.title.ifBlank { stringResource(R.string.untitled_board) },
                 color = Color(0xFF0F172A),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -1011,7 +1011,7 @@ private fun BoardRow(note: Note, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Interactive Board",
+                    text = stringResource(R.string.interactive_whiteboard),
                     color = Color(0xFF94A3B8),
                     fontSize = 12.sp
                 )
@@ -1044,16 +1044,17 @@ private fun BoardRow(note: Note, onClick: () -> Unit) {
     }
 }
 
+@Composable
 internal fun classGreeting(hour: Int, teacherName: String): String {
     val hello = when (hour) {
-        in 5..11 -> "Good Morning"
-        in 12..16 -> "Good Afternoon"
-        else -> "Good Evening"
+        in 5..11 -> stringResource(R.string.greeting_good_morning)
+        in 12..16 -> stringResource(R.string.greeting_good_afternoon)
+        else -> stringResource(R.string.greeting_good_evening)
     }
     val parts = teacherName.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
     val honorifics = setOf("dr", "dr.", "mr", "mr.", "mrs", "mrs.", "ms", "ms.", "prof", "prof.")
     val greetingName = when {
-        parts.isEmpty() -> "Teacher"
+        parts.isEmpty() -> stringResource(R.string.greeting_teacher)
         parts.size >= 2 && parts[0].lowercase() in honorifics -> "${parts[0]} ${parts[1]}"
         else -> parts[0]
     }
@@ -1129,7 +1130,7 @@ private fun NewBoardCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
             )
             Spacer(Modifier.height(3.dp))
             Text(
-                text = "Start interactive board",
+                text = stringResource(R.string.interactive_whiteboard),
                 fontSize = 11.sp,
                 color = Color(0xFF64748B)
             )

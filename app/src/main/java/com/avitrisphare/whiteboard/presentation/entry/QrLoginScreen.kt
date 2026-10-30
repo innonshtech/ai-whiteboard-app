@@ -36,6 +36,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -163,7 +165,7 @@ fun QrLoginScreen(
                     GyoashMark(schoolName = schoolName, markSize = 30.dp, labelSize = 15.sp)
 
                     Text(
-                        text = "Change License",
+                        text = stringResource(R.string.qr_change_license),
                         color = Color(0xFF64748B),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
@@ -243,7 +245,7 @@ fun QrLoginScreen(
                         Spacer(Modifier.height(10.dp))
 
                         Text(
-                            text = "Refreshes automatically every 60 seconds",
+                            text = stringResource(R.string.qr_auto_refresh_hint),
                             color = Color(0xFF64748B),
                             fontSize = 12.sp
                         )
@@ -265,7 +267,7 @@ fun QrLoginScreen(
                             )
                             Spacer(Modifier.width(10.dp))
                             Text(
-                                text = "Scan to log in",
+                                text = stringResource(R.string.qr_scan_title),
                                 color = EntryText,
                                 fontSize = 26.sp,
                                 fontWeight = FontWeight.Bold
@@ -275,7 +277,7 @@ fun QrLoginScreen(
                         Spacer(Modifier.height(6.dp))
 
                         Text(
-                            text = "Use your phone no password needed",
+                            text = stringResource(R.string.qr_scan_sub),
                             color = Color(0xFF64748B),
                             fontSize = 14.sp
                         )
@@ -316,7 +318,7 @@ fun QrLoginScreen(
 
                         // Fallback link
                         Text(
-                            text = "Or log in with Email & Password",
+                            text = stringResource(R.string.qr_login_with_email),
                             color = BrandOrange,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -371,7 +373,7 @@ private fun WhiteEmailLoginDialog(
                 .padding(26.dp)
         ) {
             Text(
-                "Teacher login",
+                stringResource(R.string.login_teacher_title),
                 color = EntryText,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
@@ -396,7 +398,7 @@ private fun WhiteEmailLoginDialog(
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it; error = null },
-                label = { Text("Email") },
+                label = { Text(stringResource(R.string.label_email)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 colors = fieldColors,
@@ -408,7 +410,7 @@ private fun WhiteEmailLoginDialog(
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it; error = null },
-                label = { Text("Password") },
+                label = { Text(stringResource(R.string.label_password)) },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 colors = fieldColors,
@@ -428,7 +430,7 @@ private fun WhiteEmailLoginDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Cancel",
+                    text = stringResource(R.string.cancel),
                     color = Color(0xFF64748B),
                     fontWeight = FontWeight.Medium,
                     fontSize = 14.sp,
@@ -468,7 +470,7 @@ private fun WhiteEmailLoginDialog(
                         )
                     } else {
                         Text(
-                            "Log in",
+                            stringResource(R.string.btn_log_in),
                             color = Color.White,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 14.sp

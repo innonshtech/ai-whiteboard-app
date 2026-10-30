@@ -30,6 +30,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -130,14 +132,14 @@ fun LicenseActivationScreen(
                 GyoashFullLogo(modifier = Modifier.height(52.dp))
                 Spacer(Modifier.height(18.dp))
                 Text(
-                    text = "Activate this Panel",
+                    text = stringResource(R.string.license_activate_panel_title),
                     color = EntryText,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "Enter the 16-character licence key from your administrator",
+                    text = stringResource(R.string.license_enter_key_sub),
                     color = EntryMuted,
                     fontSize = 15.sp
                 )
@@ -224,7 +226,7 @@ fun LicenseActivationScreen(
                 }
                 // Space Bar
                 WhiteKeyboardKey(
-                    label = "space",
+                    label = stringResource(R.string.key_space),
                     width = keyboardKeyWidth * 6.5f,
                     height = keyboardKeyHeight * 0.95f,
                     fontSize = 14.sp,
@@ -297,7 +299,7 @@ fun LicenseActivationScreen(
                         )
                     } else {
                         Text(
-                            text = "Activate Panel",
+                            text = stringResource(R.string.license_btn_activate),
                             color = Color.White,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 16.sp
@@ -308,7 +310,7 @@ fun LicenseActivationScreen(
                 Spacer(Modifier.height(16.dp))
 
                 Text(
-                    text = "Device UUID  $deviceUuid  ·  support@gyoash.com",
+                    text = "${stringResource(R.string.license_device_uuid)}  $deviceUuid  ·  support@gyoash.com",
                     color = EntryPlaceholder,
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center
