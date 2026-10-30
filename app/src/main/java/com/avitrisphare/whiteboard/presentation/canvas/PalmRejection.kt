@@ -190,7 +190,6 @@ class AdaptiveTouchClassifier(private val context: Context?) {
         size: Float = 0f
     ): Boolean {
         if (isEraser) return false
-        if (isStylus) return true
 
         val contactSize = effectiveContactSize(majorPx, minorPx, size)
         if (contactSize <= 0f) return true // Unreported contact defaults to primary pen
@@ -206,12 +205,15 @@ class AdaptiveTouchClassifier(private val context: Context?) {
             return contactSize <= 2.25f
         }
 
+        if (isStylus) return true
+
         // B) Pixel scale with sensible DPI
         // A physical fine pen nib is typically <= 3.5mm; fingers are 8mm-15mm
         val dpi = xdpi.coerceAtLeast(1f)
         val contactMm = (contactSize / dpi) * 25.4f
+        val minorMm = if (minorPx > 0f) (minorPx / dpi) * 25.4f else contactMm
         if (dpi > 50f && dpi < 500f && contactMm in 0.1f..30f) {
-            return contactMm <= 4.0f
+            return contactMm <= 8.0f || minorMm <= 6.5f
         }
 
         // C) Generic pixel scale fallback for fine nib

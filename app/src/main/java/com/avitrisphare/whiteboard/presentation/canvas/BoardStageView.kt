@@ -177,14 +177,9 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         val moved = scale != this.scale || offsetX != this.offsetX || offsetY != this.offsetY
 
         // Fast change check: if stroke list reference and selection reference haven't changed, ink has NOT changed.
-        // Prevents redrawing the entire board when modals open/close, pens change, or colors swap!
         val inkChanged = pageIndexChanged ||
-            (sourceStrokes !== strokes && (
-                strokes.size != this.strokes.size ||
-                this.strokes.isEmpty() != strokes.isEmpty() ||
-                (strokes.isNotEmpty() && (strokes.first().id != this.strokes.firstOrNull()?.id || strokes.last().id != this.strokes.lastOrNull()?.id || strokes.last() !== this.strokes.lastOrNull()))
-            )) ||
-            (sourceSelected !== selected && (selected.size != this.selected.size || selected != this.selected))
+            (sourceStrokes !== strokes) ||
+            (sourceSelected != selected)
 
         this.pageBackground = background
         this.customBackgroundUri = customBackgroundUri

@@ -1060,6 +1060,7 @@ fun straightStroke(start: Offset, end: Offset, color: Int, width: Float): Stroke
 }
 
 fun measurementLabel(text: String, at: Offset, color: Int, angleDeg: Float = 0f): Stroke {
+    val safeText = text.replace("┬░", "\u00B0")
     val safeColor = if (color != 0) color else 0xFF1E293B.toInt()
     val kind = if (angleDeg == 0f) "measurement" else "measurement:${angleDeg.roundToInt()}"
     return Stroke(
@@ -1068,7 +1069,7 @@ fun measurementLabel(text: String, at: Offset, color: Int, angleDeg: Float = 0f)
         strokeWidth = 16f,
         strokeType = StrokeType.TEXT,
         stickerKind = kind,
-        text = text
+        text = safeText
     )
 }
 

@@ -442,18 +442,20 @@ fun AvitriSphareWhiteboardChrome(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+            val selectedStrokes = remember(state.strokes, state.selectedStrokeIds) {
+                state.strokes.filter { it.id in state.selectedStrokeIds }
+            }
+            val isDiagram = remember(selectedStrokes) {
+                selectedStrokes.any { isMindMapNode(it) || it.strokeType == StrokeType.CONNECTOR }
+            }
             AnimatedVisibility(
-                visible = state.selectedStrokeIds.isNotEmpty() && !selectionToolbarDismissed,
+                visible = selectedStrokes.isNotEmpty() && !selectionToolbarDismissed && !isDiagram,
                 enter = fadeIn(tween(200)) + slideInVertically(tween(220)) { it / 2 },
                 exit = fadeOut(tween(160)) + slideOutVertically(tween(180)) { it / 2 }
             ) {
-                val selectedStrokes = remember(state.strokes, state.selectedStrokeIds) {
-                    state.strokes.filter { it.id in state.selectedStrokeIds }
-                }
-                val isDiagram = remember(selectedStrokes) {
-                    selectedStrokes.any { isMindMapNode(it) || it.strokeType == StrokeType.CONNECTOR }
-                }
-                if (!isDiagram) {
+                // Guard: if selectedStrokes is empty (during exit animation), render nothing.
+                if (selectedStrokes.isNotEmpty() && !isDiagram) {
+
                     val hasImage = remember(selectedStrokes) {
                         selectedStrokes.any { it.strokeType == StrokeType.IMAGE }
                     }
@@ -701,7 +703,9 @@ fun AvitriSphareWhiteboardChrome(
                                             }
                                         }
 
-                                        if (selectionColorTarget == "border") {
+                                        if (selectionColorTarget == "border" || !hasFillableShape) {
+                                            // Always show stroke-width stepper when no fillable shapes selected
+                                            // (pure ink/line selection). Keeps toolbar compact and matches Image 2.
                                             Spacer(Modifier.width(6.dp))
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
@@ -807,21 +811,9 @@ fun AvitriSphareWhiteboardChrome(
                                             .clickable { onDismissSelectionToolbar(true) }
                                             .padding(2.dp)
                                     )
-                                    val canEdit = state.strokes.count {
-                                        it.id in state.selectedStrokeIds && it.strokeType == StrokeType.TEXT
-                                    } == 1
-                                    if (canEdit && state.editingTextId == null) {
-                                        Text(
-                                            text = "Edit text",
-                                            color = Color.White,
-                                            fontSize = 12.sp,
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .clickable { viewModel.beginTextEdit() }
-                                                .padding(horizontal = 8.dp, vertical = 6.dp)
-                                        )
-                                    }
+                                    // 'Edit text' is shown in Row 3 (contextual actions), not here.
                                 }
+
 
                                 // Bottom row: Color palette
                                 Spacer(Modifier.height(8.dp))
@@ -896,7 +888,13 @@ fun AvitriSphareWhiteboardChrome(
                                 }
 
                                 // Optional row 3: Contextual actions for Handwriting / Equation
-                                val canConvert = state.strokes.any { it.id in state.selectedStrokeIds && isConvertibleEquationInk(it) }
+                                // Note: Plain geometry LINEs are NOT convertible ink. Only actual handwriting types
+                                // (freehand strokes, etc.) should show the Text / Convert Equation actions.
+                                val canConvert = state.strokes.any {
+                                    it.id in state.selectedStrokeIds &&
+                                    isConvertibleEquationInk(it) &&
+                                    it.strokeType != StrokeType.LINE  // plain lines are not convertible
+                                }
                                 val selectedEquation = state.strokes.singleOrNull { it.id in state.selectedStrokeIds && it.strokeType == StrokeType.EQUATION }
                                 val editableStroke = state.strokes.singleOrNull {
                                     it.id in state.selectedStrokeIds && (

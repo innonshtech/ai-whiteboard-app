@@ -1,4 +1,4 @@
-﻿package com.avitrisphare.whiteboard.presentation.canvas
+package com.avitrisphare.whiteboard.presentation.canvas
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -915,7 +915,7 @@ fun DrawScope.renderStroke(
                     textAlign = if (isMeasurement) Paint.Align.CENTER else Paint.Align.LEFT
                 }
                 if (isMeasurement) {
-                    val mText = stroke.text
+                    val mText = stroke.text.replace("┬░", "\u00B0")
                     val textH = paint.textSize
                     paint.color = if (stroke.colorValue != 0) stroke.colorValue else 0xFF0F172A.toInt()
                     if (angleDeg != 0f) {
@@ -2682,9 +2682,9 @@ fun CanvasScreen(
                                                     replaceMathTool(updated)
                                                     val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
                                                     val text = if (tool.kind == MathToolKind.RULER) {
-                                                        "${formatCentimetres(updated.span, pxPerCm)} ÔÇó $deg┬░"
+                                                        "${formatCentimetres(updated.span, pxPerCm)} \u2022 $deg\u00B0"
                                                     } else {
-                                                        "$deg┬░"
+                                                        "$deg\u00B0"
                                                     }
                                                     mathReadout = text to change.position + Offset(0f, -38f)
                                                 }
@@ -3121,7 +3121,7 @@ fun CanvasScreen(
                                 val leftBaseWorld = CanvasTransform.screenToWorld(leftBaseScreen, canvasScale, offset)
                                 when (mathGesture.zone) {
                                     MathToolZone.ANGLE_MODE_1 -> {
-                                        // Left Angle: from Left baseline (180┬░) to arm
+                                        // Left Angle: from Left baseline (180°) to arm
                                         val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
                                         viewModel.commitStroke(straightStroke(centerWorld, leftBaseWorld, state.selectedColor, state.strokeWidth))
                                         viewModel.commitStroke(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
@@ -3145,12 +3145,12 @@ fun CanvasScreen(
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
                                         val labelScreen = tool.center + midD * (arcR + 32f)
                                         viewModel.commitStroke(
-                                            measurementLabel("${leftAngleDeg.roundToInt()}┬░", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${leftAngleDeg.roundToInt()}\u00B0", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
-                                        Toast.makeText(context, "Left Angle ${leftAngleDeg.roundToInt()}┬░ drawn", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Left Angle ${leftAngleDeg.roundToInt()}\u00B0 drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     MathToolZone.ANGLE_MODE_ARC_LEFT -> {
-                                        // Left Arc: circular arc only from Left baseline (180┬░) down to arm
+                                        // Left Arc: circular arc only from Left baseline (180°) down to arm
                                         val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
                                         val arcScreenPoints = mutableListOf<Offset>()
                                         val steps = (leftAngleDeg / 2.5f).roundToInt().coerceAtLeast(8)
@@ -3171,12 +3171,12 @@ fun CanvasScreen(
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
                                         val labelScreen = tool.center + midD * (tool.span + 32f)
                                         viewModel.commitStroke(
-                                            measurementLabel("${leftAngleDeg.roundToInt()}┬░", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${leftAngleDeg.roundToInt()}\u00B0", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
-                                        Toast.makeText(context, "Left Arc (${leftAngleDeg.roundToInt()}┬░) drawn", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Left Arc (${leftAngleDeg.roundToInt()}\u00B0) drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     MathToolZone.ANGLE_MODE_ARC -> {
-                                        // Right Arc: circular arc only from Right baseline (0┬░) up to arm
+                                        // Right Arc: circular arc only from Right baseline (0°) up to arm
                                         val arcScreenPoints = mutableListOf<Offset>()
                                         val steps = (pDeg / 2.5f).roundToInt().coerceAtLeast(8)
                                         for (i in 0..steps) {
@@ -3196,12 +3196,12 @@ fun CanvasScreen(
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
                                         val labelScreen = tool.center + midD * (tool.span + 32f)
                                         viewModel.commitStroke(
-                                            measurementLabel("${pDeg.roundToInt()}┬░", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${pDeg.roundToInt()}\u00B0", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
-                                        Toast.makeText(context, "Right Arc (${pDeg.roundToInt()}┬░) drawn", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Right Arc (${pDeg.roundToInt()}\u00B0) drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     MathToolZone.ANGLE_MODE_2 -> {
-                                        // Right Angle: from Right baseline (0┬░) to arm
+                                        // Right Angle: from Right baseline (0°) to arm
                                         viewModel.commitStroke(straightStroke(centerWorld, rightBaseWorld, state.selectedColor, state.strokeWidth))
                                         viewModel.commitStroke(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
                                         val arcScreenPoints = mutableListOf<Offset>()
@@ -3224,9 +3224,9 @@ fun CanvasScreen(
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
                                         val labelScreen = tool.center + midD * (arcR + 32f)
                                         viewModel.commitStroke(
-                                            measurementLabel("${pDeg.roundToInt()}┬░", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${pDeg.roundToInt()}\u00B0", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
-                                        Toast.makeText(context, "Right Angle ${pDeg.roundToInt()}┬░ drawn", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Right Angle ${pDeg.roundToInt()}\u00B0 drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     else -> Unit
                                 }
