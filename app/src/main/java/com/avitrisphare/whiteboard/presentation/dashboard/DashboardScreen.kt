@@ -35,19 +35,27 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
+import com.avitrisphare.whiteboard.core.localization.AppLanguage
+import com.avitrisphare.whiteboard.presentation.common.LanguageSelectionDialog
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
     onNoteClick: (String) -> Unit,
     onNewNote: () -> Unit,
-    onToggleTheme: () -> Unit
+    onToggleTheme: () -> Unit,
+    currentLanguage: AppLanguage = AppLanguage.ENGLISH,
+    onLanguageChange: (AppLanguage) -> Unit = {}
 ) {
     val notes: List<Note> by viewModel.notes.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val sortOrder by viewModel.sortOrder.collectAsStateWithLifecycle()
     var showSearch by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
     var noteToDelete by remember { mutableStateOf<Note?>(null) }
     var selectedNote by remember { mutableStateOf<Note?>(null) }
     var showNoteActions by remember { mutableStateOf(false) }
@@ -76,7 +84,7 @@ fun DashboardScreen(
                             OutlinedTextField(
                                 value = searchQuery,
                                 onValueChange = { viewModel.setSearchQuery(it) },
-                                placeholder = { Text("Search notes...", color = LocalAvitriSphareColors.current.textMuted) },
+                                placeholder = { Text(stringResource(R.string.search_notes), color = LocalAvitriSphareColors.current.textMuted) },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp),
@@ -93,7 +101,7 @@ fun DashboardScreen(
                                 trailingIcon = {
                                     if (searchQuery.isNotEmpty()) {
                                         IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                            Icon(Icons.Default.Add, contentDescription = "Clear", modifier = Modifier.size(20.dp).rotate(45f))
+                                            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.clear_all), modifier = Modifier.size(20.dp).rotate(45f))
                                         }
                                     }
                                 }
@@ -108,7 +116,7 @@ fun DashboardScreen(
                                     color = LocalAvitriSphareColors.current.textPrimary
                                 )
                                 Text(
-                                    text = "${notes.size} note${if (notes.size != 1) "s" else ""}",
+                                    text = if (notes.size == 1) stringResource(R.string.single_note_count) else stringResource(R.string.notes_count, notes.size),
                                     fontSize = 11.sp,
                                     color = LocalAvitriSphareColors.current.textMuted,
                                     fontFamily = FontFamily.Monospace
@@ -123,7 +131,7 @@ fun DashboardScreen(
                             showSearch = false
                             viewModel.setSearchQuery("")
                         }) {
-                            Text("Cancel", color = LocalAvitriSphareColors.current.textMuted)
+                            Text(stringResource(R.string.cancel), color = LocalAvitriSphareColors.current.textMuted)
                         }
                     } else {
                         IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
@@ -133,10 +141,17 @@ fun DashboardScreen(
                 },
                 actions = {
                     if (!showSearch) {
+                        IconButton(onClick = { showLanguageDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Language,
+                                contentDescription = stringResource(R.string.language),
+                                tint = LocalAvitriSphareColors.current.textPrimary
+                            )
+                        }
                         IconButton(onClick = onToggleTheme) {
                             Icon(
                                 imageVector = if (LocalAvitriSphareColors.current.isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                contentDescription = "Toggle theme",
+                                contentDescription = stringResource(R.string.toggle_theme),
                                 tint = LocalAvitriSphareColors.current.textPrimary
                             )
                         }
@@ -144,7 +159,7 @@ fun DashboardScreen(
                             IconButton(onClick = { showSortMenu = true }) {
                                 Icon(
                                     Icons.Default.Sort,
-                                    contentDescription = "Sort notes",
+                                    contentDescription = stringResource(R.string.sort_notes),
                                     tint = LocalAvitriSphareColors.current.textPrimary
                                 )
                             }
@@ -169,7 +184,7 @@ fun DashboardScreen(
                             }
                         }
                         IconButton(onClick = { showSearch = true }) {
-                            Icon(Icons.Default.Search, contentDescription = "Search", tint = LocalAvitriSphareColors.current.textPrimary)
+                            Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search), tint = LocalAvitriSphareColors.current.textPrimary)
                         }
                     }
                 },
@@ -185,7 +200,7 @@ fun DashboardScreen(
                 contentColor = Color.Black,
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = "New Note")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.new_note))
             }
         },
         containerColor = LocalAvitriSphareColors.current.background
@@ -198,7 +213,7 @@ fun DashboardScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = if (isSearchActive) "No notes found matching your search" else "Your library is empty",
+                        text = if (isSearchActive) stringResource(R.string.no_notes_found) else stringResource(R.string.library_empty),
                         color = LocalAvitriSphareColors.current.textMuted,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 14.sp
@@ -229,22 +244,33 @@ fun DashboardScreen(
     if (noteToDelete != null) {
         AlertDialog(
             onDismissRequest = { noteToDelete = null },
-            title = { Text("Delete Note", color = LocalAvitriSphareColors.current.textPrimary) },
-            text = { Text("Are you sure you want to delete '${noteToDelete?.title}'?", color = LocalAvitriSphareColors.current.textMuted) },
+            title = { Text(stringResource(R.string.dialog_delete_title), color = LocalAvitriSphareColors.current.textPrimary) },
+            text = { Text(stringResource(R.string.delete_note_confirm, noteToDelete?.title ?: ""), color = LocalAvitriSphareColors.current.textMuted) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteNote(noteToDelete!!)
                     noteToDelete = null
                 }) {
-                    Text("Delete", color = Color(0xFFFF6B6B))
+                    Text(stringResource(R.string.delete), color = Color(0xFFFF6B6B))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { noteToDelete = null }) {
-                    Text("Cancel", color = LocalAvitriSphareColors.current.textMuted)
+                    Text(stringResource(R.string.cancel), color = LocalAvitriSphareColors.current.textMuted)
                 }
             },
             containerColor = LocalAvitriSphareColors.current.surface
+        )
+    }
+
+    if (showLanguageDialog) {
+        LanguageSelectionDialog(
+            currentLanguage = currentLanguage,
+            onLanguageSelected = { newLang ->
+                onLanguageChange(newLang)
+                showLanguageDialog = false
+            },
+            onDismiss = { showLanguageDialog = false }
         )
     }
 

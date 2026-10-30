@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GYOASH — Architecture & Tech Stack</title>
+  <style>
+    :root {
+      --bg: #0d1117; --card: #161b22; --border: #21262d;
+      --text: #c9d1d9; --muted: #8b949e;
+      --green: #3fb950; --red: #f85149; --blue: #4fc3f7;
+      --gold: #f5a623; --purple: #a855f7; --orange: #f97316;
+      --teal: #00c896;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; font-size: 14px; }
+    header { background: linear-gradient(135deg, #0d1117, #1a1a2e); border-bottom: 2px solid var(--orange); padding: 40px; text-align: center; }
+    header h1 { font-size: 2rem; font-weight: 900; color: #fff; }
+    header p { color: var(--muted); margin-top: 8px; }
+    .hbadge { display:inline-block; padding:4px 14px; border-radius:20px; font-size:0.75rem; font-weight:700; border:1px solid rgba(255,255,255,0.2); color:#fff; background:rgba(255,255,255,0.07); margin:4px; }
+    nav { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:100; }
+    nav a { text-decoration:none; font-size:0.75rem; font-weight:600; padding:5px 12px; border-radius:20px; color:var(--muted); border:1px solid var(--border); transition:all 0.2s; }
+    nav a:hover { color:#fff; border-color:#fff; }
+    .container { max-width:1200px; margin:0 auto; padding:40px 20px; }
+    section { margin-bottom:56px; }
+    h2 { font-size:1.2rem; font-weight:700; color:#fff; margin-bottom:18px; padding-bottom:10px; border-bottom:1px solid var(--border); }
+    h3 { font-size:0.95rem; font-weight:700; color:#fff; margin-bottom:10px; }
+    .note { padding:12px 16px; border-radius:10px; font-size:0.82rem; margin:12px 0; border-left:3px solid; }
+    .note-blue   { background:rgba(79,195,247,0.08);  border-color:var(--blue);   color:#aad4f5; }
+    .note-green  { background:rgba(63,185,80,0.08);   border-color:var(--green);  color:#8fdc9a; }
+    .note-gold   { background:rgba(245,166,35,0.08);  border-color:var(--gold);   color:#fde68a; }
+    .note-orange { background:rgba(249,115,22,0.08);  border-color:var(--orange); color:#fdba74; }
+    .note-red    { background:rgba(248,81,73,0.08);   border-color:var(--red);    color:#fca5a5; }
+
+    /* Big picture diagram */
+    .arch-diagram { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:28px; overflow-x:auto; }
+    .arch-row { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-bottom:12px; }
+    .arch-box { border-radius:10px; padding:12px 18px; text-align:center; font-size:0.78rem; font-weight:700; min-width:130px; border:1px solid; }
+    .arch-arrow { display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:1.2rem; }
+    .arch-label { font-size:0.68rem; font-weight:600; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
+
+    /* Repo cards */
+    .repo-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:16px; }
+    .repo-card { background:var(--card); border-radius:12px; padding:20px; border:1px solid var(--border); }
+    .repo-card h3 { font-size:0.9rem; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+    .repo-card .stack-row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+    .chip { display:inline-block; padding:2px 10px; border-radius:6px; font-size:0.72rem; font-weight:700; background:rgba(255,255,255,0.06); border:1px solid var(--border); color:#ccc; }
+    .chip-blue   { background:rgba(79,195,247,0.1);  border-color:#0369a1; color:#4fc3f7; }
+    .chip-green  { background:rgba(63,185,80,0.1);   border-color:#238636; color:#3fb950; }
+    .chip-gold   { background:rgba(245,166,35,0.1);  border-color:#9a6700; color:#f5a623; }
+    .chip-purple { background:rgba(168,85,247,0.1);  border-color:#7e22ce; color:#c084fc; }
+    .chip-red    { background:rgba(248,81,73,0.1);   border-color:#b91c1c; color:#f85149; }
+    .chip-teal   { background:rgba(0,200,150,0.1);   border-color:#0d9488; color:#00c896; }
+    .chip-orange { background:rgba(249,115,22,0.1);  border-color:#c2410c; color:#f97316; }
+    .repo-card ul { padding-left:16px; font-size:0.8rem; color:#aaa; }
+    .repo-card ul li { margin-bottom:4px; }
+    .repo-card .boundary { margin-top:10px; padding:8px 12px; border-radius:8px; font-size:0.78rem; background:rgba(248,81,73,0.06); border-left:3px solid var(--red); color:#fca5a5; }
+
+    /* Tables */
+    .gtable { width:100%; border-collapse:collapse; font-size:0.82rem; }
+    .gtable th { background:rgba(255,255,255,0.04); border:1px solid var(--border); padding:9px 12px; color:#fff; font-weight:700; text-align:left; }
+    .gtable td { padding:9px 12px; border:1px solid var(--border); vertical-align:top; color:#bbb; }
+    .gtable tr:hover td { background:rgba(255,255,255,0.02); }
+
+    /* Flow steps */
+    .flow { display:flex; flex-direction:column; gap:0; }
+    .flow-step { display:flex; gap:16px; align-items:flex-start; }
+    .flow-step .num { display:flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; font-size:0.78rem; font-weight:800; flex-shrink:0; margin-top:2px; }
+    .flow-step .body { flex:1; padding-bottom:16px; border-left:2px solid var(--border); margin-left:14px; padding-left:16px; }
+    .flow-step:last-child .body { border-left:2px solid transparent; }
+    .flow-step .title { font-size:0.88rem; font-weight:700; color:#fff; margin-bottom:4px; }
+    .flow-step .desc  { font-size:0.8rem; color:#aaa; }
+    .flow-step .code  { margin-top:6px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:6px; padding:8px 12px; font-family:monospace; font-size:0.78rem; color:#79c0ff; }
+
+    /* Day 1 checklist */
+    .checklist { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+    .check-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px; }
+    .check-card h3 { font-size:0.85rem; color:var(--gold); margin-bottom:10px; }
+    .check-card ul { list-style:none; padding:0; }
+    .check-card ul li { font-size:0.8rem; color:#aaa; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.04); display:flex; align-items:flex-start; gap:8px; }
+    .check-card ul li:last-child { border-bottom:none; }
+    .check-card ul li::before { content:'☐'; color:var(--gold); flex-shrink:0; }
+
+    /* Env vars table */
+    .env-section { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:14px; }
+    .env-section h3 { font-size:0.88rem; margin-bottom:12px; }
+    .env-row { display:flex; gap:12px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:0.8rem; }
+    .env-row:last-child { border-bottom:none; }
+    .env-key { font-family:monospace; color:#79c0ff; min-width:220px; flex-shrink:0; }
+    .env-val { color:#aaa; }
+
+    footer { text-align:center; padding:28px; border-top:1px solid var(--border); color:var(--muted); font-size:0.82rem; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>🏗️ GYOASH — Architecture & Tech Stack</h1>
+  <p>Project 2609 &nbsp;|&nbsp; Developer Reference Document &nbsp;|&nbsp; Phase 1 Scope</p>
+  <div style="margin-top:14px;">
+    <span class="hbadge">6 Repos</span>
+    <span class="hbadge">4 Surfaces</span>
+    <span class="hbadge">2 Backends</span>
+    <span class="hbadge">AI on Panel Only</span>
+    <span class="hbadge">Phase 1</span>
+  </div>
+</header>
+
+<nav>
+  <a href="#bigpicture">Big Picture</a>
+  <a href="#repos">6 Repos</a>
+  <a href="#techstack">Tech Stack</a>
+  <a href="#apiboundary">API Boundary</a>
+  <a href="#realtime">Real-Time</a>
+  <a href="#aipipeline">AI Pipeline</a>
+  <a href="#database">Database</a>
+  <a href="#envvars">Env Variables</a>
+  <a href="#day1">Day 1 Checklist</a>
+</nav>
+
+<div class="container">
+
+  <!-- BIG PICTURE -->
+  <section id="bigpicture">
+    <h2>🗺️ Big Picture — How Everything Connects</h2>
+    <div class="arch-diagram">
+
+      <!-- Surface layer -->
+      <div style="text-align:center;font-size:0.7rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">SURFACES (what users see)</div>
+      <div class="arch-row">
+        <div class="arch-box" style="background:rgba(249,115,22,0.08);border-color:var(--orange);color:var(--orange);">
+          🖥️ IFP Panel App<br/><span style="font-size:0.65rem;font-weight:400;color:#aaa;">React + Android WebView</span>
+        </div>
+        <div class="arch-box" style="background:rgba(245,166,35,0.08);border-color:var(--gold);color:var(--gold);">
+          📱 Teacher App<br/><span style="font-size:0.65rem;font-weight:400;color:#aaa;">React Native</span>
+        </div>
+        <div class="arch-box" style="background:rgba(0,200,150,0.08);border-color:var(--teal);color:var(--teal);">
+          📱 Student App<br/><span style="font-size:0.65rem;font-weight:400;color:#aaa;">React Native + Web</span>
+        </div>
+        <div class="arch-box" style="background:rgba(79,195,247,0.08);border-color:var(--blue);color:var(--blue);">
+          🌐 Admin Portal<br/><span style="font-size:0.65rem;font-weight:400;color:#aaa;">React Web</span>
+        </div>
+      </div>
+
+      <!-- Arrow down -->
+      <div class="arch-arrow" style="margin:8px 0;">↓ &nbsp; REST API + WebSocket + WebRTC &nbsp; ↓</div>
+
+      <!-- Backend layer -->
+      <div style="text-align:center;font-size:0.7rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">BACKENDS</div>
+      <div class="arch-row">
+        <div class="arch-box" style="background:rgba(63,185,80,0.08);border-color:var(--green);color:var(--green);min-width:200px;">
+          ⚙️ Node.js Backend<br/><span style="font-size:0.65rem;font-weight:400;color:#aaa;">Express + Socket.io + WebRTC</span><br/>
+          <span style="font-size:0.65rem;color:#aaa;">Auth · APIs · Real-time · Recording</span>
+        </div>
+        <div style="display:flex;align-items:center;padding:0 8px;color:var(--muted);">⟷</div>
+        <div class="arch-box" style="background:rgba(168,85,247,0.08);border-color:var(--purple);color:var(--purple);min-width:200px;">
+          🤖 FastAPI Backend<br/><span style="font-size:0.65rem;font-weight:400;color:#aaa;">Python + LangChain + OpenAI</span><br/>
+          <span style="font-size:0.65rem;color:#aaa;">AI Tools · OCR · Voice · LLM calls</span>
+        </div>
+      </div>
+
+      <!-- Arrow down -->
+      <div class="arch-arrow" style="margin:8px 0;">↓ &nbsp; DB reads/writes &nbsp; ↓</div>
+
+      <!-- Data layer -->
+      <div style="text-align:center;font-size:0.7rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">DATA & INFRA</div>
+      <div class="arch-row">
+        <div class="arch-box" style="background:rgba(79,195,247,0.06);border-color:#0369a1;color:var(--blue);">🗄️ PostgreSQL<br/><span style="font-size:0.65rem;font-weight:400;color:#aaa;">Primary DB</span></div>
+        <div class="arch-box" style="background:rgba(248,81,73,0.06);border-color:#b91c1c;color:var(--red);">⚡ Redis<br/><span style="font-size:0.65rem;font-weight:400;color:#aaa;">Cache + Sessions</span></div>
+        <div class="arch-box" style="background:rgba(245,166,35,0.06);border-color:#9a6700;color:var(--gold);">☁️ AWS S3 / Azure Blob<br/><span style="font-size:0.65rem;font-weight:400;color:#aaa;">Files + Recordings</span></div>
+        <div class="arch-box" style="background:rgba(0,200,150,0.06);border-color:#0d9488;color:var(--teal);">🔥 Firebase<br/><span style="font-size:0.65rem;font-weight:400;color:#aaa;">Push Notifications</span></div>
+      </div>
+
+      <!-- Key rule -->
+      <div style="margin-top:20px;padding:12px 16px;background:rgba(249,115,22,0.08);border-radius:8px;border:1px solid rgba(249,115,22,0.3);text-align:center;font-size:0.82rem;color:#fdba74;">
+        ⚠️ <strong>Phase 1 Rule:</strong> Only the IFP Panel App calls FastAPI (AI endpoints). Teacher App, Student App, and Admin Portal call Node.js only.
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 REPOS -->
+  <section id="repos">
+    <h2>📦 The 6 Repositories</h2>
+    <div class="repo-grid">
+
+      <!-- Repo 1 -->
+      <div class="repo-card" style="border-color:var(--orange);">
+        <h3>🖥️ <span style="color:var(--orange);">gyoash-panel</span> &nbsp;<span style="font-size:0.7rem;color:var(--muted);font-weight:400;">IFP Panel App</span></h3>
+        <div class="stack-row">
+          <span class="chip chip-orange">React 18</span>
+          <span class="chip chip-orange">TypeScript</span>
+          <span class="chip chip-orange">Fabric.js / Konva.js</span>
+          <span class="chip chip-orange">Android WebView</span>
+          <span class="chip chip-orange">Electron (Windows)</span>
+        </div>
+        <ul>
+          <li>Whiteboard canvas — infinite canvas, all drawing tools, OCR</li>
+          <li>AI Teacher side panel — all 11 AI tools (calls FastAPI)</li>
+          <li>Interactive Classroom UI — polls, raise hand, student whiteboard</li>
+          <li>Content Library browser, Virtual Labs, 3D model viewer</li>
+          <li>Wireless casting receiver, recording controls</li>
+          <li>Cloud sync (Google Drive, OneDrive, Dropbox)</li>
+        </ul>
+        <div class="boundary">🚫 Does NOT handle auth logic, user management, or DB writes directly. All via Node.js API.</div>
+      </div>
+
+      <!-- Repo 2 -->
+      <div class="repo-card" style="border-color:var(--gold);">
+        <h3>📱 <span style="color:var(--gold);">gyoash-teacher-app</span> &nbsp;<span style="font-size:0.7rem;color:var(--muted);font-weight:400;">Teacher Mobile App</span></h3>
+        <div class="stack-row">
+          <span class="chip chip-gold">React Native 0.74</span>
+          <span class="chip chip-gold">TypeScript</span>
+          <span class="chip chip-gold">Expo</span>
+          <span class="chip chip-gold">Android + iOS</span>
+        </div>
+        <ul>
+          <li>Dashboard, My Classes, Attendance, Homework, Assessments</li>
+          <li>Student Profiles, Communication, Calendar, Timetable</li>
+          <li>Reports — export PDF/Excel</li>
+          <li>Push notifications (Firebase)</li>
+          <li>Content Repository — browse, search, download offline</li>
+        </ul>
+        <div class="boundary">🚫 Does NOT call FastAPI. Zero AI endpoints in Phase 1. Pure CRUD — only calls Node.js REST APIs.</div>
+      </div>
+
+      <!-- Repo 3 -->
+      <div class="repo-card" style="border-color:var(--teal);">
+        <h3>📱 <span style="color:var(--teal);">gyoash-student-app</span> &nbsp;<span style="font-size:0.7rem;color:var(--muted);font-weight:400;">Student App</span></h3>
+        <div class="stack-row">
+          <span class="chip chip-teal">React Native 0.74</span>
+          <span class="chip chip-teal">TypeScript</span>
+          <span class="chip chip-teal">Expo</span>
+          <span class="chip chip-teal">React (Web)</span>
+          <span class="chip chip-teal">Android + iOS + Web</span>
+        </div>
+        <ul>
+          <li>Dashboard, Live Classes (WebRTC viewer), Recorded Classes</li>
+          <li>Homework submission (photos, PDF, audio, video)</li>
+          <li>Assessments, Quiz &amp; Puzzles, Gamification</li>
+          <li>Learning Resources, Academic Performance, Timetable</li>
+          <li>Parent login, multi-child switch</li>
+          <li>WebSocket connection for live class interactions (polls, raise hand)</li>
+        </ul>
+        <div class="boundary">🚫 Does NOT call FastAPI. Doubt resolution is a manual teacher-reply thread — no AI in Phase 1.</div>
+      </div>
+
+      <!-- Repo 4 -->
+      <div class="repo-card" style="border-color:var(--blue);">
+        <h3>🌐 <span style="color:var(--blue);">gyoash-admin</span> &nbsp;<span style="font-size:0.7rem;color:var(--muted);font-weight:400;">Admin Portal</span></h3>
+        <div class="stack-row">
+          <span class="chip chip-blue">React 18</span>
+          <span class="chip chip-blue">TypeScript</span>
+          <span class="chip chip-blue">Vite</span>
+          <span class="chip chip-blue">TanStack Query</span>
+        </div>
+        <ul>
+          <li>Super Admin — school registration, branch management, panel mapping</li>
+          <li>License key generation, validity, extension, cost master</li>
+          <li>Remote lock/unlock panels, device monitoring, log monitoring</li>
+          <li>School Admin — branding, teacher registration, student registration</li>
+          <li>Content blocking (class-wise), LMS data loading, language mapping</li>
+          <li>Analytics dashboards — device health, teacher usage, school reports</li>
+        </ul>
+        <div class="boundary">🚫 Does NOT call FastAPI. No AI features in Admin Portal.</div>
+      </div>
+
+      <!-- Repo 5 -->
+      <div class="repo-card" style="border-color:var(--green);">
+        <h3>⚙️ <span style="color:var(--green);">gyoash-backend</span> &nbsp;<span style="font-size:0.7rem;color:var(--muted);font-weight:400;">Node.js Backend</span></h3>
+        <div class="stack-row">
+          <span class="chip chip-green">Node.js 20 LTS</span>
+          <span class="chip chip-green">Express 4</span>
+          <span class="chip chip-green">TypeScript</span>
+          <span class="chip chip-green">Socket.io 4</span>
+          <span class="chip chip-green">Prisma ORM</span>
+          <span class="chip chip-green">JWT + OAuth</span>
+          <span class="chip chip-green">BullMQ</span>
+        </div>
+        <ul>
+          <li>All REST APIs — auth, users, classes, homework, assessments, attendance</li>
+          <li>WebSocket server (Socket.io) — live classroom, polls, raise hand, collaborative drawing</li>
+          <li>WebRTC signalling — recording, live class video</li>
+          <li>File uploads — chunked upload to S3/Azure</li>
+          <li>License key generation and validation</li>
+          <li>Push notification dispatch (Firebase Admin SDK)</li>
+          <li>Job queue (BullMQ) — video processing, async tasks</li>
+          <li>Proxy to FastAPI — Panel app AI requests route through Node.js → FastAPI</li>
+        </ul>
+        <div class="boundary">🚫 Does NOT run any LLM calls or Python code. AI work goes to FastAPI only.</div>
+      </div>
+
+      <!-- Repo 6 -->
+      <div class="repo-card" style="border-color:var(--purple);">
+        <h3>🤖 <span style="color:var(--purple);">gyoash-ai</span> &nbsp;<span style="font-size:0.7rem;color:var(--muted);font-weight:400;">FastAPI Backend</span></h3>
+        <div class="stack-row">
+          <span class="chip chip-purple">Python 3.11</span>
+          <span class="chip chip-purple">FastAPI</span>
+          <span class="chip chip-purple">LangChain</span>
+          <span class="chip chip-purple">OpenAI SDK</span>
+          <span class="chip chip-purple">Tesseract OCR</span>
+          <span class="chip chip-purple">Whisper</span>
+          <span class="chip chip-purple">python-pptx</span>
+        </div>
+        <ul>
+          <li>AI Lesson Planner — POST /ai/lesson-plan</li>
+          <li>AI Quiz Generator — POST /ai/quiz</li>
+          <li>AI PPT Generator — POST /ai/ppt (returns .pptx file)</li>
+          <li>AI Explain — POST /ai/explain</li>
+          <li>AI Worksheet Generator — POST /ai/worksheet</li>
+          <li>AI Mind Maps / Diagrams — POST /ai/diagram</li>
+          <li>AI Formula Solver — POST /ai/formula</li>
+          <li>AI Summarizer — POST /ai/summarize</li>
+          <li>AI Translator — POST /ai/translate</li>
+          <li>AI Voice Assistant — POST /ai/voice (Whisper STT → intent → action)</li>
+          <li>OCR endpoint — POST /ai/ocr (Tesseract + Vision API)</li>
+        </ul>
+        <div class="boundary">🚫 Only called from the Panel App (via Node.js proxy). Not called from Teacher App, Student App, or Admin Portal in Phase 1.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- TECH STACK -->
+  <section id="techstack">
+    <h2>🛠️ Full Tech Stack</h2>
+    <div style="overflow-x:auto;">
+    <table class="gtable">
+      <thead>
+        <tr><th style="min-width:160px">Layer</th><th>Technology</th><th>Version</th><th>Used in</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong style="color:#fff;">Panel Frontend</strong></td><td>React</td><td>18</td><td>gyoash-panel</td><td>Component-based UI, runs in Android WebView</td></tr>
+        <tr><td></td><td>TypeScript</td><td>5</td><td>All repos</td><td>Type safety across all codebases</td></tr>
+        <tr><td></td><td>Fabric.js / Konva.js</td><td>Latest</td><td>gyoash-panel</td><td>Infinite canvas engine with object model</td></tr>
+        <tr><td></td><td>Electron</td><td>Latest</td><td>gyoash-panel</td><td>Windows desktop wrapper</td></tr>
+        <tr><td><strong style="color:#fff;">Mobile</strong></td><td>React Native</td><td>0.74</td><td>Teacher App, Student App</td><td>Cross-platform Android + iOS from one codebase</td></tr>
+        <tr><td></td><td>Expo</td><td>SDK 51</td><td>Teacher App, Student App</td><td>Faster builds, OTA updates, managed workflow</td></tr>
+        <tr><td><strong style="color:#fff;">Admin Web</strong></td><td>React + Vite</td><td>18 + 5</td><td>gyoash-admin</td><td>Fast build, SPA for admin dashboards</td></tr>
+        <tr><td></td><td>TanStack Query</td><td>v5</td><td>gyoash-admin</td><td>Server state management, caching</td></tr>
+        <tr><td><strong style="color:#fff;">Node Backend</strong></td><td>Node.js</td><td>20 LTS</td><td>gyoash-backend</td><td>LTS — stable, widely deployed</td></tr>
+        <tr><td></td><td>Express</td><td>4</td><td>gyoash-backend</td><td>Lightweight, battle-tested REST API framework</td></tr>
+        <tr><td></td><td>Socket.io</td><td>4</td><td>gyoash-backend</td><td>WebSocket rooms for live classroom — 40+ students</td></tr>
+        <tr><td></td><td>Prisma ORM</td><td>5</td><td>gyoash-backend</td><td>Type-safe DB access, migrations, schema management</td></tr>
+        <tr><td></td><td>BullMQ</td><td>5</td><td>gyoash-backend</td><td>Job queue for async tasks (video processing, notifications)</td></tr>
+        <tr><td></td><td>JWT + Passport.js</td><td>Latest</td><td>gyoash-backend</td><td>Auth — access tokens + refresh tokens</td></tr>
+        <tr><td><strong style="color:#fff;">AI Backend</strong></td><td>Python</td><td>3.11</td><td>gyoash-ai</td><td>Best ecosystem for AI/ML work</td></tr>
+        <tr><td></td><td>FastAPI</td><td>0.111</td><td>gyoash-ai</td><td>Async, fast, auto-docs, easy to deploy</td></tr>
+        <tr><td></td><td>LangChain</td><td>0.2</td><td>gyoash-ai</td><td>LLM chaining, prompt templates, multi-model routing</td></tr>
+        <tr><td></td><td>OpenAI SDK</td><td>1.x</td><td>gyoash-ai</td><td>GPT-4o for lesson planner, quiz, PPT, diagrams, translate</td></tr>
+        <tr><td></td><td>Gemini SDK</td><td>Latest</td><td>gyoash-ai</td><td>Fallback LLM + multilingual (Hindi, Marathi)</td></tr>
+        <tr><td></td><td>Tesseract + Vision API</td><td>Latest</td><td>gyoash-ai</td><td>OCR — handwriting to text, equations</td></tr>
+        <tr><td></td><td>Whisper (OpenAI)</td><td>Latest</td><td>gyoash-ai</td><td>Voice assistant — STT pipeline</td></tr>
+        <tr><td></td><td>python-pptx</td><td>0.6</td><td>gyoash-ai</td><td>Build .pptx files programmatically for AI PPT Generator</td></tr>
+        <tr><td><strong style="color:#fff;">Database</strong></td><td>PostgreSQL</td><td>16</td><td>gyoash-backend</td><td>Primary relational DB — users, schools, classes, homework</td></tr>
+        <tr><td></td><td>Redis</td><td>7</td><td>gyoash-backend</td><td>Session store, rate limiting, WebSocket presence, cache</td></tr>
+        <tr><td><strong style="color:#fff;">File Storage</strong></td><td>AWS S3 / Azure Blob</td><td>—</td><td>gyoash-backend</td><td>Recordings, uploaded files, AI-generated PPTs — GYOASH's account</td></tr>
+        <tr><td><strong style="color:#fff;">Real-time Video</strong></td><td>WebRTC</td><td>—</td><td>gyoash-backend + panel</td><td>Live class streaming, recording capture</td></tr>
+        <tr><td></td><td>mediasoup / LiveKit</td><td>Latest</td><td>gyoash-backend</td><td>SFU (Selective Forwarding Unit) for multi-student live class</td></tr>
+        <tr><td><strong style="color:#fff;">Notifications</strong></td><td>Firebase Admin SDK</td><td>12</td><td>gyoash-backend</td><td>Push notifications — Android + iOS</td></tr>
+        <tr><td><strong style="color:#fff;">Auth</strong></td><td>OAuth 2.0 (Google)</td><td>—</td><td>gyoash-backend</td><td>Google SSO login</td></tr>
+        <tr><td></td><td>TOTP (2FA)</td><td>—</td><td>gyoash-backend</td><td>Two-factor authentication — Google Authenticator compatible</td></tr>
+        <tr><td><strong style="color:#fff;">Deployment</strong></td><td>Docker + Docker Compose</td><td>Latest</td><td>All backends</td><td>Local dev + staging consistency</td></tr>
+        <tr><td></td><td>Nginx</td><td>Latest</td><td>Staging/Prod</td><td>Reverse proxy, SSL termination</td></tr>
+        <tr><td></td><td>AWS / Azure</td><td>—</td><td>Staging + Prod</td><td>Cloud hosting — GYOASH's account</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- API BOUNDARY -->
+  <section id="apiboundary">
+    <h2>🔀 API Boundary — Who Calls What</h2>
+    <div class="note note-orange">This is the most important thing to get right. The wrong client calling the wrong backend is the most common source of bugs in multi-backend projects.</div>
+    <div style="overflow-x:auto;margin-top:16px;">
+    <table class="gtable">
+      <thead>
+        <tr><th>Client</th><th>Calls Node.js?</th><th>Calls FastAPI?</th><th>Uses WebSocket?</th><th>Uses WebRTC?</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong style="color:var(--orange);">IFP Panel App</strong></td>
+          <td style="color:var(--green);">✅ Yes — all non-AI APIs</td>
+          <td style="color:var(--green);">✅ Yes — all 11 AI tools + OCR + Voice</td>
+          <td style="color:var(--green);">✅ Yes — interactive classroom (teacher side)</td>
+          <td style="color:var(--green);">✅ Yes — recording capture, live class broadcast</td>
+        </tr>
+        <tr>
+          <td><strong style="color:var(--gold);">Teacher App</strong></td>
+          <td style="color:var(--green);">✅ Yes — all APIs</td>
+          <td style="color:var(--red);">🚫 No — zero AI calls in Phase 1</td>
+          <td style="color:var(--red);">🚫 No</td>
+          <td style="color:var(--red);">🚫 No</td>
+        </tr>
+        <tr>
+          <td><strong style="color:var(--teal);">Student App</strong></td>
+          <td style="color:var(--green);">✅ Yes — all APIs</td>
+          <td style="color:var(--red);">🚫 No — zero AI calls in Phase 1</td>
+          <td style="color:var(--green);">✅ Yes — live class (student side — polls, raise hand)</td>
+          <td style="color:var(--green);">✅ Yes — live class viewer (receive stream)</td>
+        </tr>
+        <tr>
+          <td><strong style="color:var(--blue);">Admin Portal</strong></td>
+          <td style="color:var(--green);">✅ Yes — all admin APIs</td>
+          <td style="color:var(--red);">🚫 No</td>
+          <td style="color:var(--red);">🚫 No</td>
+          <td style="color:var(--red);">🚫 No</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="note note-blue" style="margin-top:16px;">
+      💡 <strong>Panel → AI flow:</strong> Panel App calls Node.js → Node.js proxies the request to FastAPI → FastAPI returns AI response → Node.js forwards to Panel. This keeps FastAPI internal (not directly exposed to the internet).
+    </div>
+  </section>
+
+  <!-- REAL-TIME ARCHITECTURE -->
+  <section id="realtime">
+    <h2>⚡ Real-Time Architecture — Interactive Classroom (M3)</h2>
+    <div class="note note-gold">This is the most complex non-AI piece. 40+ students connecting simultaneously. Pre-decide this before writing a single line of M3 code.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;">
+        <h3 style="color:var(--green);margin-bottom:12px;">WebSocket Room Structure</h3>
+        <div style="font-family:monospace;font-size:0.78rem;color:#79c0ff;background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;line-height:1.8;">
+          room: "class_{classId}_{date}"<br/>
+          ├── teacher (1 socket)<br/>
+          └── students (up to 40 sockets)<br/><br/>
+          Events emitted by teacher:<br/>
+          ├── poll:create → all students<br/>
+          ├── quiz:start → all students<br/>
+          ├── student:pick → broadcast<br/>
+          └── whiteboard:sync → all students<br/><br/>
+          Events emitted by students:<br/>
+          ├── hand:raise → teacher<br/>
+          ├── poll:vote → teacher<br/>
+          ├── emoji:react → broadcast<br/>
+          └── canvas:draw → teacher
+        </div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;">
+        <h3 style="color:var(--gold);margin-bottom:12px;">Connection Handling Rules</h3>
+        <ul style="font-size:0.82rem;color:#aaa;padding-left:16px;">
+          <li style="margin-bottom:8px;">Each classroom = one Socket.io room. Teacher joins on class start, students join on app open.</li>
+          <li style="margin-bottom:8px;">On student disconnect — auto-rejoin with last state (raise hand queue preserved).</li>
+          <li style="margin-bottom:8px;">Attendance is marked server-side when student joins the room — not client-side.</li>
+          <li style="margin-bottom:8px;">Collaborative drawing: use operational transform (OT) or last-write-wins per stroke ID.</li>
+          <li style="margin-bottom:8px;">Redis pub/sub if backend scales to multiple Node.js instances (horizontal scaling).</li>
+          <li style="margin-bottom:8px;">Max 40 students per room — enforce server-side on join attempt.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI PIPELINE -->
+  <section id="aipipeline">
+    <h2>🤖 AI Pipeline — How a Request Flows (Panel → FastAPI)</h2>
+    <div class="note note-blue">Follow this exact flow for every AI feature. Do not call FastAPI directly from the Panel — always go through Node.js.</div>
+
+    <div class="flow" style="margin-top:20px;">
+      <div class="flow-step">
+        <div class="num" style="background:var(--orange);color:#000;">1</div>
+        <div class="body">
+          <div class="title">Teacher clicks "Generate Quiz" on the Panel</div>
+          <div class="desc">Panel App collects inputs — topic, class, difficulty, question count. Sends POST request to Node.js backend.</div>
+          <div class="code">POST /api/ai/quiz<br/>{ topic: "Photosynthesis", class: "8", difficulty: "medium", count: 10 }</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="num" style="background:var(--green);color:#000;">2</div>
+        <div class="body">
+          <div class="title">Node.js validates and proxies to FastAPI</div>
+          <div class="desc">Node.js authenticates the JWT, checks if the school's AI plan is active, then forwards to FastAPI internal network.</div>
+          <div class="code">POST http://gyoash-ai:8000/ai/quiz<br/>Authorization: Internal-Key {INTERNAL_SECRET}<br/>{ ...same payload + schoolId, teacherId }</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="num" style="background:var(--purple);color:#fff;">3</div>
+        <div class="body">
+          <div class="title">FastAPI calls the LLM</div>
+          <div class="desc">FastAPI builds the prompt using LangChain, calls OpenAI GPT-4o (or Gemini as fallback), parses the response into structured JSON.</div>
+          <div class="code">LangChain → OpenAI GPT-4o<br/>Prompt template: quiz_generator.prompt<br/>Returns: [ { question, options, answer, explanation } × 10 ]</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="num" style="background:var(--blue);color:#000;">4</div>
+        <div class="body">
+          <div class="title">FastAPI returns to Node.js → Node.js returns to Panel</div>
+          <div class="desc">FastAPI sends structured JSON back. Node.js optionally logs usage (tokens used, school, teacher). Returns to Panel App.</div>
+          <div class="code">200 OK<br/>{ questions: [...], tokensUsed: 847, model: "gpt-4o" }</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="num" style="background:var(--teal);color:#000;">5</div>
+        <div class="body">
+          <div class="title">Panel renders the quiz on the whiteboard canvas</div>
+          <div class="desc">Quiz is displayed as interactive cards on the canvas. Teacher edits if needed, then pushes to students via WebSocket.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-top:16px;">
+      <h3 style="margin-bottom:12px;">FastAPI Endpoints — Phase 1 (All POST)</h3>
+      <div style="overflow-x:auto;">
+      <table class="gtable">
+        <thead><tr><th>Endpoint</th><th>AI Tool</th><th>LLM Used</th><th>Returns</th></tr></thead>
+        <tbody>
+          <tr><td style="font-family:monospace;color:#79c0ff;">/ai/lesson-plan</td><td>AI Lesson Planner</td><td>GPT-4o</td><td>Structured lesson plan JSON</td></tr>
+          <tr><td style="font-family:monospace;color:#79c0ff;">/ai/quiz</td><td>AI Quiz Generator</td><td>GPT-4o</td><td>Array of question objects</td></tr>
+          <tr><td style="font-family:monospace;color:#79c0ff;">/ai/ppt</td><td>AI PPT Generator</td><td>GPT-4o + python-pptx</td><td>.pptx file (binary download)</td></tr>
+          <tr><td style="font-family:monospace;color:#79c0ff;">/ai/explain</td><td>AI Explain</td><td>GPT-4o</td><td>Explanation text at requested level</td></tr>
+          <tr><td style="font-family:monospace;color:#79c0ff;">/ai/worksheet</td><td>AI Worksheet Generator</td><td>GPT-4o</td><td>Printable worksheet JSON/HTML</td></tr>
+          <tr><td style="font-family:monospace;color:#79c0ff;">/ai/diagram</td><td>AI Diagram Generator</td><td>GPT-4o</td><td>Editable SVG diagram</td></tr>
+          <tr><td style="font-family:monospace;color:#79c0ff;">/ai/formula</td><td>AI Formula Solver</td><td>GPT-4o</td><td>Steps + solution + graph data</td></tr>
+          <tr><td style="font-family:monospace;color:#79c0ff;">/ai/summarize</td><td>AI Summarizer</td><td>GPT-4o</td><td>Revision notes / flash cards JSON</td></tr>
+          <tr><td style="font-family:monospace;color:#79c0ff;">/ai/translate</td><td>AI Translator</td><td>Gemini</td><td>Translated text in target language</td></tr>
+          <tr><td style="font-family:monospace;color:#79c0ff;">/ai/voice</td><td>AI Voice Assistant</td><td>Whisper → GPT-4o</td><td>Intent + action JSON</td></tr>
+          <tr><td style="font-family:monospace;color:#79c0ff;">/ai/ocr</td><td>OCR</td><td>Tesseract + Vision API</td><td>Extracted text / equation</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATABASE -->
+  <section id="database">
+    <h2>🗄️ Database — PostgreSQL Schema Overview</h2>
+    <div class="note note-blue">One PostgreSQL database. All tables live here. Managed via Prisma migrations from gyoash-backend.</div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:16px;">
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <h3 style="color:var(--blue);margin-bottom:8px;">👤 Auth & Users</h3>
+        <ul style="font-size:0.78rem;color:#aaa;padding-left:14px;">
+          <li>users (id, email, phone, role, schoolId, createdAt)</li>
+          <li>sessions (id, userId, token, expiresAt)</li>
+          <li>audit_logs (id, userId, action, ip, createdAt)</li>
+        </ul>
+      </div>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <h3 style="color:var(--orange);margin-bottom:8px;">🏫 School & Admin</h3>
+        <ul style="font-size:0.78rem;color:#aaa;padding-left:14px;">
+          <li>schools (id, name, code, branding, plan, createdAt)</li>
+          <li>branches (id, schoolId, name, location)</li>
+          <li>panels (id, branchId, licenseKey, status, health)</li>
+          <li>classrooms (id, branchId, panelId, name)</li>
+        </ul>
+      </div>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <h3 style="color:var(--gold);margin-bottom:8px;">📚 Academic</h3>
+        <ul style="font-size:0.78rem;color:#aaa;padding-left:14px;">
+          <li>classes (id, schoolId, grade, section, teacherId)</li>
+          <li>subjects (id, classId, name, board)</li>
+          <li>timetable (id, classId, subjectId, day, startTime)</li>
+          <li>students (id, userId, classId, rollNo, parentId)</li>
+        </ul>
+      </div>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <h3 style="color:var(--green);margin-bottom:8px;">📝 Homework & Assessments</h3>
+        <ul style="font-size:0.78rem;color:#aaa;padding-left:14px;">
+          <li>homework (id, classId, title, dueDate, attachments)</li>
+          <li>submissions (id, homeworkId, studentId, files, marks)</li>
+          <li>assessments (id, classId, title, totalMarks, scheduledAt)</li>
+          <li>results (id, assessmentId, studentId, marks, feedback)</li>
+        </ul>
+      </div>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <h3 style="color:var(--teal);margin-bottom:8px;">🎓 Classroom & Attendance</h3>
+        <ul style="font-size:0.78rem;color:#aaa;padding-left:14px;">
+          <li>live_sessions (id, classId, startedAt, endedAt, recordingUrl)</li>
+          <li>attendance (id, sessionId, studentId, status, markedAt)</li>
+          <li>polls (id, sessionId, question, options, responses)</li>
+          <li>raise_hand_queue (id, sessionId, studentId, position)</li>
+        </ul>
+      </div>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <h3 style="color:var(--purple);margin-bottom:8px;">🤖 AI Usage</h3>
+        <ul style="font-size:0.78rem;color:#aaa;padding-left:14px;">
+          <li>ai_logs (id, schoolId, teacherId, tool, tokensUsed, model, createdAt)</li>
+          <li>ai_plans (id, schoolId, plan, monthlyTokenLimit, usedTokens)</li>
+        </ul>
+      </div>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <h3 style="color:var(--red);margin-bottom:8px;">📁 Content & Files</h3>
+        <ul style="font-size:0.78rem;color:#aaa;padding-left:14px;">
+          <li>recordings (id, sessionId, url, duration, size, status)</li>
+          <li>content_items (id, schoolId, type, board, grade, subject, chapter, url)</li>
+          <li>whiteboard_sessions (id, classId, data, version, savedAt)</li>
+        </ul>
+      </div>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <h3 style="color:var(--gold);margin-bottom:8px;">🔔 Notifications</h3>
+        <ul style="font-size:0.78rem;color:#aaa;padding-left:14px;">
+          <li>notifications (id, userId, type, title, body, read, createdAt)</li>
+          <li>device_tokens (id, userId, token, platform, updatedAt)</li>
+        </ul>
+      </div>
+
+    </div>
+    <div class="note note-gold" style="margin-top:16px;">⚠️ This is a starting schema. The actual Prisma schema file in gyoash-backend is the single source of truth. Never modify the DB directly — always use Prisma migrations.</div>
+  </section>
+
+  <!-- ENV VARIABLES -->
+  <section id="envvars">
+    <h2>🔑 Environment Variables — Per Repo</h2>
+    <div class="note note-red">Never commit .env files. Each developer creates their own .env from the .env.example file in each repo.</div>
+
+    <div class="env-section" style="margin-top:16px;">
+      <h3 style="color:var(--green);">gyoash-backend (.env)</h3>
+      <div class="env-row"><span class="env-key">DATABASE_URL</span><span class="env-val">postgresql://user:pass@localhost:5432/gyoash</span></div>
+      <div class="env-row"><span class="env-key">REDIS_URL</span><span class="env-val">redis://localhost:6379</span></div>
+      <div class="env-row"><span class="env-key">JWT_SECRET</span><span class="env-val">your-secret-key-min-32-chars</span></div>
+      <div class="env-row"><span class="env-key">JWT_REFRESH_SECRET</span><span class="env-val">your-refresh-secret-key</span></div>
+      <div class="env-row"><span class="env-key">GOOGLE_CLIENT_ID</span><span class="env-val">from Google Cloud Console — OAuth app</span></div>
+      <div class="env-row"><span class="env-key">GOOGLE_CLIENT_SECRET</span><span class="env-val">from Google Cloud Console</span></div>
+      <div class="env-row"><span class="env-key">AWS_ACCESS_KEY_ID</span><span class="env-val">GYOASH's AWS account — S3 access</span></div>
+      <div class="env-row"><span class="env-key">AWS_SECRET_ACCESS_KEY</span><span class="env-val">GYOASH's AWS account</span></div>
+      <div class="env-row"><span class="env-key">AWS_S3_BUCKET</span><span class="env-val">gyoash-recordings-prod</span></div>
+      <div class="env-row"><span class="env-key">FIREBASE_SERVICE_ACCOUNT</span><span class="env-val">path to serviceAccount.json — GYOASH's Firebase</span></div>
+      <div class="env-row"><span class="env-key">FASTAPI_INTERNAL_URL</span><span class="env-val">http://gyoash-ai:8000 (Docker) or http://localhost:8000 (local)</span></div>
+      <div class="env-row"><span class="env-key">FASTAPI_INTERNAL_SECRET</span><span class="env-val">shared secret — must match gyoash-ai INTERNAL_SECRET</span></div>
+      <div class="env-row"><span class="env-key">PORT</span><span class="env-val">3000</span></div>
+    </div>
+
+    <div class="env-section">
+      <h3 style="color:var(--purple);">gyoash-ai (.env)</h3>
+      <div class="env-row"><span class="env-key">OPENAI_API_KEY</span><span class="env-val">sk-... (GYOASH's OpenAI key)</span></div>
+      <div class="env-row"><span class="env-key">GEMINI_API_KEY</span><span class="env-val">GYOASH's Google Gemini key</span></div>
+      <div class="env-row"><span class="env-key">CLAUDE_API_KEY</span><span class="env-val">GYOASH's Anthropic key (optional fallback)</span></div>
+      <div class="env-row"><span class="env-key">INTERNAL_SECRET</span><span class="env-val">must match backend FASTAPI_INTERNAL_SECRET</span></div>
+      <div class="env-row"><span class="env-key">DEFAULT_MODEL</span><span class="env-val">gpt-4o</span></div>
+      <div class="env-row"><span class="env-key">FALLBACK_MODEL</span><span class="env-val">gemini-1.5-pro</span></div>
+      <div class="env-row"><span class="env-key">PORT</span><span class="env-val">8000</span></div>
+    </div>
+
+    <div class="env-section">
+      <h3 style="color:var(--orange);">gyoash-panel (.env)</h3>
+      <div class="env-row"><span class="env-key">VITE_API_URL</span><span class="env-val">http://localhost:3000 (dev) or https://api.gyoash.com (prod)</span></div>
+      <div class="env-row"><span class="env-key">VITE_SOCKET_URL</span><span class="env-val">http://localhost:3000</span></div>
+      <div class="env-row"><span class="env-key">VITE_GOOGLE_DRIVE_CLIENT_ID</span><span class="env-val">for Google Drive OAuth — GYOASH's Google app</span></div>
+    </div>
+
+    <div class="env-section">
+      <h3 style="color:var(--gold);">gyoash-teacher-app + gyoash-student-app (.env)</h3>
+      <div class="env-row"><span class="env-key">EXPO_PUBLIC_API_URL</span><span class="env-val">http://localhost:3000 (dev) or https://api.gyoash.com (prod)</span></div>
+      <div class="env-row"><span class="env-key">EXPO_PUBLIC_SOCKET_URL</span><span class="env-val">http://localhost:3000</span></div>
+      <div class="env-row"><span class="env-key">GOOGLE_SERVICES_JSON</span><span class="env-val">path to google-services.json — Firebase (Android)</span></div>
+      <div class="env-row"><span class="env-key">GOOGLE_SERVICES_PLIST</span><span class="env-val">path to GoogleService-Info.plist — Firebase (iOS)</span></div>
+    </div>
+  </section>
+
+  <!-- DAY 1 CHECKLIST -->
+  <section id="day1">
+    <h2>✅ Day 1 Checklist — Per Developer Role</h2>
+    <div class="note note-green">Every developer should be able to run their part of the system locally by end of Day 1. This checklist makes that happen.</div>
+
+    <div class="checklist" style="margin-top:16px;">
+
+      <div class="check-card">
+        <h3>🖥️ Panel Developer (React + Canvas)</h3>
+        <ul>
+          <li>Clone gyoash-panel repo</li>
+          <li>Run npm install</li>
+          <li>Copy .env.example → .env, fill VITE_API_URL</li>
+          <li>Run npm run dev — panel opens on localhost:5173</li>
+          <li>Verify canvas renders (blank whiteboard visible)</li>
+          <li>Confirm Node.js backend is running (ping /api/health)</li>
+          <li>Read Phase1_Coverage.html — M1 and M2 sections</li>
+          <li>Start with: Auth screen → canvas shell → basic pen tool</li>
+        </ul>
+      </div>
+
+      <div class="check-card">
+        <h3>📱 Mobile Developer (React Native)</h3>
+        <ul>
+          <li>Clone gyoash-teacher-app and gyoash-student-app</li>
+          <li>Run npm install in both</li>
+          <li>Install Expo CLI globally: npm i -g expo-cli</li>
+          <li>Copy .env.example → .env in both repos</li>
+          <li>Run npx expo start in each</li>
+          <li>Scan QR with Expo Go app on physical device</li>
+          <li>Verify login screen renders on device</li>
+          <li>Add google-services.json (Firebase) from GYOASH</li>
+          <li>Start with: Login flow → Dashboard shell</li>
+        </ul>
+      </div>
+
+      <div class="check-card">
+        <h3>⚙️ Backend Developer (Node.js)</h3>
+        <ul>
+          <li>Clone gyoash-backend repo</li>
+          <li>Run npm install</li>
+          <li>Start PostgreSQL locally (Docker: docker-compose up db)</li>
+          <li>Start Redis locally (Docker: docker-compose up redis)</li>
+          <li>Copy .env.example → .env, fill DATABASE_URL + REDIS_URL</li>
+          <li>Run npx prisma migrate dev — creates DB tables</li>
+          <li>Run npx prisma db seed — seeds base data</li>
+          <li>Run npm run dev — server on localhost:3000</li>
+          <li>Hit GET /api/health → should return 200 OK</li>
+          <li>Start with: Auth endpoints (register, login, JWT refresh)</li>
+        </ul>
+      </div>
+
+      <div class="check-card">
+        <h3>🤖 AI Developer (Python + FastAPI)</h3>
+        <ul>
+          <li>Clone gyoash-ai repo</li>
+          <li>Create virtual env: python -m venv venv</li>
+          <li>Activate: venv\Scripts\activate (Windows)</li>
+          <li>Install deps: pip install -r requirements.txt</li>
+          <li>Copy .env.example → .env, fill OPENAI_API_KEY</li>
+          <li>Run: uvicorn main:app --reload --port 8000</li>
+          <li>Open http://localhost:8000/docs — FastAPI auto-docs</li>
+          <li>Test POST /ai/quiz with a sample payload</li>
+          <li>Verify OpenAI response comes back correctly</li>
+          <li>Start with: /ai/quiz → /ai/lesson-plan → /ai/explain</li>
+        </ul>
+      </div>
+
+      <div class="check-card">
+        <h3>🌐 Admin Developer (React Web)</h3>
+        <ul>
+          <li>Clone gyoash-admin repo</li>
+          <li>Run npm install</li>
+          <li>Copy .env.example → .env, fill VITE_API_URL</li>
+          <li>Run npm run dev — admin portal on localhost:5174</li>
+          <li>Confirm backend is running (Node.js on :3000)</li>
+          <li>Login with seeded Super Admin credentials</li>
+          <li>Start with: Login → School registration → Panel registration</li>
+        </ul>
+      </div>
+
+      <div class="check-card">
+        <h3>👨‍💼 Tech Lead / All Devs</h3>
+        <ul>
+          <li>Read SCOPE.html — understand what's in Phase 1</li>
+          <li>Read Phase1_Coverage.html — know your module's features</li>
+          <li>Read this Architecture.html — understand API boundaries</li>
+          <li>Set up GitHub repos — one per codebase (6 total)</li>
+          <li>Create dev, staging, main branches in each repo</li>
+          <li>Set up Docker Compose for local full-stack run</li>
+          <li>Get API keys from GYOASH — OpenAI, Firebase, AWS</li>
+          <li>Set up staging environment on AWS/Azure</li>
+          <li>Schedule Sprint 1 planning — assign module ownership</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- Sprint 1 starting point -->
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-top:20px;">
+      <h3 style="color:var(--orange);margin-bottom:14px;">🚀 Sprint 1 Starting Point — What Gets Built First</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;font-size:0.82rem;">
+        <div style="padding:12px;background:rgba(249,115,22,0.06);border-radius:8px;border-left:3px solid var(--orange);">
+          <strong style="color:var(--orange);">Panel Dev</strong><br/>
+          <span style="color:#aaa;">Auth screen + Login flow + Basic canvas shell + Pen tool</span>
+        </div>
+        <div style="padding:12px;background:rgba(63,185,80,0.06);border-radius:8px;border-left:3px solid var(--green);">
+          <strong style="color:var(--green);">Backend Dev</strong><br/>
+          <span style="color:#aaa;">Auth API (register, login, JWT) + School + User schema + Panel license key generation</span>
+        </div>
+        <div style="padding:12px;background:rgba(168,85,247,0.06);border-radius:8px;border-left:3px solid var(--purple);">
+          <strong style="color:var(--purple);">AI Dev</strong><br/>
+          <span style="color:#aaa;">FastAPI skeleton + /ai/quiz + /ai/lesson-plan working end-to-end with OpenAI</span>
+        </div>
+        <div style="padding:12px;background:rgba(245,166,35,0.06);border-radius:8px;border-left:3px solid var(--gold);">
+          <strong style="color:var(--gold);">Mobile Dev</strong><br/>
+          <span style="color:#aaa;">Login screen (Teacher App) + Dashboard shell + Navigation structure</span>
+        </div>
+        <div style="padding:12px;background:rgba(79,195,247,0.06);border-radius:8px;border-left:3px solid var(--blue);">
+          <strong style="color:var(--blue);">Admin Dev</strong><br/>
+          <span style="color:#aaa;">Login + Super Admin dashboard + School registration form</span>
+        </div>
+      </div>
+      <div class="note note-gold" style="margin-top:14px;">
+        💡 <strong>Auth first — always.</strong> Every other feature depends on JWT + user roles being stable. Do not build M1 canvas or M3 classroom before auth is done and tested.
+      </div>
+    </div>
+  </section>
+
+</div><!-- end container -->
+
+<footer>
+  <p>Project 2609 — GYOASH Technologies &nbsp;|&nbsp; Architecture document prepared by INNONSH Technologies Private Limited</p>
+  <p style="margin-top:6px;">Confidential — Internal Dev Reference &nbsp;|&nbsp; Phase 1 Scope Only</p>
+</footer>
+
+<div id="pdf-btn-wrap" style="position:fixed;bottom:28px;right:28px;z-index:9999;">
+  <button onclick="window.print()" style="background:var(--orange);color:#fff;border:none;padding:12px 22px;border-radius:30px;font-size:0.9rem;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(249,115,22,0.4);display:flex;align-items:center;gap:8px;">⬇️ Save as PDF</button>
+</div>
+<style>@media print{#pdf-btn-wrap{display:none!important}nav{display:none!important}body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}</style>
+
+</body>
+</html>

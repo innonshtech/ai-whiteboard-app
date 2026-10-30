@@ -18,15 +18,38 @@ android {
         applicationId "com.avitrisphare.whiteboard"
         minSdk 24
         targetSdk 34
-        versionCode 1
+        versionCode 1001
         versionName "1.0"
+
+        // Default to deployed EC2 API. Can be overridden in bloom/local.properties via api.base.url.
+        def apiBaseUrl = "http://13.203.229.124:3000"
+        def localPropsFile = rootProject.file("local.properties")
+        if (localPropsFile.exists()) {
+            def localProps = new Properties()
+            localPropsFile.withInputStream { localProps.load(it) }
+            def overrideUrl = localProps.getProperty("api.base.url")
+            if (overrideUrl != null && !overrideUrl.trim().isEmpty()) {
+                apiBaseUrl = overrideUrl.trim()
+            }
+        }
+        buildConfigField "String", "API_BASE_URL", "\"${apiBaseUrl}\""
+        buildConfigField "boolean", "DEMO_MODE", "false"
+
+        ndk {
+            abiFilters "arm64-v8a", "armeabi-v7a"
+        }
     }
 
     buildTypes {
+        debug {
+            buildConfigField "boolean", "DEMO_MODE", "false"
+        }
         release {
-            minifyEnabled true
-            shrinkResources true
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            buildConfigField "boolean", "DEMO_MODE", "false"
         }
     }
 
@@ -41,6 +64,7 @@ android {
 
     buildFeatures {
         compose true
+        buildConfig true
     }
 
     ksp {
@@ -78,8 +102,13 @@ dependencies {
     ksp 'androidx.room:room-compiler:2.6.1'
 
     implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'com.google.zxing:core:3.5.3'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'androidx.input:input-motionprediction:1.0.0'
     implementation 'androidx.datastore:datastore-preferences:1.0.0'
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
+    implementation 'com.google.mlkit:text-recognition-devanagari:16.0.1'
+    implementation 'com.google.mlkit:digital-ink-recognition:18.1.0'
 
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'

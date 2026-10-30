@@ -6,7 +6,7 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [NoteEntity::class, FolderEntity::class], version = 5, exportSchema = true)
+@Database(entities = [NoteEntity::class, FolderEntity::class], version = 6, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class NoteDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
@@ -39,6 +39,12 @@ abstract class NoteDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE `notes` ADD COLUMN `folderId` TEXT")
                 db.execSQL("ALTER TABLE `notes` ADD COLUMN `sourceUri` TEXT")
                 db.execSQL("ALTER TABLE `notes` ADD COLUMN `contentJson` TEXT")
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `notes` ADD COLUMN `subtitle` TEXT NOT NULL DEFAULT ''")
             }
         }
     }

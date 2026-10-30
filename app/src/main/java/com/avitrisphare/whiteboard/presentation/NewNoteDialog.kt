@@ -17,6 +17,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.avitrisphare.whiteboard.R
 import com.avitrisphare.whiteboard.core.theme.LocalAvitriSphareColors
 import com.avitrisphare.whiteboard.core.theme.AvitriSphareColors
 
@@ -31,7 +33,7 @@ fun NewNoteDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "New Note",
+                text = stringResource(R.string.new_note),
                 color = LocalAvitriSphareColors.current.textPrimary
             )
         },
@@ -39,7 +41,7 @@ fun NewNoteDialog(
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
-                label = { Text("Title") },
+                label = { Text(stringResource(R.string.title)) },
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = LocalAvitriSphareColors.current.textPrimary,
@@ -55,7 +57,7 @@ fun NewNoteDialog(
                 onClick = { onCreate(title.ifBlank { "Untitled" }) }
             ) {
                 Text(
-                    text = "Create",
+                    text = stringResource(R.string.create),
                     color = LocalAvitriSphareColors.current.brand
                 )
             }
@@ -63,7 +65,7 @@ fun NewNoteDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(
-                    text = "Cancel",
+                    text = stringResource(R.string.cancel),
                     color = LocalAvitriSphareColors.current.textMuted
                 )
             }

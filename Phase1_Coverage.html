@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GYOASH — Phase 1 Coverage</title>
+  <style>
+    :root {
+      --bg: #0d1117; --card: #161b22; --border: #21262d;
+      --text: #c9d1d9; --muted: #8b949e;
+      --green: #3fb950; --red: #f85149;
+      --blue: #4fc3f7; --gold: #f5a623; --purple: #a855f7;
+      --orange: #f97316;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; }
+    header { background: linear-gradient(135deg, #0d1117, #1a1a2e); border-bottom: 2px solid var(--green); padding: 40px; text-align: center; }
+    header h1 { font-size: 2rem; font-weight: 900; color: #fff; }
+    header p { color: var(--muted); margin-top: 8px; }
+    .hbadge { display:inline-block; padding: 4px 14px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; border: 1px solid rgba(255,255,255,0.2); color: #fff; background: rgba(255,255,255,0.07); margin: 4px; }
+    nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 12px 20px; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+    nav a { text-decoration: none; font-size: 0.78rem; font-weight: 600; padding: 5px 12px; border-radius: 20px; color: var(--muted); border: 1px solid var(--border); transition: all 0.2s; }
+    nav a:hover { color: #fff; border-color: #fff; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
+    section { margin-bottom: 52px; }
+    h2 { font-size: 1.2rem; font-weight: 700; color: #fff; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .note { padding: 12px 16px; border-radius: 10px; font-size: 0.82rem; margin-bottom: 16px; border-left: 3px solid; }
+    .note-blue   { background: rgba(79,195,247,0.08);  border-color: var(--blue);   color: #aad4f5; }
+    .note-green  { background: rgba(63,185,80,0.08);   border-color: var(--green);  color: #8fdc9a; }
+    .note-gold   { background: rgba(245,166,35,0.08);  border-color: var(--gold);   color: #fde68a; }
+
+    /* Legend */
+    .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 32px; }
+    .leg { display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; border: 1px solid; }
+    .leg-in     { background:rgba(63,185,80,0.1);  color:#3fb950; border-color:#238636; }
+    .leg-p2     { background:rgba(245,166,35,0.1); color:#f5a623; border-color:#9a6700; }
+    .leg-out    { background:rgba(248,81,73,0.1);  color:#f85149; border-color:#b91c1c; }
+    .leg-minor  { background:rgba(79,195,247,0.08);color:#4fc3f7; border-color:#0369a1; }
+
+    /* Coverage table */
+    .ctable { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 8px; }
+    .ctable th { background: rgba(255,255,255,0.04); border: 1px solid var(--border); padding: 9px 12px; color: #fff; font-weight: 700; text-align: left; white-space: nowrap; }
+    .ctable td { padding: 9px 12px; border: 1px solid var(--border); vertical-align: top; }
+    .ctable tr:hover td { background: rgba(255,255,255,0.02); }
+    .ctable td:first-child { color: #ddd; }
+
+    .st-in   { display:inline-block; padding:2px 9px; border-radius:8px; font-size:0.72rem; font-weight:700; background:rgba(63,185,80,0.12);  color:#3fb950; border:1px solid #238636; white-space:nowrap; }
+    .st-p2   { display:inline-block; padding:2px 9px; border-radius:8px; font-size:0.72rem; font-weight:700; background:rgba(245,166,35,0.12); color:#f5a623; border:1px solid #9a6700; white-space:nowrap; }
+    .st-out  { display:inline-block; padding:2px 9px; border-radius:8px; font-size:0.72rem; font-weight:700; background:rgba(248,81,73,0.12);  color:#f85149; border:1px solid #b91c1c; white-space:nowrap; }
+    .st-minor{ display:inline-block; padding:2px 9px; border-radius:8px; font-size:0.72rem; font-weight:700; background:rgba(79,195,247,0.08); color:#4fc3f7; border:1px solid #0369a1; white-space:nowrap; }
+
+    .src { font-size: 0.72rem; color: var(--muted); }
+    .stat-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 32px; }
+    .stat { flex:1; min-width:130px; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; text-align:center; }
+    .stat .num { font-size:1.8rem; font-weight:800; }
+    .stat .lbl { font-size:0.72rem; color:var(--muted); margin-top:3px; }
+    footer { text-align:center; padding:28px; border-top:1px solid var(--border); color:var(--muted); font-size:0.82rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>✅ Phase 1 — Feature Coverage Report</h1>
+  <p>Project 2609 — GYOASH &nbsp;|&nbsp; Every feature from client documents, mapped to Phase 1 status</p>
+  <div style="margin-top:14px;">
+    <span class="hbadge">Source: Annex A, B, C, D + Features xlsx</span>
+    <span class="hbadge">Module by Module</span>
+    <span class="hbadge">App by App</span>
+  </div>
+</header>
+
+<nav>
+  <a href="#legend">Legend</a>
+  <a href="#m1">M1 Whiteboard</a>
+  <a href="#m2">M2 AI Teacher</a>
+  <a href="#m3">M3 Classroom</a>
+  <a href="#m4">M4 Content</a>
+  <a href="#m5">M5 Labs</a>
+  <a href="#m6">M6 Casting</a>
+  <a href="#m7">M7 Recording</a>
+  <a href="#m8">M8 Analytics</a>
+  <a href="#m9">M9 School AI</a>
+  <a href="#m10">M10 Devices</a>
+  <a href="#m11">M11 Cloud</a>
+  <a href="#m13">M13 Hardware</a>
+  <a href="#m14">M14 Auth</a>
+  <a href="#teacher">Teacher App</a>
+  <a href="#student">Student App</a>
+  <a href="#admin">Admin</a>
+</nav>
+
+<div class="container">
+
+  <section id="legend">
+    <div class="stat-row">
+      <div class="stat"><div class="num" style="color:var(--green)">98</div><div class="lbl">Features Covered<br>in Phase 1</div></div>
+      <div class="stat"><div class="num" style="color:var(--gold)">8</div><div class="lbl">Deferred<br>to Phase 2</div></div>
+      <div class="stat"><div class="num" style="color:var(--red)">7</div><div class="lbl">Removed<br>(M9 + Admin RAG)</div></div>
+      <div class="stat"><div class="num" style="color:var(--blue)">4</div><div class="lbl">Minor Gaps<br>(Tender only)</div></div>
+    </div>
+    <div class="legend" id="legend">
+      <span class="leg leg-in">✅ Phase 1 — Covered</span>
+      <span class="leg leg-p2">🔶 Phase 2 — Deferred</span>
+      <span class="leg leg-out">🚫 Removed</span>
+      <span class="leg leg-minor">⚠️ Minor Gap (Annex A tender only, not in Annex B working spec)</span>
+    </div>
+    <div class="note note-blue">Every row below is sourced directly from Annex A (Tender), Annex B (Module Spec), Annex C (Teacher App), Annex D (Student App), or the Features xlsx. Nothing is assumed.</div>
+  </section>
+
+  <!-- M1 WHITEBOARD -->
+  <section id="m1">
+    <h2>🖊️ Module 1 — Whiteboard Engine <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">IFP Panel</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Infinite canvas</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1 + Annex A</td></tr>
+        <tr><td>Multiple pages</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>Templates</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>Grid mode</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>Dark / Light theme</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>Undo / Redo</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1 + Annex A</td></tr>
+        <tr><td>Zoom &amp; Pan</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1 + Annex A</td></tr>
+        <tr><td>Pen, Pencil, Marker, Highlighter, Brush</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>Laser Pointer</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>Eraser + Smart Eraser</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>Shape Recognition</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1 + Annex A</td></tr>
+        <tr><td>Compass, Ruler, Protractor</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1 + Annex A</td></tr>
+        <tr><td>Graph Paper</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>Annotate over PDF, PPT, Word, Excel</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>Annotate over Images, Videos, Browser</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>Annotate over Live Camera, Screen Share</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>OCR — Handwriting → Text</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>OCR — Image → Text</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>OCR — PDF → Editable Text</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>OCR — Equations → Digital Equation</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M1</td></tr>
+        <tr><td>Spotlight, Screen Shade, Magnifier</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex A Tender</td></tr>
+        <tr><td>Split Screen (up to 6)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex A Tender</td></tr>
+        <tr><td>Timer, Stopwatch, Calculator</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex A Tender</td></tr>
+        <tr><td>Periodic Table (interactive)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex A Tender</td></tr>
+        <tr><td>Insert Images + Google Image Search</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex A Tender</td></tr>
+        <tr><td>Insert Videos + YouTube Search</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex A Tender</td></tr>
+        <tr><td>Export — PDF, Image, Video, IWB format</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex A Tender</td></tr>
+        <tr><td>Cloud Save — Google Drive, OneDrive, Dropbox</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M11</td></tr>
+        <tr><td>Activities (Fill in Blanks, Game Show, Monster Quiz, etc.)</td><td><span class="st-minor">⚠️ Minor Gap</span></td><td class="src">Annex A only — not in Annex B M1</td></tr>
+        <tr><td>Widgets (GeoGebra, Arithmetic Widget, Immersive Reader)</td><td><span class="st-minor">⚠️ Minor Gap</span></td><td class="src">Annex A only — not in Annex B M1</td></tr>
+        <tr><td>Marketplace (share/use lesson plans)</td><td><span class="st-minor">⚠️ Minor Gap</span></td><td class="src">Annex A only — not in Annex B M1</td></tr>
+        <tr><td>Lasso tool, Sticky Notes, 2D/3D shapes, Icons</td><td><span class="st-minor">⚠️ Minor Gap</span></td><td class="src">Annex A only — not in Annex B M1</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- M2 AI TEACHER -->
+  <section id="m2">
+    <h2>🤖 Module 2 — AI Teacher <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">IFP Panel Only</span></h2>
+    <div class="note note-green">All 11 AI tools are fully covered in Phase 1 — on the IFP panel. None of these tools are available on the Teacher Mobile App or Student App in Phase 1.</div>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>AI Lesson Planner (objectives, flow, activities, homework, outcomes)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M2</td></tr>
+        <tr><td>AI PPT Generator (editable slides, export PPT + PDF)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M2</td></tr>
+        <tr><td>AI Explain (beginner / standard / advanced, examples, stories)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M2</td></tr>
+        <tr><td>AI Quiz Generator (MCQ, T/F, fill blanks, HOTS, descriptive)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M2</td></tr>
+        <tr><td>AI Worksheet Generator (printable, homework, practice papers)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M2</td></tr>
+        <tr><td>AI Mind Maps (concept maps, flow charts, timelines)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M2 + Annex A</td></tr>
+        <tr><td>AI Diagram Generator (text → labeled editable diagram)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M2</td></tr>
+        <tr><td>AI Formula Solver (solve + explain + graph + steps)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M2 + Annex A</td></tr>
+        <tr><td>AI Summarizer (revision notes, flash cards, formula sheet, exam notes)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M2 + Annex A</td></tr>
+        <tr><td>AI Translator (Hindi, Marathi, Gujarati, Tamil, Telugu, Kannada, Malayalam, Bengali, Punjabi, Urdu)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M2 + Annex A</td></tr>
+        <tr><td>AI Voice Assistant ("Create quiz", "Next slide", "Explain again")</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M2 + Annex A</td></tr>
+        <tr><td>AI Text-to-Picture / AI Image Generator for lessons</td><td><span class="st-p2">🔶 Phase 2</span></td><td class="src">Annex A Tender only — not in Annex B M2</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- M3 -->
+  <section id="m3">
+    <h2>🎓 Module 3 — Interactive Classroom <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">IFP Panel + Student App</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Live Poll (teacher creates, students vote, instant results on panel)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M3</td></tr>
+        <tr><td>Quiz participation during live class</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M3</td></tr>
+        <tr><td>Raise Hand queue (real-time ordered list on panel)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M3</td></tr>
+        <tr><td>Student Whiteboard (each student gets own canvas)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M3</td></tr>
+        <tr><td>Random Student Picker</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M3</td></tr>
+        <tr><td>Emoji Feedback / Reactions</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M3</td></tr>
+        <tr><td>Attendance via panel</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M3</td></tr>
+        <tr><td>Collaborative drawing (multiple students, same canvas)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M3</td></tr>
+        <tr><td>Submit answers, share screens</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M3</td></tr>
+        <tr><td>Challenges — interactive quizzes, group challenges</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex A Tender</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- M4 -->
+  <section id="m4">
+    <h2>📚 Module 4 — Content Library <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">IFP Panel + Student App</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Search — images, videos, diagrams, animations, simulations, worksheets, presentations, question banks</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M4</td></tr>
+        <tr><td>Filter by board — CBSE, ICSE, IB, IGCSE, State Boards, JEE, NEET</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M4</td></tr>
+        <tr><td>Filter by class, subject, chapter, type</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M4</td></tr>
+        <tr><td>Content ingestion pipeline (import GYOASH content data)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M4</td></tr>
+        <tr><td>Content blocking — class-wise age-appropriate filter</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx Admin</td></tr>
+        <tr><td>Inappropriate content blocking (no adult content)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx Admin</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- M5 -->
+  <section id="m5">
+    <h2>🧪 Module 5 — Virtual Labs &amp; 3D Models <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">IFP Panel</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>3D Interactive Models — Solar System, Human Body, DNA</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M5</td></tr>
+        <tr><td>3D Interactive Models — Physics models, Chemistry models</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M5</td></tr>
+        <tr><td>Rotate, Zoom, Animation on 3D models</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M5</td></tr>
+        <tr><td>Virtual Labs — Physics, Chemistry, Biology, Computer Science, Robotics</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M5</td></tr>
+        <tr><td>Simulation Engine — drag, drop, experiment, observe, record</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M5</td></tr>
+        <tr><td>Gamification — flash cards, puzzles, memory, crossword, word search</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M5</td></tr>
+        <tr><td>Spin wheel, leaderboard, badges</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M5</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- M6 -->
+  <section id="m6">
+    <h2>📡 Module 6 — Wireless Casting <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">IFP Panel receives cast</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Cast from Android to IFP panel</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M6</td></tr>
+        <tr><td>Cast from iOS to IFP panel</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M6</td></tr>
+        <tr><td>Cast from Windows to IFP panel</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M6</td></tr>
+        <tr><td>Device discovery on local network</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M6</td></tr>
+        <tr><td>QR or PIN pairing</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M6</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- M7 -->
+  <section id="m7">
+    <h2>🎥 Module 7 — Classroom Recording <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">IFP Panel records → Student App plays</span></h2>
+    <div class="note note-gold">Transcript, subtitles, and AI PDF notes are from the "Generate" section of Annex B M7. They are a post-recording AI processing pipeline — not a whiteboard feature. Deferred to Phase 2.</div>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Record whiteboard + screen</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M7 — Record section</td></tr>
+        <tr><td>Record teacher audio</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M7 — Record section</td></tr>
+        <tr><td>Record teacher camera</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M7 — Record section</td></tr>
+        <tr><td>Video file generated (MP4)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M7 — Generate section</td></tr>
+        <tr><td>Auto-upload to cloud storage (S3/Azure)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M7</td></tr>
+        <tr><td>Video encoding, thumbnails, playback optimisation</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M7</td></tr>
+        <tr><td>Student App — watch recordings</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S4</td></tr>
+        <tr><td>Student App — resume from last position</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S4</td></tr>
+        <tr><td>Student App — playback speed control (0.5x–2x)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S4</td></tr>
+        <tr><td>Student App — bookmark important moments</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S4</td></tr>
+        <tr><td>Student App — download recording</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S4</td></tr>
+        <tr><td>Auto-Transcript (Whisper / Azure Speech)</td><td><span class="st-p2">🔶 Phase 2</span></td><td class="src">Annex B M7 — Generate section</td></tr>
+        <tr><td>Auto-Subtitles / Closed Captions (SRT)</td><td><span class="st-p2">🔶 Phase 2</span></td><td class="src">Annex B M7 — Generate section</td></tr>
+        <tr><td>AI PDF Notes generated from recording</td><td><span class="st-p2">🔶 Phase 2</span></td><td class="src">Annex B M7 — Generate section</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- M8 -->
+  <section id="m8">
+    <h2>📊 Module 8 — Analytics Dashboard <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">Teacher App + Admin Portal</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Teacher Dashboard — lessons delivered, topics covered</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M8</td></tr>
+        <tr><td>Teacher Dashboard — quiz results, student participation</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M8</td></tr>
+        <tr><td>Teacher Dashboard — attendance tracking</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M8</td></tr>
+        <tr><td>School Dashboard — device health, teacher usage</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M8</td></tr>
+        <tr><td>School Dashboard — classroom utilisation, learning reports</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M8</td></tr>
+        <tr><td>Export reports — PDF and Excel</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M8</td></tr>
+        <tr><td>AI-generated narrative insights ("Students struggled with Chapter 5")</td><td><span class="st-p2">🔶 Phase 2</span></td><td class="src">Annex B M8</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- M9 -->
+  <section id="m9">
+    <h2>🧠 Module 9 — School AI / Private RAG <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">Admin Portal + FastAPI backend</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Per-school private AI knowledge base</td><td><span class="st-out">🚫 Removed</span></td><td class="src">Annex B M9</td></tr>
+        <tr><td>Upload books, PDFs, notes, question banks, policies, previous papers</td><td><span class="st-out">🚫 Removed</span></td><td class="src">Annex B M9</td></tr>
+        <tr><td>ERP Data integration into school AI</td><td><span class="st-out">🚫 Removed</span></td><td class="src">Annex B M9</td></tr>
+        <tr><td>AI answers only from school-approved content</td><td><span class="st-out">🚫 Removed</span></td><td class="src">Annex B M9</td></tr>
+        <tr><td>Vector DB per school, embedding pipeline</td><td><span class="st-out">🚫 Removed</span></td><td class="src">Annex B M9</td></tr>
+        <tr><td>RAG query pipeline with strict school data isolation</td><td><span class="st-out">🚫 Removed</span></td><td class="src">Annex B M9</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- M10 -->
+  <section id="m10">
+    <h2>🔧 Module 10 — Device Management <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">Admin Portal</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Client (school) registration, branch registration</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.1</td></tr>
+        <tr><td>Classroom-wise mapping of panel license</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.2.3</td></tr>
+        <tr><td>Panel registration</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.2.4</td></tr>
+        <tr><td>License key generation (one per panel)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.2.5</td></tr>
+        <tr><td>Key validity management, key extension</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.2.1–1.2.2</td></tr>
+        <tr><td>Cost master</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.2.3</td></tr>
+        <tr><td>Health reports, device monitoring</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.2.4 + 1.8</td></tr>
+        <tr><td>Remote lock / unlock panels</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.2.5 + Annex B M10</td></tr>
+        <tr><td>Remote app install</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M10</td></tr>
+        <tr><td>Log monitoring</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.9</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- M11 -->
+  <section id="m11">
+    <h2>☁️ Module 11 — Cloud Sync <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">IFP Panel + Backend</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Auto Save</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M11</td></tr>
+        <tr><td>Google Drive integration</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M11</td></tr>
+        <tr><td>OneDrive integration</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M11</td></tr>
+        <tr><td>Dropbox integration</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M11</td></tr>
+        <tr><td>Offline Mode</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M11</td></tr>
+        <tr><td>Version History</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M11</td></tr>
+        <tr><td>Client-wise and branch-wise cloud storage mapping</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.7</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- M13 -->
+  <section id="m13">
+    <h2>⚙️ Module 13 — Hardware Integration <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">IFP Panel — software layer only</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Camera — Bluetooth + inbuilt (software API)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M13</td></tr>
+        <tr><td>Microphones — Bluetooth + inbuilt (software API)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M13</td></tr>
+        <tr><td>Speakers — Bluetooth + inbuilt (software API)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M13</td></tr>
+        <tr><td>Touch input handling</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M13</td></tr>
+        <tr><td>Stylus pressure input (PointerEvent API)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M13</td></tr>
+        <tr><td>Palm Rejection</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M13</td></tr>
+        <tr><td>Gesture Control (software layer)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M13</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- M14 -->
+  <section id="m14">
+    <h2>🔒 Module 14 — Security &amp; Auth <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">All Surfaces</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Email login, OTP login</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M14 + Annex A</td></tr>
+        <tr><td>Google SSO</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M14 + Annex A</td></tr>
+        <tr><td>2FA (TOTP — Google Authenticator style)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M14</td></tr>
+        <tr><td>QR Code login via companion app</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M14 + Annex A</td></tr>
+        <tr><td>RBAC — Super Admin, School Admin, Teacher, Student/Parent</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M14</td></tr>
+        <tr><td>Audit logs</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex B M14</td></tr>
+        <tr><td>Encrypted sessions</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S20</td></tr>
+        <tr><td>Profanity filters</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex A Tender</td></tr>
+        <tr><td>School-wise language mapping</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.4</td></tr>
+        <tr><td>AI plan mapping per school</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.5</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- TEACHER APP -->
+  <section id="teacher">
+    <h2>📱 Teacher Mobile App <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">Android + iOS — Source: Annex C</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Dashboard — today's timetable, upcoming classes, pending homework, notifications</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S1</td></tr>
+        <tr><td>My Classes — class list, sections, student list, class schedule</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S2</td></tr>
+        <tr><td>Attendance — mark, edit, view history, absent list, leave status, reports</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S3</td></tr>
+        <tr><td>Homework — create, attach files, set due date, view submissions, add remarks</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S4</td></tr>
+        <tr><td>Assessments — create tests, define marks, schedule, enter marks, publish results</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S5</td></tr>
+        <tr><td>Content Repository — lesson plans, worksheets, question papers, search by subject/class/chapter</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S7</td></tr>
+        <tr><td>Student Profiles — attendance, marks, assignment status, behaviour notes, parent contact</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S8</td></tr>
+        <tr><td>Communication — announcements, individual messages, parent messages, circulars</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S9</td></tr>
+        <tr><td>Calendar — school calendar, holidays, exams, events, PTM, meetings</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S10</td></tr>
+        <tr><td>Timetable — daily, weekly, room allocation, substitute classes</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S11</td></tr>
+        <tr><td>Reports — attendance, homework completion, assessment, student progress, export PDF/Excel</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S13</td></tr>
+        <tr><td>Notifications — homework submitted, assignment due, leave, exam reminders, announcements</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S15</td></tr>
+        <tr><td>Teacher Profile — personal details, subjects, classes, settings, password change</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S16</td></tr>
+        <tr><td>Settings — language, notification preferences, help, about</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex C S17</td></tr>
+        <tr><td>AI Lesson Planner on Teacher App</td><td><span class="st-p2">🔶 Phase 2</span></td><td class="src">Annex C S6 — AI only on panel in Phase 1</td></tr>
+        <tr><td>AI Assistant on Teacher App (quiz gen, homework gen, parent messages, report card comments, activity suggestions)</td><td><span class="st-p2">🔶 Phase 2</span></td><td class="src">Annex C S14 — AI only on panel in Phase 1</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- STUDENT APP -->
+  <section id="student">
+    <h2>📱 Student App <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">Android + iOS + Web — Source: Annex D</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Login — parent mobile/email, OTP, Google login</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S1</td></tr>
+        <tr><td>Multi-child switch (parent switches between children)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S1</td></tr>
+        <tr><td>Student Profile — name, photo, class, roll no, section, academic year</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S1</td></tr>
+        <tr><td>Dashboard — timetable, upcoming classes, homework due, pending assignments, upcoming exams, announcements, attendance summary, recent results</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S2</td></tr>
+        <tr><td>Online Classes — join with one click, view teacher screen, watch live video, listen to teacher</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S3</td></tr>
+        <tr><td>Online Classes — raise hand, voice question, chat, emoji reactions, poll participation, quiz participation</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S3</td></tr>
+        <tr><td>Teacher controls — mute student, allow voice, disable chat, remove student, lock classroom</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S3</td></tr>
+        <tr><td>Recorded Classes — watch, resume from last position, playback speed, download, bookmark, search by subject/chapter/date</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S4</td></tr>
+        <tr><td>Homework — view, due date, instructions, attachments; submit photos/PDF/word/PPT/audio/video; track submitted/pending/reviewed/marks</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S5</td></tr>
+        <tr><td>Assignments — details, due date, upload files, draft save, resubmit, teacher comments, grades</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S6</td></tr>
+        <tr><td>Assessments — online tests, MCQ, subjective, T/F, fill blanks, match the following</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S7</td></tr>
+        <tr><td>Quiz &amp; Puzzles — brain games, crossword, word search, match pairs, memory, logic puzzles, STEM challenges</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S8</td></tr>
+        <tr><td>Gamification — points, badges, leaderboard, streaks, achievement levels</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S8</td></tr>
+        <tr><td>Learning Resources — class notes, PDF books, PPTs, videos, worksheets, reference material, previous year papers, practice questions</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S9</td></tr>
+        <tr><td>Academic Performance — test results, assignment marks, exam results, subject performance, progress charts, teacher feedback</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S13</td></tr>
+        <tr><td>Timetable — daily, weekly, online class links, teacher name, subject</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S14</td></tr>
+        <tr><td>Calendar — exams, holidays, school events, assignment deadlines, PTM, online sessions</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S15</td></tr>
+        <tr><td>Announcements — school notices, teacher announcements, exam updates, holiday notices</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S16</td></tr>
+        <tr><td>Push Notifications — class starting, homework due, assignment reviewed, exam reminder, new video, teacher message</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S17</td></tr>
+        <tr><td>Settings — dark mode, privacy settings, help &amp; support</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S19</td></tr>
+        <tr><td>Security — parent-controlled login, secure session, encrypted communication</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Annex D S20</td></tr>
+        <tr><td>AI Doubt Resolution (ask by voice, upload image, AI response)</td><td><span class="st-p2">🔶 Phase 2</span></td><td class="src">Annex D S11 — no AI in Student App in Phase 1</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- ADMIN -->
+  <section id="admin">
+    <h2>🏫 Admin Portal <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">Web — Source: Features xlsx</span></h2>
+    <div style="overflow-x:auto;">
+    <table class="ctable">
+      <thead><tr><th style="min-width:280px">Feature</th><th>Status</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Super Admin — school registration, branch registration</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.1</td></tr>
+        <tr><td>Classroom-wise panel mapping, panel registration</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.2.3–1.2.4</td></tr>
+        <tr><td>License key generation, validity, extension</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.2.5, 1.2.1–1.2.2</td></tr>
+        <tr><td>LMS — classwise data loading, school-wise content mapping, language support</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.3</td></tr>
+        <tr><td>School-wise language mapping</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.4</td></tr>
+        <tr><td>Content blocking — classwise + inappropriate content</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.6</td></tr>
+        <tr><td>Cloud storage mapping — client-wise, branch-wise</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.7</td></tr>
+        <tr><td>Device monitoring, log monitoring</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.8–1.9</td></tr>
+        <tr><td>School Admin — logo/branding, branch management</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 2.1–2.2</td></tr>
+        <tr><td>Teacher registration</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 2.3</td></tr>
+        <tr><td>Student registration via self-registration (school code + parent email)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 2.4</td></tr>
+        <tr><td>AI integration mapping per school (AI plan per school)</td><td><span class="st-in">✅ Phase 1</span></td><td class="src">Features xlsx 1.5</td></tr>
+        <tr><td>School AI upload interface (books, policies, RAG pipeline)</td><td><span class="st-out">🚫 Removed</span></td><td class="src">Annex B M9 — entire M9 removed</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <p>Project 2609 — GYOASH Technologies &nbsp;|&nbsp; Phase 1 Coverage Report prepared by INNONSH Technologies Private Limited</p>
+  <p style="margin-top:6px;">Confidential — NDA Applies &nbsp;|&nbsp; Sources: Annex A, Annex B, Annex C, Annex D, Features xlsx</p>
+</footer>
+
+<div id="pdf-btn-wrap" style="position:fixed;bottom:28px;right:28px;z-index:9999;">
+  <button onclick="window.print()" style="background:var(--green);color:#000;border:none;padding:12px 22px;border-radius:30px;font-size:0.9rem;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(63,185,80,0.4);display:flex;align-items:center;gap:8px;">⬇️ Save as PDF</button>
+</div>
+<style>@media print{#pdf-btn-wrap{display:none!important}nav{display:none!important}body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}</style>
+
+</body>
+</html>

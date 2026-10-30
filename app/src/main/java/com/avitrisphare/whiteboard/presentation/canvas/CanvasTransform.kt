@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import com.avitrisphare.whiteboard.domain.model.Stroke
+import com.avitrisphare.whiteboard.domain.model.StrokeType
 import kotlin.math.max
 import kotlin.math.min
 
@@ -171,6 +172,7 @@ object CanvasTransform {
         val thresholdSq = (thresholdRadius + stroke.strokeWidth / 2f) * (thresholdRadius + stroke.strokeWidth / 2f)
         val points = stroke.points
         if (points.isEmpty()) return false
+        if (stroke.strokeType == StrokeType.EQUATION) return stroke.bounds.contains(worldPoint)
 
         // Quick AABB rejection
         val expandedBounds = Rect(
@@ -187,6 +189,50 @@ object CanvasTransform {
             val dx = worldPoint.x - points[0].x
             val dy = worldPoint.y - points[0].y
             return (dx * dx + dy * dy) <= thresholdSq
+        }
+
+        if (stroke.strokeType == StrokeType.CONNECTOR && points.size >= 2) {
+            val safeThresholdSq = (thresholdRadius + 8f + stroke.strokeWidth / 2f) * (thresholdRadius + 8f + stroke.strokeWidth / 2f)
+            if (points.size > 2) {
+                for (i in 0 until points.size - 1) {
+                    if (distanceToSegmentSquared(worldPoint, points[i], points[i + 1]) <= safeThresholdSq) return true
+                }
+                return false
+            }
+            val p1 = points.first()
+            val p2 = points.last()
+            if (stroke.stickerKind == "curved") {
+                val cp = MindmapEngine.calculateCurvedControlPoints(p1, p2)
+                val cx1 = cp.cx1
+                val cy1 = cp.cy1
+                val cx2 = cp.cx2
+                val cy2 = cp.cy2
+                var prev = p1
+                for (step in 1..10) {
+                    val t = step / 10f
+                    val u = 1f - t
+                    val x = u * u * u * p1.x + 3 * u * u * t * cx1 + 3 * u * t * t * cx2 + t * t * t * p2.x
+                    val y = u * u * u * p1.y + 3 * u * u * t * cy1 + 3 * u * t * t * cy2 + t * t * t * p2.y
+                    val pt = Offset(x, y)
+                    if (distanceToSegmentSquared(worldPoint, prev, pt) <= safeThresholdSq) return true
+                    prev = pt
+                }
+                return false
+            } else if (stroke.stickerKind == "straight") {
+                return distanceToSegmentSquared(worldPoint, p1, p2) <= safeThresholdSq
+            } else {
+                val segments = if (kotlin.math.abs(p2.x - p1.x) >= kotlin.math.abs(p2.y - p1.y)) {
+                    val midX = (p1.x + p2.x) / 2f
+                    listOf(p1, Offset(midX, p1.y), Offset(midX, p2.y), p2)
+                } else {
+                    val midY = (p1.y + p2.y) / 2f
+                    listOf(p1, Offset(p1.x, midY), Offset(p2.x, midY), p2)
+                }
+                for (i in 0 until segments.size - 1) {
+                    if (distanceToSegmentSquared(worldPoint, segments[i], segments[i + 1]) <= safeThresholdSq) return true
+                }
+                return false
+            }
         }
 
         for (i in 0 until points.size - 1) {

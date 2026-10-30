@@ -1,4 +1,301 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">AvitriSphare</string>
+    <string name="app_subtitle">Whiteboard</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="confirm">Confirm</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="close">Close</string>
+    <string name="back">Back</string>
+    <string name="open">Open</string>
+    <string name="search">Search</string>
+    <string name="create">Create</string>
+    <string name="title">Title</string>
+    <string name="saved">Saved</string>
+    <string name="color_swapped">Color swapped</string>
+    <string name="copied_to_clipboard">Copied to clipboard</string>
+    <string name="help_close">Close</string>
+    <string name="share">Share</string>
+
+    <!-- Language & Localization -->
+    <string name="language">Language</string>
+    <string name="change_language">Change language</string>
+    <string name="select_language">Select Language</string>
+    <string name="english">English</string>
+    <string name="hindi">हिन्दी (Hindi)</string>
+    <string name="marathi">मराठी (Marathi)</string>
+
+    <!-- Sidebar Menu (From Screenshot) -->
+    <string name="menu_rename_board">Rename board</string>
+    <string name="menu_open">Open</string>
+    <string name="menu_export_lesson">Export lesson...</string>
+    <string name="menu_open_iwb">Open GYOASH Lesson (.iwb)...</string>
+    <string name="menu_live_collab">Live collaboration...</string>
+    <string name="menu_command_palette">Command palette</string>
+    <string name="menu_find_on_canvas">Find on canvas</string>
+    <string name="menu_help">Help</string>
+    <string name="menu_reset_canvas">Reset the canvas</string>
+
+    <!-- Canvas Bottom Dock Tools -->
+    <string name="tool_select">Select</string>
+    <string name="tool_pen">Pen</string>
+    <string name="tool_pencil">Pencil</string>
+    <string name="tool_marker">Marker</string>
+    <string name="tool_highlighter">Highlighter</string>
+    <string name="tool_brush">Brush</string>
+    <string name="tool_flowchart">Flowchart</string>
+    <string name="tool_stickers">Stickers</string>
+    <string name="tool_shapes">Shapes</string>
+    <string name="tool_eraser">Eraser</string>
+    <string name="tool_laser">Laser</string>
+    <string name="tool_geometry">Geometry</string>
+    <string name="tool_tools">Tools</string>
+    <string name="tool_undo">Undo</string>
+    <string name="tool_redo">Redo</string>
+    <string name="tool_save">Save</string>
+    <string name="tool_prev_page">Prev</string>
+    <string name="tool_next_page">Next</string>
+    <string name="tool_add_page">Add</string>
+    <string name="tool_profile">Profile</string>
+    <string name="tool_main_menu">Main Menu</string>
+    <string name="tool_exit">Exit</string>
+    <string name="tool_class">Class</string>
+    <string name="clear_all">Clear all</string>
+    <string name="tool_clean_all">Clean all</string>
+
+    <!-- Popover Menu Items -->
+    <string name="magic_pen">Shape Recognition</string>
+    <string name="shape_recognition">Shape Recognition</string>
+    <string name="smart_write">Smart Write</string>
+    <string name="smart_write_tip">Turn off Smart Write to use Shape Recognition.</string>
+    <string name="popover_background">Background</string>
+    <string name="save_slides_pdf">Save slides (PDF)</string>
+    <string name="popover_zoom_in">Zoom in</string>
+    <string name="popover_zoom_out">Zoom out</string>
+    <string name="popover_fit">Fit to content</string>
+
+    <!-- Utility Tabs & Tools -->
+    <string name="tab_board">Board</string>
+    <string name="tab_media">Media</string>
+    <string name="tab_utilities">Utilities</string>
+    <string name="tab_lesson">Lesson</string>
+    <string name="tab_view">View</string>
+    <string name="util_hand">Hand</string>
+    <string name="util_lasso">Lasso</string>
+    <string name="util_bucket_fill">Bucket fill</string>
+    <string name="util_stroke_colour">Stroke colour</string>
+    <string name="util_pdf">PDF</string>
+    <string name="util_image">Image</string>
+    <string name="util_google">Google</string>
+    <string name="util_video">Video</string>
+    <string name="util_youtube">YouTube</string>
+    <string name="util_website">Website</string>
+    <string name="util_timer">Countdown Timer</string>
+    <string name="util_stopwatch">Stopwatch</string>
+    <string name="util_calculator">Calculator</string>
+    <string name="util_periodic">Periodic Table</string>
+    <string name="util_spotlight">Spotlight</string>
+    <string name="util_shade">Shade</string>
+    <string name="util_magnifier">Magnifier</string>
+    <string name="util_text">Text</string>
+    <string name="util_panels">%d panels</string>
+
+    <!-- Selection Toolbar -->
+    <string name="sel_selected">%d selected</string>
+    <string name="sel_border">Border</string>
+    <string name="sel_fill">Fill</string>
+    <string name="sel_copy">Copy</string>
+    <string name="sel_paste">Paste</string>
+
+    <!-- Utility Floating Panels -->
+    <string name="timer_start">Start</string>
+    <string name="timer_pause">Pause</string>
+    <string name="timer_reset">Reset</string>
+    <string name="timer_resume">Resume</string>
+    <string name="timer_custom">Custom</string>
+    <string name="timer_min">Min</string>
+    <string name="timer_sec">Sec</string>
+    <string name="timer_finished">Time\'s up!</string>
+    <string name="stopwatch_title">Stopwatch</string>
+    <string name="periodic_search">Search elements...</string>
+
+    <!-- Dialogs -->
+    <string name="dialog_clear_title">Clear all</string>
+    <string name="dialog_clear_msg">Clear everything on this page? You can bring it back with Undo.</string>
+    <string name="dialog_clean_all_title">Clean all</string>
+    <string name="dialog_clean_all_msg">Clean everything on this canvas including pen drawings, shapes, geometry tools, and images? You can bring them back with Undo.</string>
+    <string name="dialog_rename_title">Rename whiteboard</string>
+    <string name="dialog_edit_title">Edit title</string>
+    <string name="dialog_delete_title">Delete note</string>
+    <string name="dialog_delete_msg">Are you sure you want to delete this note?</string>
+    <string name="dialog_split_leave_title">Leave split screen</string>
+    <string name="dialog_split_leave_msg">Keep ink from the active panel on the main board?</string>
+    <string name="dialog_keep_active">Keep active panel</string>
+    <string name="dialog_help_title">Whiteboard guide</string>
+    <string name="dialog_got_it">Got it</string>
+    <string name="dialog_exported_title">Exported</string>
+    <string name="dialog_exported_msg">Note exported to Pictures/AvitriSphare</string>
+    <string name="search_commands">Search tools &amp; commands...</string>
+
+    <!-- Live Collaboration -->
+    <string name="collab_title">Live collaboration</string>
+    <string name="collab_start">Start session</string>
+    <string name="collab_stop">Stop session</string>
+    <string name="collab_share_link">Share this link with your students or collaborators:</string>
+    <string name="collab_copy">Copy link</string>
+    <string name="collab_copied">Copied!</string>
+    <string name="collab_scan_qr">Or scan the QR code:</string>
+    <string name="collab_privacy_note">Don\'t worry, the session is end-to-end encrypted, and fully private. Not even our server can see what you draw.</string>
+    <string name="collab_disconnect_note">Stopping the session will disconnect you from the room, but you\'ll be able to continue working with the scene, locally.</string>
+
+    <!-- Export Lesson -->
+    <string name="export_title">Export Whiteboard Lesson</string>
+    <string name="export_pages">%d Pages</string>
+    <string name="export_subtitle">Save locally, backup to cloud, or export for GYOASH</string>
+    <string name="export_step1">1. CHOOSE EXPORT FORMAT</string>
+    <string name="export_step2">2. SELECT DESTINATION</string>
+    <string name="export_lesson_title_label">Lesson title</string>
+    <string name="export_btn_start">Export lesson</string>
+    <string name="export_success_title">Export Complete!</string>
+    <string name="export_open_file">Open file</string>
+    <string name="export_share_file">Share file</string>
+
+    <!-- Dashboard & Class Home -->
+    <string name="portal_title">AvitriSphare Education Portal</string>
+    <string name="open_whiteboard">Open whiteboard</string>
+    <string name="continue_today_board">Continue today\'s board</string>
+    <string name="mark_attendance">Mark Attendance</string>
+    <string name="weekly_timetable">Weekly Timetable</string>
+    <string name="assign_homework">Assign Homework</string>
+    <string name="student_doubts">Student Doubts</string>
+    <string name="tests_grading">Class Tests &amp; Grading</string>
+    <string name="past_whiteboards">Past whiteboards</string>
+    <string name="new_board">New board</string>
+    <string name="view_all">View all</string>
+    <string name="log_out">Log out</string>
+    <string name="no_boards_yet">No boards yet. Open the whiteboard to start today\'s lesson.</string>
+    <string name="search_notes">Search notes...</string>
+    <string name="new_note">New Note</string>
+    <string name="notes_count">%d notes</string>
+    <string name="single_note_count">1 note</string>
+    <string name="library_empty">Your library is empty</string>
+    <string name="no_notes_found">No notes found matching your search</string>
+    <string name="delete_note_confirm">Are you sure you want to delete \'%s\'?</string>
+    <string name="sort_notes">Sort notes</string>
+    <string name="toggle_theme">Toggle theme</string>
+    <string name="theme_title">Theme</string>
+    <string name="theme_dark">Dark Theme</string>
+    <string name="theme_light">Light Theme</string>
+    <string name="theme_black_board">Black Board</string>
+    <string name="toast_color_swapped">Color swapped</string>
+    <string name="toast_saved">Saved</string>
+    <string name="customize_toolbar_title">Customize Toolbar</string>
+    <string name="customize_toolbar_edit_mode">Drag tools to reorder • Tap ✕ to hide</string>
+    <string name="customize_toolbar_reset">Reset</string>
+    <string name="customize_toolbar_done">Done</string>
+    <string name="customize_toolbar_tools_on_bar">Tools in Toolbar</string>
+    <string name="customize_toolbar_available_tools">Available Tools (Tap to Add)</string>
+    <string name="customize_toolbar_hint">Long-press any tool to drag and reorder directly on the toolbar.</string>
+
+    <!-- Geometry Panel -->
+    <string name="geo_title">Geometry</string>
+    <string name="geo_instruments">Instruments</string>
+    <string name="geo_board">Board</string>
+    <string name="geo_instructions">Drag a tool onto the board. Tap a tool to place it or take it off. A dot means it is on the board.</string>
+    <string name="geo_ruler">Ruler</string>
+    <string name="geo_ruler_hint">Draw along either edge. Length is shown in centimetres.</string>
+    <string name="geo_compass">Compass</string>
+    <string name="geo_compass_hint">Drag the pencil to set the radius. Tap for a circle, or sweep an arc.</string>
+    <string name="geo_protractor">Protractor</string>
+    <string name="geo_protractor_hint">Set the arm, then mark the left or right angle in degrees.</string>
+    <string name="geo_set_square">Set square</string>
+    <string name="geo_set_square_hint">45°-45°-90°. Draw along the base, the upright, or the hypotenuse.</string>
+    <string name="geo_triangle">Triangle</string>
+    <string name="geo_triangle_hint">Equilateral, 60°-60°-60°. Draw along any side.</string>
+    <string name="geo_length">Length: %s</string>
+    <string name="geo_radius">Radius: %s</string>
+    <string name="geo_side">Side: %s</string>
+    <string name="geo_legs_hyp">Legs %1$.1f · hyp %2$.1f cm</string>
+    <string name="geo_rotation">Rotation: %d°</string>
+    <string name="geo_arm_other">Arm %1$d° · other %2$d°</string>
+    <string name="geo_remove_board">Remove from board</string>
+    <string name="geo_place_board">Place on board</string>
+    <string name="geo_aids_description">Graph paper, a straight line, an arrow, and a frame.</string>
+    <string name="geo_aid_graph">Graph</string>
+    <string name="geo_aid_line">Line</string>
+    <string name="geo_aid_arrow">Arrow</string>
+    <string name="geo_aid_frame">Frame</string>
+    <string name="ink_colour">Ink colour</string>
+    <string name="stroke_px">Stroke: %.1f px</string>
+
+    <!-- Shapes Panel -->
+    <string name="shapes_title">Shapes</string>
+    <string name="drag_to_move">Drag to move</string>
+    <string name="dialog_close">Close</string>
+    <string name="shape_cat_2d">2D Shapes</string>
+    <string name="shape_cat_lines_rays">Lines &amp; Rays</string>
+    <string name="shape_cat_3d">3D Solids</string>
+    <string name="shape_rectangle">Rectangle</string>
+    <string name="shape_square">Square</string>
+    <string name="shape_rounded_rect">Rounded Rect</string>
+    <string name="shape_circle">Circle</string>
+    <string name="shape_ellipse">Ellipse</string>
+    <string name="shape_semicircle">Semicircle</string>
+    <string name="shape_right_triangle">Right Triangle</string>
+    <string name="shape_triangle">Triangle</string>
+    <string name="shape_scalene">Scalene</string>
+    <string name="shape_trapezoid">Trapezoid</string>
+    <string name="shape_star">Star</string>
+    <string name="shape_parallelogram">Parallelogram</string>
+    <string name="shape_rhombus">Rhombus</string>
+    <string name="shape_pentagon">Pentagon</string>
+    <string name="shape_hexagon">Hexagon</string>
+    <string name="shape_octagon">Octagon</string>
+    <string name="shape_line">Line</string>
+    <string name="shape_dashed">Dashed</string>
+    <string name="shape_arrow">Arrow</string>
+    <string name="shape_double_arrow">Double Arrow</string>
+    <string name="shape_dashed_arrow">Dashed Arrow</string>
+    <string name="shape_angle_ray">Angle Ray</string>
+    <string name="shape_cube">Cube</string>
+    <string name="shape_cuboid">Cuboid</string>
+    <string name="shape_pyramid">Pyramid</string>
+    <string name="shape_prism">Prism</string>
+    <string name="shape_cylinder">Cylinder</string>
+    <string name="shape_cone">Cone</string>
+    <string name="shape_sphere">Sphere</string>
+    <string name="shape_opacity">Opacity: %d%%</string>
+    <string name="shape_radius">Radius: %d px</string>
+    <string name="shape_dims">Dims</string>
+    <string name="shape_dims_active">✓ Dims</string>
+    <string name="shape_border">● Border</string>
+    <string name="shape_fill">⊘ Fill</string>
+    <string name="shape_border_color">Border Color</string>
+    <string name="shape_fill_color">Fill Color</string>
+    <string name="rgb_custom_color">RGB Custom Color</string>
+    <string name="custom_color">Custom color</string>
+
+    <!-- Eraser & Pen Tools -->
+    <string name="eraser_title">Eraser</string>
+    <string name="eraser_standard">Standard</string>
+    <string name="eraser_smart">Smart</string>
+    <string name="eraser_standard_hint">Erases the ink inside the circle.</string>
+    <string name="eraser_smart_hint">Erases each whole stroke or object you touch.</string>
+    <string name="eraser_size_px">Size %dpx</string>
+    <string name="pen_two_colour">Two-colour pen (One-tap swap)</string>
+    <string name="pen_primary_active">Primary (Active)</string>
+    <string name="pen_secondary">Secondary</string>
+    <string name="pen_swap">Swap</string>
+    <string name="pen_palette_primary">Palette sets: Primary (Active) Color</string>
+    <string name="pen_palette_secondary">Palette sets: Secondary Color</string>
+    <string name="tool_more">More</string>
+    <string name="more_tools_title">More Tools</string>
+    <string name="more_tools_empty">No tools in More. Long press and drag any tool up above the toolbar to move it here.</string>
+    <string name="more_tools_hint">Drag up above toolbar to move to More</string>
+    <string name="toast_moved_to_more">%s moved to More</string>
+    <string name="toast_restored_to_toolbar">%s added back to toolbar</string>
+    <string name="release_to_move_more">Release to move to More</string>
+    <string name="action_add">Add</string>
+    <string name="tool_color_swap">Color Swap</string>
 </resources>

@@ -22,6 +22,9 @@
 -keep class javax.inject.** { *; }
 -keep @dagger.hilt.android.lifecycle.HiltViewModel class * { *; }
 
+-keep class com.google.mlkit.** { *; }
+-dontwarn com.google.mlkit.**
+
 # Keep Kotlin
 -keep class kotlin.Metadata { *; }
 -dontwarn kotlin.**

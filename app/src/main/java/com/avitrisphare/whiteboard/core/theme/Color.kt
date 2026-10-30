@@ -95,3 +95,7 @@ object AvitriSphareShapes {
     val SmallShape = RoundedCornerShape(6.dp)
     val CardShape = RoundedCornerShape(16.dp)
 }
+
+val BrandOrange = Color(0xFFF26A1B)
+val BrandPurple = Color(0xFF2E2466)
+val PanelGradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(BrandOrange, BrandPurple))

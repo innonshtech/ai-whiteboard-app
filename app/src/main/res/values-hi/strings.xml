@@ -1,0 +1,301 @@
+<resources>
+    <string name="app_name">AvitriSphare</string>
+    <string name="app_subtitle">व्हाइटबोर्ड</string>
+    <string name="save">सहेजें</string>
+    <string name="cancel">रद्द करें</string>
+    <string name="confirm">पुष्टि करें</string>
+    <string name="delete">हटाएं</string>
+    <string name="edit">संपादित करें</string>
+    <string name="close">बंद करें</string>
+    <string name="back">पीछे</string>
+    <string name="open">खोलें</string>
+    <string name="search">खोजें</string>
+    <string name="create">बनाएं</string>
+    <string name="title">शीर्षक</string>
+    <string name="saved">सहेजा गया</string>
+    <string name="color_swapped">रंग बदला गया</string>
+    <string name="copied_to_clipboard">क्लिपबोर्ड पर कॉपी किया गया</string>
+    <string name="help_close">बंद करें</string>
+    <string name="share">साझा करें</string>
+
+    <!-- Language & Localization -->
+    <string name="language">भाषा</string>
+    <string name="change_language">भाषा बदलें</string>
+    <string name="select_language">भाषा चुनें</string>
+    <string name="english">English</string>
+    <string name="hindi">हिन्दी (Hindi)</string>
+    <string name="marathi">मराठी (Marathi)</string>
+
+    <!-- Sidebar Menu (From Screenshot) -->
+    <string name="menu_rename_board">बोर्ड का नाम बदलें</string>
+    <string name="menu_open">खोलें</string>
+    <string name="menu_export_lesson">पाठ निर्यात करें...</string>
+    <string name="menu_open_iwb">GYOASH पाठ (.iwb) खोलें...</string>
+    <string name="menu_live_collab">लाइव सहयोग...</string>
+    <string name="menu_command_palette">कमांड पैलेट</string>
+    <string name="menu_find_on_canvas">कैनवास पर खोजें</string>
+    <string name="menu_help">सहायता</string>
+    <string name="menu_reset_canvas">कैनवास रीसेट करें</string>
+
+    <!-- Canvas Bottom Dock Tools -->
+    <string name="tool_select">चुनें</string>
+    <string name="tool_pen">पेन</string>
+    <string name="tool_pencil">पेंसिल</string>
+    <string name="tool_marker">मार्कर</string>
+    <string name="tool_highlighter">हाइलाइटर</string>
+    <string name="tool_brush">ब्रश</string>
+    <string name="tool_flowchart">फ्लोचार्ट</string>
+    <string name="tool_stickers">स्टिकर्स</string>
+    <string name="tool_shapes">आकृतियाँ</string>
+    <string name="tool_eraser">इरेज़र</string>
+    <string name="tool_laser">लेज़र</string>
+    <string name="tool_geometry">ज्यामिति</string>
+    <string name="tool_tools">उपकरण</string>
+    <string name="tool_undo">पूर्ववत</string>
+    <string name="tool_redo">फिर से करें</string>
+    <string name="tool_save">सहेजें</string>
+    <string name="tool_prev_page">पिछला</string>
+    <string name="tool_next_page">अगला</string>
+    <string name="tool_add_page">जोड़ें</string>
+    <string name="tool_profile">प्रोफ़ाइल</string>
+    <string name="tool_main_menu">मुख्य मेनू</string>
+    <string name="tool_exit">बाहर निकलें</string>
+    <string name="tool_class">कक्षा</string>
+    <string name="clear_all">सब साफ़ करें</string>
+    <string name="tool_clean_all">ऑब्जेक्ट्स साफ़ करें</string>
+
+    <!-- Popover Menu Items -->
+    <string name="magic_pen">आकृति पहचान</string>
+    <string name="shape_recognition">आकृति पहचान</string>
+    <string name="smart_write">स्मार्ट राइट</string>
+    <string name="smart_write_tip">आकृति पहचान का उपयोग करने के लिए स्मार्ट राइट बंद करें।</string>
+    <string name="popover_background">पृष्ठभूमि</string>
+    <string name="save_slides_pdf">स्लाइड्स सहेजें (PDF)</string>
+    <string name="popover_zoom_in">ज़ूम इन</string>
+    <string name="popover_zoom_out">ज़ूम आउट</string>
+    <string name="popover_fit">सामग्री में फ़िट करें</string>
+
+    <!-- Utility Tabs & Tools -->
+    <string name="tab_board">बोर्ड</string>
+    <string name="tab_media">मीडिया</string>
+    <string name="tab_utilities">सुविधाएँ</string>
+    <string name="tab_lesson">पाठ</string>
+    <string name="tab_view">दृश्य</string>
+    <string name="util_hand">हैंड टूल</string>
+    <string name="util_lasso">लैसो</string>
+    <string name="util_bucket_fill">रंग भरें</string>
+    <string name="util_stroke_colour">स्ट्रोक रंग</string>
+    <string name="util_pdf">PDF</string>
+    <string name="util_image">चित्र</string>
+    <string name="util_google">गूगल</string>
+    <string name="util_video">वीडियो</string>
+    <string name="util_youtube">यूट्यूब</string>
+    <string name="util_website">वेबसाइट</string>
+    <string name="util_timer">काउंटडाउन टाइमर</string>
+    <string name="util_stopwatch">स्टॉपवॉच</string>
+    <string name="util_calculator">कैलकुलेटर</string>
+    <string name="util_periodic">आवर्त सारणी</string>
+    <string name="util_spotlight">स्पॉटलाइट</string>
+    <string name="util_shade">पर्दा</string>
+    <string name="util_magnifier">आवर्धक लेंस</string>
+    <string name="util_text">टेक्स्ट</string>
+    <string name="util_panels">%d पैनल</string>
+
+    <!-- Selection Toolbar -->
+    <string name="sel_selected">%d चयनित</string>
+    <string name="sel_border">किनारा</string>
+    <string name="sel_fill">भराव</string>
+    <string name="sel_copy">कॉपी</string>
+    <string name="sel_paste">पेस्ट</string>
+
+    <!-- Utility Floating Panels -->
+    <string name="timer_start">शुरू करें</string>
+    <string name="timer_pause">रोकें</string>
+    <string name="timer_reset">रीसेट करें</string>
+    <string name="timer_resume">जारी रखें</string>
+    <string name="timer_custom">कस्टम</string>
+    <string name="timer_min">मिनट</string>
+    <string name="timer_sec">सेकंड</string>
+    <string name="timer_finished">समय समाप्त!</string>
+    <string name="stopwatch_title">स्टॉपवॉच</string>
+    <string name="periodic_search">तत्व खोजें...</string>
+
+    <!-- Dialogs -->
+    <string name="dialog_clear_title">सब साफ़ करें</string>
+    <string name="dialog_clear_msg">क्या आप इस पृष्ठ की सभी सामग्री मिटाना चाहते हैं? पूर्ववत (Undo) से इसे वापस लाया जा सकता है।</string>
+    <string name="dialog_clean_all_title">सब कुछ साफ़ करें</string>
+    <string name="dialog_clean_all_msg">क्या आप पेन सहित सभी चित्र, आकृतियाँ, ज्यामिति और ऑब्जेक्ट्स मिटाना चाहते हैं? पूर्ववत (Undo) से इसे वापस लाया जा सकता है।</string>
+    <string name="dialog_rename_title">व्हाइटबोर्ड का नाम बदलें</string>
+    <string name="dialog_edit_title">शीर्षक संपादित करें</string>
+    <string name="dialog_delete_title">नोट हटाएं</string>
+    <string name="dialog_delete_msg">क्या आप वाकई इस नोट को हटाना चाहते हैं?</string>
+    <string name="dialog_split_leave_title">विभाजित स्क्रीन छोड़ें</string>
+    <string name="dialog_split_leave_msg">क्या सक्रिय पैनल की इंक मुख्य बोर्ड पर रखनी है?</string>
+    <string name="dialog_keep_active">सक्रिय पैनल रखें</string>
+    <string name="dialog_help_title">व्हाइटबोर्ड मार्गदर्शिका</string>
+    <string name="dialog_got_it">समझ गया</string>
+    <string name="dialog_exported_title">निर्यात किया गया</string>
+    <string name="dialog_exported_msg">नोट Pictures/AvitriSphare में निर्यात किया गया</string>
+    <string name="search_commands">उपकरण और आदेश खोजें...</string>
+
+    <!-- Live Collaboration -->
+    <string name="collab_title">लाइव सहयोग</string>
+    <string name="collab_start">सत्र शुरू करें</string>
+    <string name="collab_stop">सत्र समाप्त करें</string>
+    <string name="collab_share_link">अपने विद्यार्थियों या साथियों के साथ यह लिंक साझा करें:</string>
+    <string name="collab_copy">लिंक कॉपी करें</string>
+    <string name="collab_copied">कॉपी हो गया!</string>
+    <string name="collab_scan_qr">या क्यूआर कोड स्कैन करें:</string>
+    <string name="collab_privacy_note">चिंता न करें, सत्र एंड-टू-एंड एन्क्रिप्टेड और पूरी तरह से निजी है। हमारे सर्वर भी आपके चित्र नहीं देख सकते।</string>
+    <string name="collab_disconnect_note">सत्र रोकने पर आप रूम से डिस्कनेक्ट हो जाएंगे, लेकिन आप स्थानीय रूप से काम जारी रख सकेंगे।</string>
+
+    <!-- Export Lesson -->
+    <string name="export_title">व्हाइटबोर्ड पाठ निर्यात करें</string>
+    <string name="export_pages">%d पृष्ठ</string>
+    <string name="export_subtitle">स्थानीय रूप से सहेजें, क्लाउड में बैकअप लें, या GYOASH के लिए निर्यात करें</string>
+    <string name="export_step1">1. निर्यात प्रारूप चुनें</string>
+    <string name="export_step2">2. गंतव्य चुनें</string>
+    <string name="export_lesson_title_label">पाठ का शीर्षक</string>
+    <string name="export_btn_start">पाठ निर्यात करें</string>
+    <string name="export_success_title">निर्यात पूर्ण हुआ!</string>
+    <string name="export_open_file">फ़ाइल खोलें</string>
+    <string name="export_share_file">फ़ाइल साझा करें</string>
+
+    <!-- Dashboard & Class Home -->
+    <string name="portal_title">AvitriSphare शिक्षा पोर्टल</string>
+    <string name="open_whiteboard">व्हाइटबोर्ड खोलें</string>
+    <string name="continue_today_board">आज का बोर्ड जारी रखें</string>
+    <string name="mark_attendance">उपस्थिति दर्ज करें</string>
+    <string name="weekly_timetable">साप्ताहिक समय-सारणी</string>
+    <string name="assign_homework">गृहकार्य दें</string>
+    <string name="student_doubts">विद्यार्थियों के प्रश्न</string>
+    <string name="tests_grading">कक्षा परीक्षा और मूल्यांकन</string>
+    <string name="past_whiteboards">पिछले व्हाइटबोर्ड</string>
+    <string name="new_board">नया बोर्ड</string>
+    <string name="view_all">सभी देखें</string>
+    <string name="log_out">लॉग आउट</string>
+    <string name="no_boards_yet">अभी कोई बोर्ड नहीं है। आज का पाठ शुरू करने के लिए व्हाइटबोर्ड खोलें।</string>
+    <string name="search_notes">नोट्स खोजें...</string>
+    <string name="new_note">नया नोट</string>
+    <string name="notes_count">%d नोट्स</string>
+    <string name="single_note_count">1 नोट</string>
+    <string name="library_empty">आपकी लाइब्रेरी खाली है</string>
+    <string name="no_notes_found">आपकी खोज से मेल खाता कोई नोट नहीं मिला</string>
+    <string name="delete_note_confirm">क्या आप वाकई \'%s\' को हटाना चाहते हैं?</string>
+    <string name="sort_notes">नोट्स क्रमबद्ध करें</string>
+    <string name="toggle_theme">थीम बदलें</string>
+    <string name="theme_title">थीम</string>
+    <string name="theme_dark">डार्क थीम</string>
+    <string name="theme_light">लाइट थीम</string>
+    <string name="theme_black_board">ब्लैक बोर्ड</string>
+    <string name="toast_color_swapped">रंग बदला गया</string>
+    <string name="toast_saved">सहेज लिया गया</string>
+    <string name="customize_toolbar_title">टूलबार कस्टमाइज़ करें</string>
+    <string name="customize_toolbar_edit_mode">क्रम बदलने के लिए खींचें • छिपाने के लिए ✕ दबाएं</string>
+    <string name="customize_toolbar_reset">रीसेट</string>
+    <string name="customize_toolbar_done">पूर्ण</string>
+    <string name="customize_toolbar_tools_on_bar">टूलबार में उपलब्ध टूल्स</string>
+    <string name="customize_toolbar_available_tools">अन्य टूल्स (जोड़ने के लिए टैप करें)</string>
+    <string name="customize_toolbar_hint">टूलबार पर सीधे क्रम बदलने के लिए किसी भी टूल को दबाकर रखें।</string>
+
+    <!-- Geometry Panel -->
+    <string name="geo_title">ज्यामिति</string>
+    <string name="geo_instruments">उपकरण</string>
+    <string name="geo_board">बोर्ड</string>
+    <string name="geo_instructions">उपकरण को बोर्ड पर खींचें। लगाने या हटाने के लिए टैप करें। बिंदी का अर्थ है कि यह बोर्ड पर है।</string>
+    <string name="geo_ruler">स्केल (रूलर)</string>
+    <string name="geo_ruler_hint">किसी भी किनारे के साथ रेखा खींचें। लंबाई सेंटीमीटर में दिखाई जाती है।</string>
+    <string name="geo_compass">परकार (कंपास)</string>
+    <string name="geo_compass_hint">त्रिज्या सेट करने के लिए पेंसिल खींचें। वृत्त के लिए टैप करें, या चाप बनाएं।</string>
+    <string name="geo_protractor">चांदा (प्रोट्रॅक्टर)</string>
+    <string name="geo_protractor_hint">भुजा सेट करें, फिर बाएँ या दाएँ कोण को डिग्री में चिह्नित करें।</string>
+    <string name="geo_set_square">सेट स्क्वायर</string>
+    <string name="geo_set_square_hint">45°-45°-90°। आधार, लंब या कर्ण के साथ रेखा खींचें।</string>
+    <string name="geo_triangle">समबाहु त्रिभुज</string>
+    <string name="geo_triangle_hint">समबाहु, 60°-60°-60°। किसी भी भुजा के साथ रेखा खींचें।</string>
+    <string name="geo_length">लंबाई: %s</string>
+    <string name="geo_radius">त्रिज्या: %s</string>
+    <string name="geo_side">भुजा: %s</string>
+    <string name="geo_legs_hyp">भुजाएं %1$.1f · कर्ण %2$.1f सेमी</string>
+    <string name="geo_rotation">घुमाव: %d°</string>
+    <string name="geo_arm_other">भुजा %1$d° · अन्य %2$d°</string>
+    <string name="geo_remove_board">बोर्ड से हटाएं</string>
+    <string name="geo_place_board">बोर्ड पर रखें</string>
+    <string name="geo_aids_description">ग्राफ़ पेपर, सीधी रेखा, तीर और फ़्रेम।</string>
+    <string name="geo_aid_graph">ग्राफ़</string>
+    <string name="geo_aid_line">रेखा</string>
+    <string name="geo_aid_arrow">तीर</string>
+    <string name="geo_aid_frame">फ़्रेम</string>
+    <string name="ink_colour">स्याही का रंग</string>
+    <string name="stroke_px">स्ट्रोक: %.1f px</string>
+
+    <!-- Shapes Panel -->
+    <string name="shapes_title">आकृतियां</string>
+    <string name="drag_to_move">खिसकाने के लिए खींचें</string>
+    <string name="dialog_close">बंद करें</string>
+    <string name="shape_cat_2d">2D आकृतियां</string>
+    <string name="shape_cat_lines_rays">रेखाएं और किरणें</string>
+    <string name="shape_cat_3d">3D ठोस</string>
+    <string name="shape_rectangle">आयत</string>
+    <string name="shape_square">वर्ग</string>
+    <string name="shape_rounded_rect">गोल आयत</string>
+    <string name="shape_circle">वृत्त</string>
+    <string name="shape_ellipse">दीर्घवृत्त</string>
+    <string name="shape_semicircle">अर्धवृत्त</string>
+    <string name="shape_right_triangle">समकोण त्रिभुज</string>
+    <string name="shape_triangle">त्रिभुज</string>
+    <string name="shape_scalene">विषमबाहु</string>
+    <string name="shape_trapezoid">समलम्ब चतुर्भुज</string>
+    <string name="shape_star">तारा</string>
+    <string name="shape_parallelogram">समांतर चतुर्भुज</string>
+    <string name="shape_rhombus">समचतुर्भुज</string>
+    <string name="shape_pentagon">पंचभुज</string>
+    <string name="shape_hexagon">षट्भुज</string>
+    <string name="shape_octagon">अष्टभुज</string>
+    <string name="shape_line">रेखा</string>
+    <string name="shape_dashed">बिंदीदार रेखा</string>
+    <string name="shape_arrow">तीर</string>
+    <string name="shape_double_arrow">दोहरा तीर</string>
+    <string name="shape_dashed_arrow">बिंदीदार तीर</string>
+    <string name="shape_angle_ray">कोण किरण</string>
+    <string name="shape_cube">घन</string>
+    <string name="shape_cuboid">घनाभ</string>
+    <string name="shape_pyramid">पिरामिड</string>
+    <string name="shape_prism">प्रिज्म</string>
+    <string name="shape_cylinder">बेलन</string>
+    <string name="shape_cone">शंकु</string>
+    <string name="shape_sphere">गोला</string>
+    <string name="shape_opacity">अपारदर्शिता: %d%%</string>
+    <string name="shape_radius">त्रिज्या: %d px</string>
+    <string name="shape_dims">माप</string>
+    <string name="shape_dims_active">✓ माप</string>
+    <string name="shape_border">● बॉर्डर</string>
+    <string name="shape_fill">⊘ भराव</string>
+    <string name="shape_border_color">बॉर्डर का रंग</string>
+    <string name="shape_fill_color">भराव का रंग</string>
+    <string name="rgb_custom_color">RGB कस्टम रंग</string>
+    <string name="custom_color">मनपसंद रंग</string>
+
+    <!-- Eraser & Pen Tools -->
+    <string name="eraser_title">इरेज़र (खोडरबर)</string>
+    <string name="eraser_standard">मानक</string>
+    <string name="eraser_smart">स्मार्ट</string>
+    <string name="eraser_standard_hint">वृत्त के अंदर की स्याही मिटाता है।</string>
+    <string name="eraser_smart_hint">छूने वाले पूरे स्ट्रोक या वस्तु को मिटाता है।</string>
+    <string name="eraser_size_px">आकार %dpx</string>
+    <string name="pen_two_colour">द्वि-रंगी पेन (एक टैप में बदलें)</string>
+    <string name="pen_primary_active">प्राथमिक (सक्रिय)</string>
+    <string name="pen_secondary">द्वितीयक</string>
+    <string name="pen_swap">बदलें</string>
+    <string name="pen_palette_primary">पैलेट: प्राथमिक (सक्रिय) रंग सेट करता है</string>
+    <string name="pen_palette_secondary">पैलेट: द्वितीयक रंग सेट करता है</string>
+    <string name="tool_more">अधिक</string>
+    <string name="more_tools_title">अधिक टूल्स</string>
+    <string name="more_tools_empty">कोई टूल छिपा नहीं है। किसी भी टूल को यहाँ ले जाने के लिए दबाकर ऊपर खींचें।</string>
+    <string name="more_tools_hint">टूल को \'अधिक\' में ले जाने के लिए ऊपर खींचें</string>
+    <string name="toast_moved_to_more">%s को \'अधिक\' में भेजा गया</string>
+    <string name="toast_restored_to_toolbar">%s को टूलबार में वापस जोड़ा गया</string>
+    <string name="release_to_move_more">\'अधिक\' में भेजने के लिए छोड़ें</string>
+    <string name="action_add">जोड़ें</string>
+    <string name="tool_color_swap">रंग बदलें</string>
+</resources>

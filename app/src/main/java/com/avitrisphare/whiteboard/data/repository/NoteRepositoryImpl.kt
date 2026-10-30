@@ -79,6 +79,7 @@ class NoteRepositoryImpl @Inject constructor(
     private fun NoteEntity.toNote() = Note(
         id = id,
         title = title,
+        subtitle = subtitle,
         createdAt = createdAt,
         updatedAt = updatedAt,
         strokeDataPath = strokeDataPath,
@@ -94,6 +95,7 @@ class NoteRepositoryImpl @Inject constructor(
     private fun Note.toEntity() = NoteEntity(
         id = id,
         title = title,
+        subtitle = subtitle,
         createdAt = createdAt,
         updatedAt = updatedAt,
         strokeDataPath = strokeDataPath,

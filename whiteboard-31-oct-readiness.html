@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AvitriSphare Whiteboard — 31 Oct demo readiness</title>
+<style>
+  :root {
+    --ink: #1b2430;
+    --muted: #5c6b7a;
+    --line: #e4e9ef;
+    --paper: #f6f7f9;
+    --card: #ffffff;
+    --brand: #3d4fdb;
+    --brand-soft: #eef0ff;
+    --ok: #0f7a45;
+    --ok-bg: #e7f6ee;
+    --warn: #8a5a00;
+    --warn-bg: #fff6e0;
+    --gap: #9b2335;
+    --gap-bg: #fdecee;
+    --info: #1d4e89;
+    --info-bg: #e8f1fb;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font: 16px/1.55 "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+  }
+  header.top {
+    background: #161b2e;
+    color: #fff;
+    padding: 36px 28px 28px;
+  }
+  header.top h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.02em; }
+  header.top p { margin: 0; color: #c5cbe0; max-width: 820px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .meta span {
+    background: #262c45;
+    border: 1px solid #3a4264;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 13px;
+    color: #d7dcf0;
+  }
+  nav.toc {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 10px 20px;
+  }
+  nav.toc a {
+    color: var(--brand);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    padding: 6px 10px;
+    border-radius: 8px;
+  }
+  nav.toc a:hover { background: var(--brand-soft); }
+  main { max-width: 1080px; margin: 0 auto; padding: 28px 20px 80px; }
+  section {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 24px 8px;
+    margin-bottom: 18px;
+  }
+  h2 { margin: 0 0 6px; font-size: 22px; }
+  h3 { margin: 22px 0 8px; font-size: 17px; }
+  .lead { color: var(--muted); margin: 0 0 16px; }
+  .callout {
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin: 0 0 16px;
+  }
+  .callout strong { display: block; margin-bottom: 4px; }
+  .bad { background: var(--gap-bg); color: #6d1826; }
+  .good { background: var(--ok-bg); color: #0d5c34; }
+  .mid { background: var(--warn-bg); color: #6b4700; }
+  .note { background: var(--info-bg); color: #163e6b; }
+  ol.obs { margin: 0 0 16px; padding-left: 22px; }
+  ol.obs li { margin: 0 0 10px; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-size: 14.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 10px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); background: #fafbfc; }
+  tr:last-child td { border-bottom: 0; }
+  .pill {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.gap { background: var(--gap-bg); color: var(--gap); }
+  .pill.info { background: var(--info-bg); color: var(--info); }
+  .feature {
+    border-top: 1px solid var(--line);
+    padding: 16px 0 14px;
+  }
+  .feature h3 { margin: 0 0 8px; }
+  .feature p { margin: 0 0 8px; }
+  ul.tight { margin: 0 0 8px; padding-left: 18px; }
+  ul.tight li { margin: 0 0 4px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stat {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: #fbfcfe;
+  }
+  .stat b { display: block; font-size: 26px; letter-spacing: -0.03em; }
+  .stat span { color: var(--muted); font-size: 13px; }
+  .script { counter-reset: step; list-style: none; padding: 0; margin: 0 0 16px; }
+  .script li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .script li:before {
+    content: counter(step);
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--brand);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    display: grid; place-items: center;
+  }
+  footer { color: var(--muted); font-size: 13px; padding: 0 4px 20px; }
+  @media (max-width: 800px) {
+    .grid3 { grid-template-columns: 1fr; }
+    header.top { padding: 24px 16px; }
+  }
+  @media print {
+    nav.toc { display: none; }
+    section { break-inside: avoid; }
+    body { background: #fff; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Whiteboard status for the 31 October demo</h1>
+  <p>What the panel app already contains, what the 19 October demo exposed, and the enhancements still required before the client sees the board again. Source: the client note, Shashank’s incomplete-feature list, and the whiteboard code in <code>bloom</code> as of 21 October 2026.</p>
+  <div class="meta">
+    <span>First demo: about 19 Oct — client disappointed</span>
+    <span>Dry run: 28 Oct</span>
+    <span>Client demo: 31 Oct</span>
+    <span>App: AvitriSphare panel, bloom</span>
+  </div>
+</header>
+<nav class="toc">
+  <a href="#verdict">Verdict</a>
+  <a href="#client">Client note</a>
+  <a href="#built">What is built</a>
+  <a href="#shashank">Shashank’s list</a>
+  <a href="#enhance">Enhancements</a>
+  <a href="#stories">Stories still open</a>
+  <a href="#demo">Demo rules</a>
+  <a href="#test">Tester script</a>
+  <a href="#team">Team</a>
+</nav>
+<main>
+
+<section id="verdict">
+  <h2>Verdict</h2>
+  <p class="lead">The first demo failed because the client was shown registration and teacher login, and the tools on the board did not finish their own gestures. Since then the whiteboard code has been extended so a debug build opens on the board and Shashank’s tool list has an implementation. That code has not been signed off on the IFP panel. The 31 Oct demo is a test of the board, not a claim that the full Sprint 2 story list is done.</p>
+  <div class="grid3">
+    <div class="stat"><b>14</b><span>Shashank items ready for a device test</span></div>
+    <div class="stat"><b>6</b><span>Items present only as a limited demo version</span></div>
+    <div class="stat"><b>3</b><span>Items still missing: backup, cloud sync, real Hindi UI</span></div>
+  </div>
+  <div class="callout mid">
+    <strong>Do not demo a release build.</strong>
+    Debug builds set <code>DEMO_MODE</code> to true and cold-start on a board named “Demo Whiteboard”. Release builds set it to false and still open license, QR login, then Class Home. The APK for 31 Oct has to be a debug (or a future demo) build, exercised on the panel by 28 Oct.
+  </div>
+</section>
+
+<section id="client">
+  <h2>What the client said</h2>
+  <p class="lead">Observation points from the demo. The client was disappointed. The next demo is 31 Oct, and the team was asked to be ready at least three days earlier.</p>
+  <ol class="obs">
+    <li><strong>Only the whiteboard was supposed to be on screen.</strong> Teacher login and board registration were included. The client did not want those modules in this showing.</li>
+    <li><strong>Every whiteboard tool needs a real test.</strong> In that demo, no tool was working perfectly. Close did not dismiss panels. Pop-ups stayed on the screen.</li>
+    <li><strong>Shashank’s earlier list was still open.</strong> Those points are the feature table below. A second developer was requested. A dedicated tester should sit on every feature from here to the demo.</li>
+  </ol>
+  <div class="callout good">
+    <strong>Response already in the code for point 1 and the stuck pop-ups.</strong>
+    With demo mode on, startup skips the “Checking this panel with the school server…” splash and goes to <code>canvas/{noteId}</code>. License, QR, and Class Home stay in the app and are simply not the start route. Dock popovers are written to dismiss on an outside tap, a tool change, pen-down, and an explicit Close. That behaviour still has to be proven on the panel, one dialog at a time.
+  </div>
+</section>
+
+<section id="built">
+  <h2>What the whiteboard already contains</h2>
+  <p class="lead">These are in the panel app today. “In the app” means the code path exists. It does not mean the IFP demo passed.</p>
+
+  <h3>Board engine</h3>
+  <table>
+    <thead><tr><th>Capability</th><th>What the teacher gets</th><th>Limit to know before the demo</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Infinite canvas</td>
+        <td>Pinch zoom from 10% to 500%, two-finger pan, multiple pages (up to 50), dark and light ink themes, autosave into the local board file, undo and redo.</td>
+        <td>Two-second load and 60 fps were never measured on the panel.</td>
+      </tr>
+      <tr>
+        <td>Writing tools</td>
+        <td>Pen, pencil, marker, highlighter, brush. Width slider 1–50 px with stepped minus and plus. 24 preset colours, a hex field, and a colour wheel. Pressure affects brush width.</td>
+        <td>Size now writes into new text and sticky notes as well as ink. Confirm on device that a selected object changes, not only the next stroke.</td>
+      </tr>
+      <tr>
+        <td>Two colours</td>
+        <td>Tip A and tip B on the ink panel, one-tap swap. New strokes use the active tip. Existing strokes keep the colour they were drawn with.</td>
+        <td>A stylus barrel button is not wired. Swap is a tap.</td>
+      </tr>
+      <tr>
+        <td>Erasers</td>
+        <td>Standard eraser cuts a circle out of a stroke (size 8–80). Smart eraser deletes the whole object. Palm rejection ignores a large contact while a stylus is down. Palm-eraser mode turns that same large contact into a wipe. Selection eraser cuts only the selected strokes.</td>
+        <td>Palm behaviour depends on the panel reporting touch size. It has to be tried with the real stylus and a resting palm.</td>
+      </tr>
+      <tr>
+        <td>Magic pen</td>
+        <td>Rough circle, ellipse, rectangle, square, triangle, line, arrow, star, or diamond offers “Convert to shape?” half a second after lift. Yes converts, No keeps the ink, silence converts after two seconds. The mode can be turned off. It stays off while Smart Write is on.</td>
+        <td>Label in the dock is Magic pen. Recognition quality on fast IFP strokes still needs a tester pass.</td>
+      </tr>
+      <tr>
+        <td>Shape tools</td>
+        <td>Rectangle, diamond, circle, arrow, line, triangle, star, ellipse, square, hexagon, rounded rectangle. Placed shapes move, resize from handles, and recolour.</td>
+        <td>These are flat shapes. 3D items are a separate isometric set.</td>
+      </tr>
+      <tr>
+        <td>3D solids</td>
+        <td>Isometric cube, cylinder, cone, and pyramid as normal strokes. Same move, resize, colour, and erase as other shapes.</td>
+        <td>This is a drawing, not a model you can orbit. Say “isometric solids” in the demo.</td>
+      </tr>
+      <tr>
+        <td>Math tools</td>
+        <td>Geometry on the dock opens one panel for ruler, compass, protractor, set square (45°-45°-90°), and equilateral triangle. Drag a card onto the board or tap it to place and remove. Length and radius are in centimetres, the protractor arm is in degrees, and rotation can be set from the panel.</td>
+        <td>Already present at the first demo. Open Geometry in the script so the tools are shown working.</td>
+      </tr>
+      <tr>
+        <td>Pen density</td>
+        <td>Sample gap is stored in millimetres, default about 0.4 mm, and the same screen-to-world gap is used on the main board and in a split pane.</td>
+        <td>Look at a slow curve at 100% and zoomed, on the board and inside a split pane. Sparse ink is a fail.</td>
+      </tr>
+      <tr>
+        <td>Pages</td>
+        <td>Add, rename, delete (last page refused, confirm, undo), duplicate. Titles persist with the board. Copy selection, change page, paste with a small offset.</td>
+        <td>While a PDF or PPT is open, page count follows the file. Rename still works. Delete does not.</td>
+      </tr>
+      <tr>
+        <td>Backgrounds</td>
+        <td>White, dark, lined, dotted, grid, graph paper, a drawn football pitch, and a picked image. Choice is per page and sits under the ink.</td>
+        <td>This is not the 15-template library (KWL, Venn, mind-map skeleton) from the user stories.</td>
+      </tr>
+      <tr>
+        <td>Clear all</td>
+        <td>One action, one confirm, clears the focused page or the focused split pane. Undo restores that surface.</td>
+        <td>The label needs to read “Clear all” in the dock and the eraser panel during the dry run.</td>
+      </tr>
+      <tr>
+        <td>Split screen</td>
+        <td>2, 3, 4, or 6 panes. Each pane keeps its own ink and tool. Dividers resize. Closing asks to keep the focused pane.</td>
+        <td>This was broken in the first demo. Retest every layout, then close and confirm the kept ink is still there.</td>
+      </tr>
+      <tr>
+        <td>Documents</td>
+        <td>Local PDF and PPTX open as a background. Ink is a separate layer and is not written back into the file. The PDF frame can be dragged and scaled on its own. Double-tap fits it again. Annotated PDF export writes one slide per page.</td>
+        <td>Save slides is a PDF, not a PowerPoint file. Drive and OneDrive are not connected.</td>
+      </tr>
+      <tr>
+        <td>Images, video, web</td>
+        <td>Local image insert. Google image search opens in a page and a tapped result can be placed, moved, and resized. A YouTube URL embeds in a web player. A URL can open in an in-canvas browser. Split panes can show a local video.</td>
+        <td>No content library. No image rotate handle. YouTube controls are the web player’s, not a board-owned bar. Drawing on top of a live video or web view is not a separate ink layer.</td>
+      </tr>
+      <tr>
+        <td>OCR and equations</td>
+        <td>Smart Write turns handwriting into editable text (on-device, English and Devanagari). “Extract Text” on a selected image. PDF OCR can run the current page first, shows progress, can be stopped, and the text is saved so search still works after reopen. Handwritten equations render as LaTeX and can be solved on the board.</td>
+        <td>There is no lasso-then-convert button for handwriting. Equation recognition is local parsing, not a cloud vision service. A scanned PDF becomes searchable text, not a fully editable document of every page.</td>
+      </tr>
+      <tr>
+        <td>Flowchart and mind map</td>
+        <td>Flowchart nodes with arrows that stay attached when a node moves. Mind-map branches that move as a subtree.</td>
+        <td>Treat both as a first version. The dry run should drag a middle node and a branch and watch the connectors.</td>
+      </tr>
+      <tr>
+        <td>Stickers and emoji</td>
+        <td>A fixed emoji set inserts as text. A small sticker row (star, tick, cross, thumbs-up) inserts as movable objects. Selection can move and delete them.</td>
+        <td>This is a short set, not the system emoji keyboard.</td>
+      </tr>
+      <tr>
+        <td>Save</td>
+        <td>The board autosaves locally. An explicit Save flushes that file. “Save slides” exports an annotated PDF. Export image writes one PNG of the current content. “Save to…” writes a <code>.whiteboard</code> JSON file on the device.</td>
+        <td>There is no IWB file, no per-page PNG zip, no cloud destination, and no restore-from-backup flow.</td>
+      </tr>
+      <tr>
+        <td>Panel identity</td>
+        <td>Each panel has <code>Settings.Secure.ANDROID_ID</code> as its id and a <code>GYSH-…</code> license checked with the school server. Help on the board shows the panel id and the license state.</td>
+        <td>Demo mode never shows the license screen. The id is only on Help. Confirm with Shashank that this is the “unique key” he meant before changing the API.</td>
+      </tr>
+      <tr>
+        <td>Other tools already on the dock</td>
+        <td>Select, lasso, hand, text, sticky note, laser, spotlight, screen shade, magnifier, bucket fill, frame, undo/redo, live-collaboration room id.</td>
+        <td>Live collaboration creates a local room id. It does not sync student canvases.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="shashank">
+  <h2>Shashank’s incomplete list, against the code</h2>
+  <p class="lead">This is the list the client treated as missing. Status is against the code on 21 Oct, not against a finished panel test.</p>
+  <table>
+    <thead>
+      <tr><th>Client item</th><th>Now</th><th>Still to do before 31 Oct</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Clear all with one click</td>
+        <td><span class="pill ok">Ready to test</span></td>
+        <td>One confirm, focused page or focused pane, undo brings the ink back. Tester does this on a full page and on pane 2 of a split.</td>
+      </tr>
+      <tr>
+        <td>Magic pen: different shapes</td>
+        <td><span class="pill ok">Ready to test</span></td>
+        <td>Draw a rough circle, triangle, and arrow. Yes, No, and waiting 2 seconds each once. Turn the mode off and confirm free ink stays free.</td>
+      </tr>
+      <tr>
+        <td>Add more shapes</td>
+        <td><span class="pill ok">Ready to test</span></td>
+        <td>Place triangle, star, ellipse, square, hexagon, rounded rectangle. Drag, resize, recolour, erase.</td>
+      </tr>
+      <tr>
+        <td>Two colour pen</td>
+        <td><span class="pill ok">Ready to test</span></td>
+        <td>Draw with tip A, swap, draw with tip B, without opening the full colour panel twice.</td>
+      </tr>
+      <tr>
+        <td>Size increase / decrease throughout</td>
+        <td><span class="pill ok">Ready to test</span></td>
+        <td>Pen, eraser, selected shape thickness, text, and sticky all change. Shape footprint still uses the corner handles.</td>
+      </tr>
+      <tr>
+        <td>Increase DPM for pen</td>
+        <td><span class="pill ok">Ready to test</span></td>
+        <td>Slow curve on the main board and inside a zoomed split pane. Density should match. If the panel still looks sparse, lower the millimetre gap and retest. Do not change it on the morning of the demo.</td>
+      </tr>
+      <tr>
+        <td>Palm eraser and selection eraser</td>
+        <td><span class="pill ok">Ready to test</span></td>
+        <td>Stylus draws while a palm rests. Palm-eraser mode on: a palm wipe removes ink. Selection eraser cannot cut an unselected stroke. Stars and the new shapes must erase cleanly.</td>
+      </tr>
+      <tr>
+        <td>Draw line with ruler, angle</td>
+        <td><span class="pill ok">Ready to test</span></td>
+        <td>Open Geometry. Place the ruler and draw a line with a length, a compass circle in centimetres, and a protractor angle in degrees. Place the set square and the equilateral triangle. Drag a tool back to the toolbar to remove it.</td>
+      </tr>
+      <tr>
+        <td>Page delete, name / rename</td>
+        <td><span class="pill ok">Ready to test</span></td>
+        <td>Name three pages, delete one, leave the board, come back. Names must still be there. Last page cannot be deleted. Undo restores a deleted page.</td>
+      </tr>
+      <tr>
+        <td>Copy strokes from one page to another</td>
+        <td><span class="pill ok">Ready to test</span></td>
+        <td>Select ink on page 1, copy, open page 2, paste. Also duplicate a whole page from the thumbnail menu.</td>
+      </tr>
+      <tr>
+        <td>Custom background, football ground</td>
+        <td><span class="pill ok">Ready to test</span></td>
+        <td>Set a page to the football pitch, draw on it, relaunch. Ink stays on top. Try one custom image as well.</td>
+      </tr>
+      <tr>
+        <td>Bugs with split screen</td>
+        <td><span class="pill ok">Ready to test</span></td>
+        <td>Draw in two panes, resize every divider in 2, 4, and 6, close, keep the focused pane. Ink from the kept pane must survive. Undo and colour apply to the active pane only.</td>
+      </tr>
+      <tr>
+        <td>PDF drag and resize</td>
+        <td><span class="pill ok">Ready to test</span></td>
+        <td>Open a one-page PDF, shrink it, move it, draw a stroke beside it. The stroke stays put. Double-tap fits the page again.</td>
+      </tr>
+      <tr>
+        <td>Uniquely identify key</td>
+        <td><span class="pill warn">Demo version</span></td>
+        <td>Help shows panel id and license state. The license screen itself is hidden in the demo build. Ask Shashank, before any API change, whether he meant this panel id or a different key.</td>
+      </tr>
+      <tr>
+        <td>OCR</td>
+        <td><span class="pill warn">Demo version</span></td>
+        <td>Show three things: handwriting to text, Extract Text on one image, OCR on the current PDF page then reopen and search. Stop must abort a long run. Do not promise every Indian language or a fully editable scan.</td>
+      </tr>
+      <tr>
+        <td>Save slides</td>
+        <td><span class="pill warn">Demo version</span></td>
+        <td>Two named pages, Save, then Save slides. Open the PDF and match both pages, including the football background and the ink. The button is PDF slides. It does not write PPTX.</td>
+      </tr>
+      <tr>
+        <td>3D shapes</td>
+        <td><span class="pill warn">Demo version</span></td>
+        <td>Place cube, cylinder, cone, pyramid. Resize and erase. Describe them as isometric drawings.</td>
+      </tr>
+      <tr>
+        <td>Flow chart</td>
+        <td><span class="pill warn">Demo version</span></td>
+        <td>Three nodes, two arrows, drag the middle node. Arrows stay attached. If a connector detaches, pull this out of the demo script.</td>
+      </tr>
+      <tr>
+        <td>Mind map</td>
+        <td><span class="pill warn">Demo version</span></td>
+        <td>One centre, four branches, drag one branch. The subtree moves together. Same rule: if it detaches, drop it from the script.</td>
+      </tr>
+      <tr>
+        <td>Stickers, emojis</td>
+        <td><span class="pill warn">Demo version</span></td>
+        <td>Place one emoji and one sticker, move them, clear them. The catalogue is small on purpose.</td>
+      </tr>
+      <tr>
+        <td>Localisation</td>
+        <td><span class="pill gap">Still open</span></td>
+        <td>A language toggle stores English or Hindi, and <code>values-hi</code> has a handful of strings. The board does not read those strings. Dock and dialogs stay English. Do not switch to Hindi in front of the client until the chrome actually changes.</td>
+      </tr>
+      <tr>
+        <td>App data backup and recovery</td>
+        <td><span class="pill gap">Still open</span></td>
+        <td>Autosave and a local <code>.whiteboard</code> export exist. There is no backup package, no restore onto another panel, and no recovery if the app data is cleared. Say “saved on this panel” until a restore path exists.</td>
+      </tr>
+      <tr>
+        <td>Cloud save and sync</td>
+        <td><span class="pill gap">Still open</span></td>
+        <td>No Google Drive, OneDrive, Dropbox, offline queue, or version history. Leave it out of the 31 Oct script.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="enhance">
+  <h2>Enhancements, in detail</h2>
+  <p class="lead">Each block is the current behaviour, the gap the client will still feel, and the work that closes it. Items marked for 28 Oct are demo-blocking. Items marked after 31 Oct are real product work and should not be started if the dry run is still red.</p>
+
+  <div class="feature">
+    <h3>1. Demo entry <span class="pill ok">28 Oct</span></h3>
+    <p><strong>Now.</strong> <code>debug</code> sets <code>DEMO_MODE</code> true. Cold start creates or reopens one note and navigates to the canvas. Back must not land on teacher or registration. <code>release</code> still starts at license.</p>
+    <p><strong>Enhance.</strong> Add a build type named demo, with demo mode on and with shrinking turned off, so the file handed to the client is not a raw debug APK and is not a release APK that shows registration. Splash copy in demo mode must never be the school-server line.</p>
+    <ul class="tight">
+      <li>Pass: install that build, force-stop, launch. First screen is an empty board.</li>
+      <li>Pass: system Back does not reveal QR, license, or Class Home.</li>
+    </ul>
+  </div>
+
+  <div class="feature">
+    <h3>2. Close and pop-ups <span class="pill ok">28 Oct</span></h3>
+    <p><strong>Now.</strong> The dock is supposed to dismiss on outside press, tool change, and the first pen contact. Dialogs that must have a Close control: live collaboration, command palette, help, image search, YouTube, web embed, text, sticky, rename, delete, clear, export, PDF search, Smart Write, formula card.</p>
+    <p><strong>Enhance.</strong> A tester opens every one of those, taps the board, and taps Close. Any panel that survives is a demo-blocker. Also confirm pen-down clears the dock before the stroke is drawn, so the first line is not lost under a popover.</p>
+  </div>
+
+  <div class="feature">
+    <h3>3. Size, across every object <span class="pill ok">28 Oct</span></h3>
+    <p><strong>Now.</strong> <code>setStrokeWidth</code> clamps 1–50 and is applied to new ink. Text and sticky notes are supposed to store that width. A selected text or shape should update in place. Eraser size is a separate slider.</p>
+    <p><strong>Enhance.</strong> Walk pen, pencil, marker, highlighter, brush, eraser, text, sticky, and a selected rectangle. The minus and plus buttons must be large enough to hit on the panel without aiming at the slider thumb. If text under a certain size still snaps to a fixed pixel size, that snap is the bug to remove.</p>
+  </div>
+
+  <div class="feature">
+    <h3>4. Clear all <span class="pill ok">28 Oct</span></h3>
+    <p><strong>Now.</strong> Clear targets the focused surface and pushes an undo snapshot.</p>
+    <p><strong>Enhance.</strong> Confirm the button text is “Clear all” in both the dock and the eraser panel. Confirm a split pane clear does not wipe the other panes. Confirm undo after clear does not also undo an earlier page rename.</p>
+  </div>
+
+  <div class="feature">
+    <h3>5. Split screen <span class="pill ok">28 Oct</span></h3>
+    <p><strong>Now.</strong> Layouts are 2, 3, 4, and 6. Weights resize columns and rows. Close keeps the focused pane instead of always keeping pane 0.</p>
+    <p><strong>Enhance.</strong> On the panel, drag every shared edge in the 4-up and 6-up layouts. A divider that only works on the first gap is the bug from the first demo. Active pane needs a visible frame. Pen colour, eraser, and undo in pane 3 must not redraw pane 1. After close, reopen the board and confirm the kept ink was saved.</p>
+  </div>
+
+  <div class="feature">
+    <h3>6. Magic pen and the shape set <span class="pill ok">28 Oct</span></h3>
+    <p><strong>Now.</strong> Recognition covers line, arrow, rectangle, square, diamond, circle, ellipse, triangle, star. Toolbar adds hexagon and rounded rectangle. Prompt delay is 500 ms, auto-convert is 2 s.</p>
+    <p><strong>Enhance.</strong> Recognition on a 4K panel may see different point spacing than the emulator. If a slow circle is not offered, that is a threshold bug, not a missing tool. The Yes / No card must dismiss when the pen goes down again, same as the other pop-ups. Smart Write and Magic pen must not both be armed.</p>
+  </div>
+
+  <div class="feature">
+    <h3>7. Pen density <span class="pill ok">28 Oct</span></h3>
+    <p><strong>Now.</strong> Gap default is about 0.4 mm and is converted with the canvas scale on both the main board and split panes.</p>
+    <p><strong>Enhance.</strong> Compare a 10 cm curve at 100% and at 200% zoom. If split ink is still dotted, the split path is still comparing world distance to screen pixels. Fix that before adding features. Keep pressure width as it is.</p>
+  </div>
+
+  <div class="feature">
+    <h3>8. Palm eraser and selection eraser <span class="pill ok">28 Oct</span></h3>
+    <p><strong>Now.</strong> A contact whose area is over 3 cm² is a palm, and only while a stylus is active. Palm-eraser mode uses that contact to erase. Selection mode restricts the standard eraser to selected ids. Star and the newer shape outlines are included in the eraser geometry.</p>
+    <p><strong>Enhance.</strong> The IFP infrared frame often reports touch size as 0. A zero size is treated as “not a palm”, so palm eraser can silently do nothing on that hardware. The tester’s first check is whether a resting palm is detected at all. If it is not, the demo line is: palm rejection and palm erase need the panel’s touch-size data, and the toggle is there. Do not fake a pass.</p>
+  </div>
+
+  <div class="feature">
+    <h3>9. Pages: rename, delete, copy <span class="pill ok">28 Oct</span></h3>
+    <p><strong>Now.</strong> Titles, delete with undo, duplicate, and a stroke clipboard live on the board snapshot.</p>
+    <p><strong>Enhance.</strong> Long-press the thumbnail for Rename, Delete, and Duplicate. Paste should land slightly offset so it is visible. Copy across a PDF-backed board should be refused or clearly limited, because those pages are tied to the file. Relaunch is part of the test, not an extra.</p>
+  </div>
+
+  <div class="feature">
+    <h3>10. PDF frame <span class="pill ok">28 Oct</span></h3>
+    <p><strong>Now.</strong> Document position and scale are stored separately from the ink camera. Drag moves the page. Corner handles scale it between 0.2 and 3. Ink is not moved with the page.</p>
+    <p><strong>Enhance.</strong> Use a real classroom PDF, not a blank page. Check that pinch-zoom of the canvas still works when the finger starts outside the PDF, and that a drag that starts on the page does not also pan the ink. Annotations from before the move must stay where they were drawn.</p>
+  </div>
+
+  <div class="feature">
+    <h3>11. OCR <span class="pill warn">28 Oct for the demo slice, then deepen</span></h3>
+    <p><strong>Now.</strong> Image OCR and PDF OCR use on-device ML Kit. PDF OCR can be stopped, prefers the current page, and the result is stored on the board so search survives reopen. Smart Write offers text after handwriting. Equations go through the local math parser and can be solved.</p>
+    <p><strong>Enhance for the demo.</strong> One image, one handwriting line in English, one PDF page, stop, reopen, search. That is the script.</p>
+    <p><strong>Enhance after 31 Oct.</strong></p>
+    <ul class="tight">
+      <li>Lasso or selection, then an explicit “Convert to Text”, matching story FC0027. The current offer appears on its own.</li>
+      <li>Hindi handwriting that actually uses the Devanagari model on the panel, plus a clear failure when Tamil, Bengali, and the other listed languages have no model.</li>
+      <li>“Make editable” for the rest of a scanned PDF, with a per-page progress bar that the teacher can leave and come back to.</li>
+      <li>Equation convert stays honest: it is on-device structure, not a cloud vision API.</li>
+    </ul>
+  </div>
+
+  <div class="feature">
+    <h3>12. Backgrounds <span class="pill ok">28 Oct</span> <span class="pill info">Templates after</span></h3>
+    <p><strong>Now.</strong> Football pitch is drawn (field, lines, centre circle), plus white, dark, lined, dotted, grid, graph, and a picked image, per page.</p>
+    <p><strong>Enhance for the demo.</strong> Football on page 1, graph paper on page 2, both survive relaunch, ink above both.</p>
+    <p><strong>Enhance after 31 Oct.</strong> Story FC0029 asks for at least 15 subject templates (KWL, Venn, table, mind-map skeleton) with a preview, applied as a background layer. Backgrounds are not that library.</p>
+  </div>
+
+  <div class="feature">
+    <h3>13. Save slides <span class="pill warn">28 Oct as PDF</span></h3>
+    <p><strong>Now.</strong> Explicit Save flushes the board JSON. Save slides exports an annotated PDF, one page per board page, including background and ink. PPTX in this app is a reader only.</p>
+    <p><strong>Enhance.</strong> The button text must say PDF so the client is not shown a PowerPoint promise. Open the exported file on the panel and check page order, titles, and that a dark page stays dark. A later enhancement is a real PPTX writer and per-page PNG files inside a zip (story FC0033).</p>
+  </div>
+
+  <div class="feature">
+    <h3>14. Two-colour pen <span class="pill ok">28 Oct</span></h3>
+    <p><strong>Now.</strong> Two swatches and a swap. Active tip colours new strokes only.</p>
+    <p><strong>Enhance.</strong> Swap has to be one hit on the panel. After swap, the pen, marker, and highlighter should all pick up the active tip. Highlighter transparency must not turn the second colour opaque.</p>
+  </div>
+
+  <div class="feature">
+    <h3>15. Stickers and emoji <span class="pill warn">28 Oct, small set</span></h3>
+    <p><strong>Now.</strong> Fixed emoji picker and four stickers, movable and deletable.</p>
+    <p><strong>Enhance.</strong> They must land on the current page, including the active split pane, and they must export in the PDF slides. Growing the catalogue can wait.</p>
+  </div>
+
+  <div class="feature">
+    <h3>16. Localisation <span class="pill gap">Do not demo yet</span></h3>
+    <p><strong>Now.</strong> <code>uiLocaleTag</code> toggles between <code>en</code> and <code>hi</code> and is stored with the panel session. <code>values-hi/strings.xml</code> contains the app name plus clear, save, save-slides, magic pen, and close. No screen calls <code>stringResource</code>. Tool names and dialogs are still Kotlin literals in English.</p>
+    <p><strong>Enhance.</strong> Wire the whiteboard chrome and dialogs to those strings, finish the Hindi set for tools, pages, clear, save, and errors, and recreate the activity when the toggle changes. Class Home can stay English because the demo build does not show it. Until a tester can read the dock in Hindi and switch back, this item stays off the script. More Indian languages are a later pass.</p>
+  </div>
+
+  <div class="feature">
+    <h3>17. 3D shapes <span class="pill warn">28 Oct only if the dry run of items 1–14 is clean</span></h3>
+    <p><strong>Now.</strong> Cube, cylinder, cone, pyramid render as isometric paths with the same handles as flat shapes.</p>
+    <p><strong>Enhance.</strong> No 3D engine for this demo. If the client asks to rotate in space, the answer is that these are classroom isometric drawings. Hit-testing and erase must match the visible outline, including the ellipse caps on cylinder and cone.</p>
+  </div>
+
+  <div class="feature">
+    <h3>18. Flowchart <span class="pill warn">Same gate as 3D</span></h3>
+    <p><strong>Now.</strong> Process, decision, and terminator nodes, with arrows whose ends stick to nodes. Moving a node moves its arrows. Parent and child ids live on the stroke and stay off the ink hot path.</p>
+    <p><strong>Enhance.</strong> Dragging the middle of three nodes is the pass. Also delete a node and confirm its arrows go with it. Also undo that delete. If arrows drift by more than a few pixels, hide the tool in the demo build rather than showing a broken connector.</p>
+  </div>
+
+  <div class="feature">
+    <h3>19. Mind map <span class="pill warn">Same gate as 3D</span></h3>
+    <p><strong>Now.</strong> A centre topic, add-branch, children laid out to the sides, dragging a branch moves its subtree.</p>
+    <p><strong>Enhance.</strong> Centre plus four branches, then drag one. Add a child to a child and confirm the grandchild moves too. This shares the connector model with the flowchart, so one fix should serve both.</p>
+  </div>
+
+  <div class="feature">
+    <h3>20. Unique key <span class="pill warn">Verify, do not rebuild</span></h3>
+    <p><strong>Now.</strong> Panel id is the Android id. License key format is the GYSH key checked by <code>PanelApi.verifyLicense</code>. Help shows both. Demo mode does not remove that code. It only skips the screen.</p>
+    <p><strong>Enhance.</strong> On the demo panel, open Help and read the id aloud once in the dry run so the presenter knows where it is. If Shashank meant a school license visible on the board, that line is already the place. If he meant a per-board key or a QR for students, that is new work and it misses 31 Oct unless he confirms this week.</p>
+  </div>
+
+  <div class="feature">
+    <h3>21. Backup and recovery <span class="pill gap">After 31 Oct</span></h3>
+    <p><strong>Now.</strong> Room holds the note. The board snapshot is a local JSON file. Export can write a <code>.whiteboard</code> file under app storage. Clearing app data loses the board. There is no import of that file back onto a fresh install.</p>
+    <p><strong>Enhance.</strong></p>
+    <ul class="tight">
+      <li>Export a single archive the teacher can see in the panel’s files: board JSON, images, custom backgrounds, and the open document path.</li>
+      <li>Import that archive onto the same panel after a data clear, and onto a second panel.</li>
+      <li>A failed import leaves the current board untouched.</li>
+    </ul>
+    <p>Until import exists, the demo sentence is “this lesson is stored on this panel.”</p>
+  </div>
+
+  <div class="feature">
+    <h3>22. Cloud save and sync <span class="pill gap">After 31 Oct</span></h3>
+    <p><strong>Now.</strong> Nothing talks to Drive, OneDrive, or Dropbox. Offline mode is “the file is local,” not a sync queue. Version history is undo on one device.</p>
+    <p><strong>Enhance, matching stories FC0035 and FC0087.</strong> Connect one provider first (Google Drive), save the same archive as backup, and pull it back. Version history is a list of those uploads, not a second product. Offline edits queue until the panel has a network. Do not start this while split, PDF, and pop-ups are still unverified.</p>
+  </div>
+
+  <div class="feature">
+    <h3>23. Ruler and protractor <span class="pill ok">28 Oct, already built</span></h3>
+    <p><strong>Now.</strong> Ruler, compass, protractor, set square, and equilateral triangle sit in the Geometry panel. They drag on, rotate, show centimetres and degrees, and a line can be drawn along the ruler edge. The panel sets size, rotation, and the protractor arm.</p>
+    <p><strong>Enhance.</strong> Put them in the dry-run script so they are not forgotten. Check the centimetre scale against a known length on the panel. DPI on an IFP is often wrong, and a “10 cm” line that is obviously not 10 cm will be noticed.</p>
+  </div>
+</section>
+
+<section id="stories">
+  <h2>User stories still outside this demo</h2>
+  <p class="lead">From <code>User_Stories_SprintOS_2026-10-21.xlsx</code>, module Panel · M1. The sheet still says BACKLOG for all of them. The app is ahead of the sheet on the core board, and behind the sheet on the items below. These are not 31 Oct promises.</p>
+  <table>
+    <thead><tr><th>Story</th><th>Gap after the current board</th></tr></thead>
+    <tbody>
+      <tr><td>FC0025 Annotate over PDF and PPT</td><td>Local files work. Opening from Google Drive or OneDrive does not.</td></tr>
+      <tr><td>FC0026 Images, video, browser</td><td>Insert works. A true annotation layer over a playing video or a live web page does not.</td></tr>
+      <tr><td>FC0027 Handwriting OCR</td><td>Smart Write covers part of it. Lasso plus Convert to Text, with reliable Indian languages, does not.</td></tr>
+      <tr><td>FC0029 Templates</td><td>Paper and a football pitch exist. A 15-template subject library with preview does not.</td></tr>
+      <tr><td>FC0030 Images</td><td>Local file and a Google search page exist. Content library and a rotate handle do not.</td></tr>
+      <tr><td>FC0031 YouTube</td><td>Search page and embed exist. Board-owned play, pause, and seek do not.</td></tr>
+      <tr><td>FC0032 Timer, stopwatch, calculator</td><td>Not in the app.</td></tr>
+      <tr><td>FC0033 Export</td><td>PDF and one PNG exist. Per-page PNG zip, IWB, and cloud share do not.</td></tr>
+      <tr><td>FC0048 AI side panel</td><td>A panel opens with four placeholder lines (Lesson step, Explain, Quiz, Voice). Eleven tools with input forms do not exist.</td></tr>
+      <tr><td>FC0055 Student whiteboards</td><td>Not in the app. Live collaboration is a local room id.</td></tr>
+      <tr><td>FC0090 Camera and screen share</td><td>Not in the app.</td></tr>
+      <tr><td>FC0015 Panel Figma</td><td>The screens exist in code. The sheet still has Figma as pending and no link.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="demo">
+  <h2>Rules for the 31 Oct showing</h2>
+  <div class="callout bad">
+    <strong>The client asked to see only the whiteboard.</strong>
+    The build on the panel is the demo build. License, QR login, Class Home, and the school-server splash stay out of the path. If someone sideloads a release APK, the first screen is registration again, which is the failure from 19 Oct.
+  </div>
+  <ul class="tight">
+    <li>Ready date is 28 Oct. 29 and 30 Oct are for demo-blocking bugs only.</li>
+    <li>Flowchart, mind map, and isometric solids stay in the script only if the dry run of the repaired tools is clean.</li>
+    <li>Hindi stays out until the dock actually changes language.</li>
+    <li>Cloud sync, backup/restore, timer, calculator, IWB export, student boards, and the AI tool cards are named as later work if the client asks. They are not shown half-built.</li>
+    <li>Every pop-up in the script has been closed with the button and with a tap on the board, on the same panel the client will stand in front of.</li>
+  </ul>
+</section>
+
+<section id="test">
+  <h2>Tester script for 28 Oct</h2>
+  <p class="lead">One pass, on the IFP, by the dedicated tester. A step fails if the gesture does not finish, a panel stays up, or the result is gone after leaving the board and coming back.</p>
+  <ol class="script">
+    <li>Install the demo build. Force-stop. Launch. The first screen is an empty board. Back does not show registration or a teacher.</li>
+    <li>Open the dock, image search, YouTube, text, sticky, help, clear, and export. Tap the board. Each one closes. Tap Close on each one as well.</li>
+    <li>Draw with the pen. Increase and decrease size. Swap the two colours and draw again. Magic-pen a circle: try Yes, and on a second shape wait two seconds.</li>
+    <li>Place a triangle, a star, a hexagon, and a rounded rectangle. Move and resize each.</li>
+    <li>Open Geometry. Drag out the ruler and draw a line. Set the protractor arm and mark an angle. Draw a compass circle and read the centimetres. Place the set square and the triangle.</li>
+    <li>Turn on palm eraser and wipe. Turn on selection eraser and confirm an unselected stroke is untouched.</li>
+    <li>Add three pages. Rename them. Copy strokes from page 1 to page 2. Delete page 3. Leave the board and reopen. Names and the copied ink are still there.</li>
+    <li>Set page 1 to the football ground. Draw on it. Save. Save slides. Open the PDF and match both the pitch and the ink.</li>
+    <li>Open a one-page PDF. Shrink it and move it. The stroke beside it stays. Run OCR, stop it once, run it again, reopen, and search for a word on that page.</li>
+    <li>Split into two panes. Draw in both. Resize the divider. Split into four and drag an inner edge. Close and keep the focused pane. The kept ink is still there.</li>
+    <li>Place one emoji and one sticker. Move them. Clear all. Undo. The ink returns.</li>
+    <li>Only if the steps above passed: isometric cube, a three-node flowchart with a drag, and a mind map with a dragged branch.</li>
+  </ol>
+  <div class="callout note">
+    <strong>Fail closed.</strong>
+    A tool that fails this script is removed from the 31 Oct path or fixed before 29 Oct. It is not explained live as “almost working.” That is what disappointed the client the first time.
+  </div>
+</section>
+
+<section id="team">
+  <h2>People the client asked for</h2>
+  <table>
+    <thead><tr><th>Ask</th><th>What they cover</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>One more developer</td>
+        <td>The first developer holds demo entry, pop-ups, size, clear, split, pages, PDF, save, and the dry-run fixes. The second developer takes isometric solids, flowchart, and mind map, and stops if those connectors are not stable by 28 Oct. Cloud sync and backup are queued behind the dry run, not beside it.</td>
+      </tr>
+      <tr>
+        <td>A dedicated tester</td>
+        <td>Owns the script above on the physical panel, once per feature as it lands and once as a full pass on 28 Oct. Unit tests already cover pieces of split layout, shapes, eraser, math tools, and OCR helpers. They do not replace a hand on the IFP. The tester files a fail with the step number, and that fail blocks the demo script until it is rechecked.</td>
+      </tr>
+    </tbody>
+  </table>
+  <h3>Order of work from today</h3>
+  <ul class="tight">
+    <li><strong>21–24 Oct.</strong> Device-test the repaired tools: entry, pop-ups, size, clear, split, magic pen, shapes, density, erasers, pages, copy.</li>
+    <li><strong>25–27 Oct.</strong> PDF frame, OCR reopen, football background, two colours, save slides. Hindi only if the strings are actually on screen.</li>
+    <li><strong>28 Oct.</strong> Full script. Freeze the feature list.</li>
+    <li><strong>29–30 Oct.</strong> Demo-blocking bugs only.</li>
+    <li><strong>31 Oct.</strong> The script, on the demo build, whiteboard only.</li>
+  </ul>
+</section>
+
+<footer>
+  Written 21 October 2026 from the client demo note, Shashank’s incomplete-feature list, the Panel · M1 rows in User_Stories_SprintOS_2026-10-21.xlsx, and the whiteboard code under bloom/app. Open this file in a browser. It does not need a network.
+</footer>
+</main>
+</body>
+</html>

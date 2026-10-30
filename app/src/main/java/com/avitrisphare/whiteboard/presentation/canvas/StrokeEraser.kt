@@ -1,6 +1,7 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import com.avitrisphare.whiteboard.domain.model.Stroke
 import com.avitrisphare.whiteboard.domain.model.StrokeType
 import java.util.UUID
@@ -49,6 +50,51 @@ object StrokeEraser {
         return if (changed) out else strokes
     }
 
+    private fun isMindMapElement(stroke: Stroke): Boolean {
+        return stroke.stickerKind.startsWith("mindmap:") ||
+            stroke.stickerKind.startsWith("flow:") ||
+            stroke.strokeType == StrokeType.CONNECTOR
+    }
+
+    fun applySelection(
+        strokes: List<Stroke>,
+        selectedIds: Set<String>,
+        center: Offset,
+        radius: Float,
+        mode: EraserMode,
+        restrictToSelection: Boolean
+    ): Pair<List<Stroke>, Set<String>> {
+        val selectedNodes = strokes.filter { it.id in selectedIds && isMindMapElement(it) }
+
+        if (!restrictToSelection && selectedNodes.isEmpty()) {
+            val erased = apply(strokes, center, radius, mode)
+            return erased to selectedIds
+        }
+        if (selectedIds.isEmpty()) {
+            return strokes to selectedIds
+        }
+        val pool = if (selectedNodes.isNotEmpty()) {
+            strokes.filter { stroke ->
+                (stroke.id in selectedIds && !isMindMapElement(stroke)) ||
+                    (stroke.strokeType in inkTypes && selectedNodes.any { node -> node.bounds.contains(stroke.bounds.center) })
+            }
+        } else {
+            strokes.filter { it.id in selectedIds }
+        }
+        val kept = strokes.filter { it !in pool }
+        if (pool.isEmpty()) {
+            return strokes to selectedIds
+        }
+        val erased = apply(pool, center, radius, mode)
+        if (erased === pool) {
+            return strokes to selectedIds
+        }
+        val originalPoolIds = pool.map { it.id }.toSet()
+        val newPieceIds = erased.map { it.id }.toSet()
+        val updatedSelectedIds = (selectedIds - originalPoolIds) + newPieceIds
+        return (kept + erased) to updatedSelectedIds
+    }
+
     private fun eraseOne(
         stroke: Stroke,
         center: Offset,
@@ -56,6 +102,22 @@ object StrokeEraser {
         mode: EraserMode
     ): List<Stroke> {
         if (stroke.points.isEmpty()) return listOf(stroke)
+        // Never erase mind map boxes, borders, or connectors
+        if (isMindMapElement(stroke)) {
+            if (stroke.text.isNotEmpty()) {
+                val reach = radius + strokeInkHalfWidth(stroke)
+                val b = stroke.bounds
+                val textW = (b.width - 24f).coerceAtLeast(40f)
+                val textH = 40f
+                val textRect = Rect(b.center.x - textW / 2f, b.center.y - textH / 2f, b.center.x + textW / 2f, b.center.y + textH / 2f)
+                val touchesText = center.x >= textRect.left - reach && center.x <= textRect.right + reach &&
+                    center.y >= textRect.top - reach && center.y <= textRect.bottom + reach
+                if (touchesText) {
+                    return listOf(stroke.copy(text = ""))
+                }
+            }
+            return listOf(stroke)
+        }
         val reach = radius + strokeInkHalfWidth(stroke)
         if (!boundsMayHit(stroke, center, reach)) return listOf(stroke)
 
@@ -67,6 +129,10 @@ object StrokeEraser {
                 centerlineHits(points, center, reach)
             }
             return if (hit) emptyList() else listOf(stroke)
+        }
+
+        if (stroke.strokeType == StrokeType.TEXT) {
+            return if (circleTouchesRect(center, reach, stroke)) emptyList() else listOf(stroke)
         }
 
         if (stroke.strokeType in objectTypes) return listOf(stroke)
@@ -133,7 +199,8 @@ object StrokeEraser {
         val right = maxOf(a.x, b.x)
         val bottom = maxOf(a.y, b.y)
         return when (stroke.strokeType) {
-            StrokeType.RECTANGLE, StrokeType.FRAME -> listOf(
+            StrokeType.TRIANGLE -> stroke.points + stroke.points.first()
+            StrokeType.RECTANGLE, StrokeType.SQUARE, StrokeType.FRAME -> listOf(
                 Offset(left, top),
                 Offset(right, top),
                 Offset(right, bottom),
@@ -151,7 +218,7 @@ object StrokeEraser {
                     Offset(cx, top)
                 )
             }
-            StrokeType.CIRCLE -> {
+            StrokeType.CIRCLE, StrokeType.ELLIPSE -> {
                 val cx = (left + right) / 2f
                 val cy = (top + bottom) / 2f
                 val rx = (right - left) / 2f
@@ -161,6 +228,33 @@ object StrokeEraser {
                     Offset(cx + rx * cos(angle), cy + ry * sin(angle))
                 }
             }
+            StrokeType.STAR -> {
+                val cx = (left + right) / 2f
+                val cy = (top + bottom) / 2f
+                val outer = kotlin.math.min(right - left, bottom - top) / 2f
+                val inner = outer * 0.45f
+                List(11) { i ->
+                    val angle = -Math.PI / 2 + i * Math.PI / 5
+                    val r = if (i % 2 == 0) outer else inner
+                    Offset(cx + (r * cos(angle)).toFloat(), cy + (r * sin(angle)).toFloat())
+                }
+            }
+            StrokeType.HEXAGON -> {
+                val cx = (left + right) / 2f
+                val cy = (top + bottom) / 2f
+                val r = kotlin.math.min(right - left, bottom - top) / 2f
+                List(7) { i ->
+                    val angle = i / 6f * (2.0 * PI).toFloat() - (PI / 2).toFloat()
+                    Offset(cx + r * cos(angle), cy + r * sin(angle))
+                }
+            }
+            StrokeType.ROUND_RECT -> listOf(
+                Offset(left, top),
+                Offset(right, top),
+                Offset(right, bottom),
+                Offset(left, bottom),
+                Offset(left, top)
+            )
             else -> null
         }
     }
