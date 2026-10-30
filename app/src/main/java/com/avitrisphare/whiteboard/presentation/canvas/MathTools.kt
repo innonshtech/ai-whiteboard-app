@@ -448,12 +448,7 @@ fun distanceToRulerEdge(tool: PlacedMathTool, point: Offset): Float {
             val dHyp = distanceToSegment(local, vTop, vBase)
             return minOf(dBase, dHeight, dHyp)
         }
-        MathToolKind.PROTRACTOR -> {
-            val distBaseline = if (abs(local.x) <= tool.span + 10f && local.y in -15f..15f) abs(local.y) else Float.MAX_VALUE
-            val r = hypot(local.x, local.y)
-            val distRim = if (local.y <= 12f) abs(r - tool.span) else Float.MAX_VALUE
-            return minOf(distBaseline, distRim)
-        }
+        MathToolKind.PROTRACTOR -> return Float.MAX_VALUE
         MathToolKind.TRIANGLE -> {
             val side = tool.span * 1.8f
             val h = side * 0.8660254f
@@ -594,7 +589,6 @@ fun snapToRulerEdge(
 fun rulerForStraightedge(tools: List<PlacedMathTool>, point: Offset): PlacedMathTool? {
     return tools.lastOrNull { tool ->
         (tool.kind == MathToolKind.RULER ||
-            tool.kind == MathToolKind.PROTRACTOR ||
             tool.kind == MathToolKind.SET_SQUARE ||
             tool.kind == MathToolKind.TRIANGLE) &&
             distanceToRulerEdge(tool, point) <= RULER_EDGE_SLOP

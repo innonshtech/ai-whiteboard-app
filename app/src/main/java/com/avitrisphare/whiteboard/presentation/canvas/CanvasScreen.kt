@@ -339,10 +339,11 @@ private fun DrawScope.drawCenteredNodeText(
         val rawParagraphs = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
         val lineCount = maxOf(rawParagraphs.size, 1)
 
-        val hTarget = ((maxHeight * 0.70f) / lineCount).coerceIn(12f, 48f)
         val maxLen = rawParagraphs.maxOfOrNull { it.length }?.coerceAtLeast(1) ?: 1
-        val wTarget = if (text.isNotBlank()) ((maxWidth * 0.90f) / (maxLen * 0.55f)).coerceAtLeast(12f) else hTarget
-        val baseSize = minOf(hTarget, wTarget).coerceIn(12f, 60f)
+        val hTarget = ((maxHeight * 0.75f) / lineCount).coerceAtLeast(6f)
+        val wTarget = if (text.isNotBlank()) ((maxWidth * 0.90f) / (maxLen * 0.55f)).coerceAtLeast(6f) else hTarget
+        val maxBoxAllowedSize = maxOf(40f, minOf(maxWidth, maxHeight) * 0.45f)
+        val baseSize = minOf(hTarget, wTarget).coerceIn(6f, maxBoxAllowedSize)
 
         val tPaint = Paint().apply {
             color = resolvedColor
@@ -396,9 +397,9 @@ private fun DrawScope.drawCenteredNodeText(
         var lines = wrapTextForSize(candidateSize)
         var totalH = lines.size * candidateSize * 1.25f
 
-        val minAllowed = 12f
-        while (candidateSize > minAllowed && (totalH > maxHeight || lines.any { tPaint.measureText(it) > maxWidth * 1.02f })) {
-            candidateSize -= 1.0f
+        val minAllowed = 6f
+        while (candidateSize > minAllowed && (totalH > maxHeight || lines.any { tPaint.measureText(it) > maxWidth })) {
+            candidateSize -= 0.5f
             lines = wrapTextForSize(candidateSize)
             totalH = lines.size * candidateSize * 1.25f
         }
@@ -407,7 +408,16 @@ private fun DrawScope.drawCenteredNodeText(
         val lineH = candidateSize * 1.25f
         val startY = cy - ((lines.size - 1) * lineH) / 2f + (candidateSize * 0.35f)
         lines.forEachIndexed { i, line ->
-            drawText(line, cx, startY + i * lineH, tPaint)
+            val toDraw = if (candidateSize <= minAllowed && tPaint.measureText(line) > maxWidth) {
+                var truncated = line
+                while (truncated.isNotEmpty() && tPaint.measureText("$truncated...") > maxWidth) {
+                    truncated = truncated.dropLast(1)
+                }
+                if (truncated.isNotEmpty()) "$truncated..." else line
+            } else {
+                line
+            }
+            drawText(toDraw, cx, startY + i * lineH, tPaint)
         }
     }
 }
@@ -2112,6 +2122,7 @@ fun CanvasScreen(
                         var strokeHit = false
                         var resizeStrokeId: String? = null
                         var resizeHandle: ShapeHandleHit? = null
+                        var resizeInitialBounds: Rect? = null
                         var activeWebInteractId: String? = null
                         var webGestureDownTime = 0L
                         var groupResizeHandle: ShapeHandle? = null
@@ -2225,8 +2236,9 @@ fun CanvasScreen(
                                     viewModel.state.value.strokes.filter { it.id in state.selectedStrokeIds }
                                 } else emptyList()
                                 val isLockedSelection = selectedStrokes.isNotEmpty() && selectedStrokes.all { it.stickerKind.contains(":locked") }
+                                val isMultiSelection = selectedStrokes.size > 1
                                 val groupHit = if (selectedStrokes.isNotEmpty() && !isLockedSelection) {
-                                    hitSelectionBoundsHandle(selectedStrokes, downWorld, handleSlop)
+                                    hitSelectionBoundsHandle(selectedStrokes, downWorld, 18f / canvasScale.coerceAtLeast(0.001f))
                                 } else null
                                 val headerH = 38f / canvasScale.coerceAtLeast(0.001f)
 
@@ -2258,14 +2270,17 @@ fun CanvasScreen(
                                     viewModel.beginSelectionScale()
                                     selectionToolbarDismissed = true
                                 } else {
-                                    val selectedHandle = if (!isLockedSelection) {
+                                    val selectedHandle = if (!isLockedSelection && !isMultiSelection) {
                                         selectedStrokes.firstNotNullOfOrNull { stroke ->
-                                            hitShapeHandle(stroke, downWorld, handleSlop)?.let { stroke.id to it }
+                                            val slop = if (isMindMapNode(stroke)) 18f / canvasScale.coerceAtLeast(0.001f) else handleSlop
+                                            hitShapeHandle(stroke, downWorld, slop)?.let { stroke.id to it }
                                         }
                                     } else null
                                     if (selectedHandle != null) {
                                         resizeStrokeId = selectedHandle.first
                                         resizeHandle = selectedHandle.second
+                                        val targetStroke = selectedStrokes.first { it.id == selectedHandle.first }
+                                        resizeInitialBounds = targetStroke.bounds
                                         selectionToolbarDismissed = true
                                     } else {
                                         val isMultiSelection = selectedStrokes.size > 1
@@ -2332,14 +2347,18 @@ fun CanvasScreen(
                                     val moveSlop = 24f / canvasScale.coerceAtLeast(0.001f)
                                     val selectedStrokes = viewModel.state.value.strokes.filter { it.id in state.selectedStrokeIds }
                                     val isLocked = selectedStrokes.isNotEmpty() && selectedStrokes.all { it.stickerKind.contains(":locked") }
-                                    val selectedHandle = if (!isLocked) {
+                                    val isMultiSelection = selectedStrokes.size > 1
+                                    val selectedHandle = if (!isLocked && !isMultiSelection) {
                                         selectedStrokes.firstNotNullOfOrNull { stroke ->
-                                            hitShapeHandle(stroke, downWorld, handleSlop)?.let { stroke.id to it }
+                                            val slop = if (isMindMapNode(stroke)) 18f / canvasScale.coerceAtLeast(0.001f) else handleSlop
+                                            hitShapeHandle(stroke, downWorld, slop)?.let { stroke.id to it }
                                         }
                                     } else null
                                     if (selectedHandle != null) {
                                         resizeStrokeId = selectedHandle.first
                                         resizeHandle = selectedHandle.second
+                                        val targetStroke = selectedStrokes.first { it.id == selectedHandle.first }
+                                        resizeInitialBounds = targetStroke.bounds
                                         selectionToolbarDismissed = true
                                     } else {
                                         val selectedWeb = selectedStrokes.singleOrNull { it.strokeType == StrokeType.WEB_EMBED }
@@ -2804,6 +2823,9 @@ fun CanvasScreen(
                                         )
                                     } else if (groupResizeHandle != null && groupResizeInitialBounds != null) {
                                         viewModel.scaleSelectedStrokes(groupResizeInitialBounds!!, groupResizeHandle!!, curWorld)
+                                    } else if (resizeStrokeId != null && resizeHandle != null && resizeInitialBounds != null) {
+                                        viewModel.beginSelectionMove()
+                                        viewModel.resizeStrokeWithInitialBounds(resizeStrokeId, resizeHandle, curWorld, resizeInitialBounds!!)
                                     } else if (resizeStrokeId != null && resizeHandle != null) {
                                         viewModel.beginSelectionMove()
                                         viewModel.resizeStroke(resizeStrokeId, resizeHandle, curWorld)
@@ -3151,6 +3173,11 @@ fun CanvasScreen(
                                     }
                                     MathToolZone.ANGLE_MODE_ARC_LEFT -> {
                                         // Left Arc: circular arc only from Left baseline (180°) down to arm
+                                        viewModel.cancelCurrentStroke()
+                                        liveInk.stroke = null
+                                        boardStage?.setLiveInk(null)
+                                        rulerLivePreview = null
+
                                         val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
                                         val arcScreenPoints = mutableListOf<Offset>()
                                         val steps = (leftAngleDeg / 2.5f).roundToInt().coerceAtLeast(8)
@@ -3167,16 +3194,15 @@ fun CanvasScreen(
                                                 state.strokeWidth
                                             )
                                         )
-                                        val midRad = Math.toRadians((180.0 - leftAngleDeg / 2.0)).toFloat()
-                                        val midD = dir * cos(midRad) - perp * sin(midRad)
-                                        val labelScreen = tool.center + midD * (tool.span + 32f)
-                                        viewModel.commitStroke(
-                                            measurementLabel("${leftAngleDeg.roundToInt()}\u00B0", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
-                                        )
                                         Toast.makeText(context, "Left Arc (${leftAngleDeg.roundToInt()}\u00B0) drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     MathToolZone.ANGLE_MODE_ARC -> {
                                         // Right Arc: circular arc only from Right baseline (0°) up to arm
+                                        viewModel.cancelCurrentStroke()
+                                        liveInk.stroke = null
+                                        boardStage?.setLiveInk(null)
+                                        rulerLivePreview = null
+
                                         val arcScreenPoints = mutableListOf<Offset>()
                                         val steps = (pDeg / 2.5f).roundToInt().coerceAtLeast(8)
                                         for (i in 0..steps) {
@@ -3191,12 +3217,6 @@ fun CanvasScreen(
                                                 state.selectedColor,
                                                 state.strokeWidth
                                             )
-                                        )
-                                        val midRad = Math.toRadians((pDeg / 2f).toDouble()).toFloat()
-                                        val midD = dir * cos(midRad) - perp * sin(midRad)
-                                        val labelScreen = tool.center + midD * (tool.span + 32f)
-                                        viewModel.commitStroke(
-                                            measurementLabel("${pDeg.roundToInt()}\u00B0", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
                                         Toast.makeText(context, "Right Arc (${pDeg.roundToInt()}\u00B0) drawn", Toast.LENGTH_SHORT).show()
                                     }
@@ -3283,6 +3303,7 @@ fun CanvasScreen(
                                 isDraggingSelection = false
                                 resizeStrokeId = null
                                 resizeHandle = null
+                                resizeInitialBounds = null
                                 activeWebInteractId = null
                                 if (state.selectedStrokeIds.isNotEmpty()) {
                                     selectionToolbarDismissed = false
@@ -3364,7 +3385,7 @@ fun CanvasScreen(
                     BoardStageView(context).also { boardStage = it }
                 },
                 update = { stage ->
-                    val page = viewModel.state.value
+                    val page = state
                     stage.syncPage(
                         strokes = if (eraserSession.active) eraserSession.strokes else page.strokes,
                         background = page.canvasBackground,
@@ -5474,6 +5495,20 @@ fun CanvasScreen(
             onConfirm = {
                 editingNodeStrokeId?.let { id ->
                     viewModel.updateStrokeText(id, editingNodeText)
+                    val latest = viewModel.state.value
+                    boardStage?.syncPage(
+                        strokes = latest.strokes,
+                        background = latest.canvasBackground,
+                        showGrid = latest.showGrid,
+                        dark = latest.isDarkCanvas,
+                        scale = latest.scale,
+                        offsetX = latest.offsetX,
+                        offsetY = latest.offsetY,
+                        selected = latest.selectedStrokeIds,
+                        customBackgroundUri = latest.pageCustomBackgroundUris.getOrElse(latest.pageIndex) { "" },
+                        pageIndex = latest.pageIndex
+                    )
+                    boardStage?.invalidate()
                 }
                 editingNodeStrokeId = null
             }

@@ -289,11 +289,5 @@ fun hitSelectionBoundsHandle(strokes: List<Stroke>, point: Offset, slop: Float):
     if (near(Offset(boxRight, boxBottom)) || near(Offset(right, bottom))) return ShapeHandle.BOTTOM_RIGHT to origBounds
     if (near(Offset(boxLeft, boxBottom)) || near(Offset(left, bottom))) return ShapeHandle.BOTTOM_LEFT to origBounds
 
-    // 2. Mid-edges
-    if (near(Offset(midX, boxTop))) return ShapeHandle.TOP_LEFT to origBounds
-    if (near(Offset(midX, boxBottom))) return ShapeHandle.BOTTOM_RIGHT to origBounds
-    if (near(Offset(boxLeft, midY))) return ShapeHandle.TOP_LEFT to origBounds
-    if (near(Offset(boxRight, midY))) return ShapeHandle.BOTTOM_RIGHT to origBounds
-
     return null
 }

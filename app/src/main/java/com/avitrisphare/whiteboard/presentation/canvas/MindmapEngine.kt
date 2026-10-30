@@ -932,13 +932,33 @@ object MindmapEngine {
         requestedCenter: Offset,
         halfWidth: Float = 360f,
         halfHeight: Float = 220f,
-        margin: Float = 100f
+        margin: Float = 60f,
+        boundary: Rect? = null
     ): Offset {
         val existingBounds = existingStrokes.filter {
             it.stickerKind.startsWith("mindmap:") || it.stickerKind.startsWith("flow:") || it.strokeType == StrokeType.CONNECTOR
         }.map { it.bounds }
 
-        if (existingBounds.isEmpty()) return requestedCenter
+        fun isWithinBoundary(c: Offset): Boolean {
+            if (boundary == null) return true
+            return (c.x - halfWidth >= boundary.left &&
+                    c.x + halfWidth <= boundary.right &&
+                    c.y - halfHeight >= boundary.top &&
+                    c.y + halfHeight <= boundary.bottom)
+        }
+
+        fun clampToBoundary(c: Offset): Offset {
+            if (boundary == null) return c
+            val minX = boundary.left + halfWidth
+            val maxX = boundary.right - halfWidth
+            val minY = boundary.top + halfHeight
+            val maxY = boundary.bottom - halfHeight
+            val cx = if (minX < maxX) c.x.coerceIn(minX, maxX) else (boundary.left + boundary.right) / 2f
+            val cy = if (minY < maxY) c.y.coerceIn(minY, maxY) else (boundary.top + boundary.bottom) / 2f
+            return Offset(cx, cy)
+        }
+
+        if (existingBounds.isEmpty()) return clampToBoundary(requestedCenter)
 
         fun collides(c: Offset): Boolean {
             val cand = Rect(
@@ -950,19 +970,217 @@ object MindmapEngine {
             return existingBounds.any { it.overlaps(cand) }
         }
 
-        if (!collides(requestedCenter)) return requestedCenter
+        val clampedReq = clampToBoundary(requestedCenter)
+        if (!collides(clampedReq) && isWithinBoundary(clampedReq)) return clampedReq
 
-        // Try placing to the right of existing cluster
+        // Try candidate positions strictly within screen/page boundary:
         val maxRight = existingBounds.maxOf { it.right }
-        val rightCandidate = Offset(maxRight + margin + halfWidth, requestedCenter.y)
-        if (!collides(rightCandidate)) return rightCandidate
-
-        // Try placing below existing cluster
+        val minLeft = existingBounds.minOf { it.left }
         val maxBottom = existingBounds.maxOf { it.bottom }
-        val bottomCandidate = Offset(requestedCenter.x, maxBottom + margin + halfHeight)
-        if (!collides(bottomCandidate)) return bottomCandidate
+        val minTop = existingBounds.minOf { it.top }
 
-        // Fallback: place further to the right
-        return rightCandidate
+        val candidates = listOf(
+            Offset(maxRight + margin + halfWidth, clampedReq.y), // Right
+            Offset(clampedReq.x, maxBottom + margin + halfHeight), // Below
+            Offset(minLeft - margin - halfWidth, clampedReq.y), // Left
+            Offset(clampedReq.x, minTop - margin - halfHeight)  // Above
+        )
+
+        for (cand in candidates) {
+            val clamped = clampToBoundary(cand)
+            if (!collides(clamped) && isWithinBoundary(clamped)) {
+                return clamped
+            }
+        }
+
+        // Fallback: Return clamped to boundary to ensure it never goes off-screen
+        return clampedReq
+    }
+
+    const val MIN_BOX_GAP = 16f
+
+    fun rectsOverlapWithGap(r1: Rect, r2: Rect, gap: Float = MIN_BOX_GAP): Boolean {
+        return r1.left < r2.right + gap &&
+                r1.right + gap > r2.left &&
+                r1.top < r2.bottom + gap &&
+                r1.bottom + gap > r2.top
+    }
+
+    /**
+     * Clamps a proposed movement delta for movingBoxes so they NEVER overlap other unselected mind map boxes,
+     * and NEVER move outside the given screen/page boundary.
+     */
+    fun clampMovementDelta(
+        movingBounds: List<Rect>,
+        otherBounds: List<Rect>,
+        delta: Offset,
+        boundary: Rect,
+        gap: Float = MIN_BOX_GAP
+    ): Offset {
+        if (movingBounds.isEmpty() || delta == Offset.Zero) return delta
+        var dx = delta.x
+        var dy = delta.y
+
+        // 1. Boundary clamping (keep all moving boxes strictly within screen/page boundary)
+        for (m in movingBounds) {
+            if (dx > 0f) {
+                val maxRight = boundary.right - m.right
+                dx = minOf(dx, maxRight.coerceAtLeast(0f))
+            } else if (dx < 0f) {
+                val maxLeft = boundary.left - m.left
+                dx = maxOf(dx, maxLeft.coerceAtMost(0f))
+            }
+            if (dy > 0f) {
+                val maxBottom = boundary.bottom - m.bottom
+                dy = minOf(dy, maxBottom.coerceAtLeast(0f))
+            } else if (dy < 0f) {
+                val maxTop = boundary.top - m.top
+                dy = maxOf(dy, maxTop.coerceAtMost(0f))
+            }
+        }
+
+        // 2. Collision clamping against all other unselected boxes (X-axis)
+        if (dx != 0f) {
+            for (m in movingBounds) {
+                for (o in otherBounds) {
+                    val yOverlap = (m.top < o.bottom && m.bottom > o.top)
+                    if (yOverlap) {
+                        if (dx > 0f && m.right <= o.left) {
+                            val maxAllowed = (o.left - gap - m.right).coerceAtLeast(0f)
+                            dx = minOf(dx, maxAllowed)
+                        } else if (dx < 0f && m.left >= o.right) {
+                            val maxAllowed = (o.right + gap - m.left).coerceAtMost(0f)
+                            dx = maxOf(dx, maxAllowed)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Collision clamping against all other unselected boxes (Y-axis with new X position)
+        if (dy != 0f) {
+            for (m in movingBounds) {
+                val mLeft = m.left + dx
+                val mRight = m.right + dx
+                for (o in otherBounds) {
+                    val xOverlap = (mLeft < o.right && mRight > o.left)
+                    if (xOverlap) {
+                        if (dy > 0f && m.bottom <= o.top) {
+                            val maxAllowed = (o.top - gap - m.bottom).coerceAtLeast(0f)
+                            dy = minOf(dy, maxAllowed)
+                        } else if (dy < 0f && m.top >= o.bottom) {
+                            val maxAllowed = (o.bottom + gap - m.top).coerceAtMost(0f)
+                            dy = maxOf(dy, maxAllowed)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Strict verification: Ensure proposed delta causes ZERO actual overlap and stays in boundary
+        for (m in movingBounds) {
+            val moved = Rect(m.left + dx, m.top + dy, m.right + dx, m.bottom + dy)
+            if (moved.left < boundary.left || moved.right > boundary.right) dx = 0f
+            if (moved.top < boundary.top || moved.bottom > boundary.bottom) dy = 0f
+
+            for (o in otherBounds) {
+                if (moved.overlaps(o)) {
+                    val movedX = Rect(m.left + dx, m.top, m.right + dx, m.bottom)
+                    val movedY = Rect(m.left, m.top + dy, m.right, m.bottom + dy)
+                    if (!otherBounds.any { movedX.overlaps(it) }) {
+                        dy = 0f
+                    } else if (!otherBounds.any { movedY.overlaps(it) }) {
+                        dx = 0f
+                    } else {
+                        return Offset.Zero
+                    }
+                }
+            }
+        }
+
+        return Offset(dx, dy)
+    }
+
+    /**
+     * Clamps a proposed resized box so it does not overlap any other mind map box and does not exceed screen bounds.
+     * If the resize would cause an overlap with another box, its size will not increase on that axis.
+     */
+    fun clampResizedBox(
+        current: Rect,
+        proposed: Rect,
+        otherBounds: List<Rect>,
+        boundary: Rect,
+        gap: Float = MIN_BOX_GAP
+    ): Rect {
+        var left = maxOf(boundary.left, proposed.left)
+        var top = maxOf(boundary.top, proposed.top)
+        var right = minOf(boundary.right, proposed.right)
+        var bottom = minOf(boundary.bottom, proposed.bottom)
+
+        // Check against other boxes on each expanded side
+        for (o in otherBounds) {
+            val yOverlap = (top < o.bottom + gap && bottom + gap > o.top)
+            val xOverlap = (left < o.right + gap && right + gap > o.left)
+
+            // Right edge expanded
+            if (right > current.right && yOverlap) {
+                if (current.right <= o.left) {
+                    val maxAllowed = o.left - gap
+                    if (maxAllowed < current.right) {
+                        right = current.right // cannot increase
+                    } else {
+                        right = minOf(right, maxAllowed)
+                    }
+                } else if (rectsOverlapWithGap(Rect(left, top, right, bottom), o, gap)) {
+                    right = current.right
+                }
+            }
+            // Left edge expanded
+            if (left < current.left && yOverlap) {
+                if (current.left >= o.right) {
+                    val minAllowed = o.right + gap
+                    if (minAllowed > current.left) {
+                        left = current.left // cannot increase
+                    } else {
+                        left = maxOf(left, minAllowed)
+                    }
+                } else if (rectsOverlapWithGap(Rect(left, top, right, bottom), o, gap)) {
+                    left = current.left
+                }
+            }
+            // Bottom edge expanded
+            if (bottom > current.bottom && xOverlap) {
+                if (current.bottom <= o.top) {
+                    val maxAllowed = o.top - gap
+                    if (maxAllowed < current.bottom) {
+                        bottom = current.bottom // cannot increase
+                    } else {
+                        bottom = minOf(bottom, maxAllowed)
+                    }
+                } else if (rectsOverlapWithGap(Rect(left, top, right, bottom), o, gap)) {
+                    bottom = current.bottom
+                }
+            }
+            // Top edge expanded
+            if (top < current.top && xOverlap) {
+                if (current.top >= o.bottom) {
+                    val minAllowed = o.bottom + gap
+                    if (minAllowed > current.top) {
+                        top = current.top // cannot increase
+                    } else {
+                        top = maxOf(top, minAllowed)
+                    }
+                } else if (rectsOverlapWithGap(Rect(left, top, right, bottom), o, gap)) {
+                    top = current.top
+                }
+            }
+        }
+
+        val result = Rect(left, top, maxOf(left + 40f, right), maxOf(top + 30f, bottom))
+        // If the resulting rect still collides with ANY other box, refuse to increase size
+        if (otherBounds.any { rectsOverlapWithGap(result, it, gap) }) {
+            return current
+        }
+        return result
     }
 }
