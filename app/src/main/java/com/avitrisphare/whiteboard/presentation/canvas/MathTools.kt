@@ -448,12 +448,7 @@ fun distanceToRulerEdge(tool: PlacedMathTool, point: Offset): Float {
             val dHyp = distanceToSegment(local, vTop, vBase)
             return minOf(dBase, dHeight, dHyp)
         }
-        MathToolKind.PROTRACTOR -> {
-            val distBaseline = if (abs(local.x) <= tool.span + 10f && local.y in -15f..15f) abs(local.y) else Float.MAX_VALUE
-            val r = hypot(local.x, local.y)
-            val distRim = if (local.y <= 12f) abs(r - tool.span) else Float.MAX_VALUE
-            return minOf(distBaseline, distRim)
-        }
+        MathToolKind.PROTRACTOR -> return Float.MAX_VALUE
         MathToolKind.TRIANGLE -> {
             val side = tool.span * 1.8f
             val h = side * 0.8660254f
@@ -594,7 +589,6 @@ fun snapToRulerEdge(
 fun rulerForStraightedge(tools: List<PlacedMathTool>, point: Offset): PlacedMathTool? {
     return tools.lastOrNull { tool ->
         (tool.kind == MathToolKind.RULER ||
-            tool.kind == MathToolKind.PROTRACTOR ||
             tool.kind == MathToolKind.SET_SQUARE ||
             tool.kind == MathToolKind.TRIANGLE) &&
             distanceToRulerEdge(tool, point) <= RULER_EDGE_SLOP
@@ -1060,6 +1054,7 @@ fun straightStroke(start: Offset, end: Offset, color: Int, width: Float): Stroke
 }
 
 fun measurementLabel(text: String, at: Offset, color: Int, angleDeg: Float = 0f): Stroke {
+    val safeText = text.replace("┬░", "\u00B0")
     val safeColor = if (color != 0) color else 0xFF1E293B.toInt()
     val kind = if (angleDeg == 0f) "measurement" else "measurement:${angleDeg.roundToInt()}"
     return Stroke(
@@ -1068,7 +1063,7 @@ fun measurementLabel(text: String, at: Offset, color: Int, angleDeg: Float = 0f)
         strokeWidth = 16f,
         strokeType = StrokeType.TEXT,
         stickerKind = kind,
-        text = text
+        text = safeText
     )
 }
 

@@ -1,5 +1,7 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
+import com.avitrisphare.whiteboard.core.theme.BrandOrange
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -149,8 +151,8 @@ private val INK_COLORS = listOf(
 private val ROTATION_PRESETS = listOf(0f, 45f, 90f, 180f)
 private val ANGLE_PRESETS = listOf(30f, 45f, 60f, 90f, 120f, 135f, 150f)
 
-private val Blue = Color(0xFF2563EB)
-private val BlueSoft = Color(0xFFEFF6FF)
+private val Orange = BrandOrange
+private val OrangeSoft = Color(0xFFFFF7ED)
 private val Ink = Color(0xFF374151)
 private val Muted = Color(0xFF6B7280)
 private val Line = Color(0xFFE5E7EB)
@@ -222,12 +224,12 @@ fun GeometryToolPanel(
     val inkColor = if (isDark) Color(0xFFE2E8F0) else Ink
     val mutedColor = if (isDark) Color(0xFF94A3B8) else Muted
     val chipBg = if (isDark) Color(0xFF334155) else Chip
-    val blueSoft = if (isDark) Color(0xFF1E3A8A) else BlueSoft
+    val orangeSoft = if (isDark) Color(0xFF431407) else OrangeSoft
 
     Column(
         modifier = modifier
             .width(330.dp)
-            .heightIn(max = 380.dp)
+            .heightIn(max = 240.dp)
             .verticalScroll(rememberScrollState())
     ) {
         Row(
@@ -323,8 +325,8 @@ fun GeometryToolPanel(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (onBoard) blueSoft else chipBg)
-                    .border(1.dp, if (onBoard) Blue else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB)), RoundedCornerShape(8.dp))
+                    .background(if (onBoard) orangeSoft else chipBg)
+                    .border(1.dp, if (onBoard) Orange else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB)), RoundedCornerShape(8.dp))
                     .clickable { placeOrMove(selectedKind, Offset.Zero, false) }
                     .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
@@ -332,7 +334,7 @@ fun GeometryToolPanel(
                     if (onBoard) stringResource(R.string.geo_remove_board) else stringResource(R.string.geo_place_board),
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (onBoard) (if (isDark) Color(0xFF93C5FD) else Blue) else inkColor
+                    color = if (onBoard) (if (isDark) Color(0xFFFDBA74) else Orange) else inkColor
                 )
             }
 
@@ -364,11 +366,11 @@ private fun InstrumentCard(
 ) {
     var origin by remember { mutableStateOf(Offset.Zero) }
     val cardBg = if (selected) {
-        if (isDark) Color(0xFF1E3A8A) else BlueSoft
+        if (isDark) Color(0xFF431407) else OrangeSoft
     } else {
         if (isDark) Color(0xFF0F172A) else Color(0xFFF9FAFB)
     }
-    val cardBorder = if (selected) Blue else (if (isDark) Color(0xFF334155) else Line)
+    val cardBorder = if (selected) Orange else (if (isDark) Color(0xFF334155) else Line)
 
     Box(
         modifier = Modifier
@@ -408,7 +410,7 @@ private fun InstrumentCard(
                     .align(Alignment.TopEnd)
                     .size(6.dp)
                     .clip(CircleShape)
-                    .background(Blue)
+                    .background(Orange)
             )
         }
         Column(
@@ -418,13 +420,13 @@ private fun InstrumentCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            InstrumentIcon(spec.kind, if (selected) Blue else (if (isDark) Color(0xFFCBD5E1) else Ink))
+            InstrumentIcon(spec.kind, if (selected) Orange else (if (isDark) Color(0xFFCBD5E1) else Ink))
             Spacer(Modifier.height(2.dp))
             Text(
                 localizedInstrumentName(spec.kind),
                 fontSize = 9.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected) (if (isDark) Color(0xFF93C5FD) else Color(0xFF1D4ED8)) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563)),
+                color = if (selected) (if (isDark) Color(0xFFFDBA74) else Orange) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563)),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center
@@ -462,8 +464,8 @@ private fun MeasureSlider(
             valueRange = valueRange,
             modifier = Modifier.weight(1f),
             colors = SliderDefaults.colors(
-                thumbColor = Blue,
-                activeTrackColor = Blue,
+                thumbColor = Orange,
+                activeTrackColor = Orange,
                 inactiveTrackColor = if (isDark) Color(0xFF334155) else Color(0xFFE5E7EB)
             )
         )
@@ -486,11 +488,11 @@ private fun ChipRow(
         chips.forEach { (label, degrees) ->
             val on = abs(current - degrees) < 0.6f
             val bg = if (on) {
-                if (isDark) Color(0xFF1E3A8A) else BlueSoft
+                if (isDark) Color(0xFF431407) else OrangeSoft
             } else {
                 if (isDark) Color(0xFF334155) else Chip
             }
-            val border = if (on) Blue else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB))
+            val border = if (on) Orange else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB))
 
             Box(
                 modifier = Modifier
@@ -504,7 +506,7 @@ private fun ChipRow(
                     label,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (on) (if (isDark) Color(0xFF93C5FD) else Blue) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563))
+                    color = if (on) (if (isDark) Color(0xFFFDBA74) else Orange) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563))
                 )
             }
         }
@@ -528,7 +530,7 @@ private fun InkSwatches(selected: Int, onPick: (Int) -> Unit) {
                     .size(26.dp)
                     .clip(CircleShape)
                     .background(Color(colorInt))
-                    .border(if (on) 2.dp else 1.dp, if (on) Blue else Color(0xFFD1D5DB), CircleShape)
+                    .border(if (on) 2.dp else 1.dp, if (on) Orange else Color(0xFFD1D5DB), CircleShape)
                     .clickable { onPick(colorInt) },
                 contentAlignment = Alignment.Center
             ) {

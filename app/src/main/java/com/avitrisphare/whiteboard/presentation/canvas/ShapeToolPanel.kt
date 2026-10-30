@@ -1,5 +1,7 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
+import com.avitrisphare.whiteboard.core.theme.BrandOrange
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -141,7 +143,7 @@ fun ShapeToolPanel(
     Column(
         modifier = modifier
             .width(340.dp)
-            .heightIn(max = 440.dp)
+            .heightIn(max = 240.dp)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
@@ -232,7 +234,7 @@ fun ShapeToolPanel(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (isCatSelected) Color(0xFF2563EB) else (if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6)))
+                        .background(if (isCatSelected) BrandOrange else (if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6)))
                         .clickable { selectedCategory = cat }
                         .padding(vertical = 6.dp),
                     contentAlignment = Alignment.Center
@@ -268,10 +270,10 @@ fun ShapeToolPanel(
                     modifier = Modifier
                         .size(width = 54.dp, height = 58.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (isSelected) (if (isDark) Color(0xFF1E3A8A) else Color(0xFFEFF6FF)) else (if (isDark) Color(0xFF0F172A) else Color(0xFFF9FAFB)))
+                        .background(if (isSelected) (if (isDark) Color(0xFF431407) else Color(0xFFFFF7ED)) else (if (isDark) Color(0xFF0F172A) else Color(0xFFF9FAFB)))
                         .border(
                             width = if (isSelected) 2.dp else 1.dp,
-                            color = if (isSelected) Color(0xFF3B82F6) else (if (isDark) Color(0xFF334155) else Color(0xFFE5E7EB)),
+                            color = if (isSelected) BrandOrange else (if (isDark) Color(0xFF334155) else Color(0xFFE5E7EB)),
                             shape = RoundedCornerShape(10.dp)
                         )
                         .clickable {
@@ -283,14 +285,14 @@ fun ShapeToolPanel(
                 ) {
                     ShapeIconPreview(
                         spec = spec,
-                        tint = if (isSelected) (if (isDark) Color(0xFF93C5FD) else Color(0xFF2563EB)) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF374151))
+                        tint = if (isSelected) (if (isDark) Color(0xFFFDBA74) else BrandOrange) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF374151))
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = localizedShapeName(spec.strokeType),
                         fontSize = 9.sp,
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (isSelected) (if (isDark) Color(0xFF93C5FD) else Color(0xFF1D4ED8)) else (if (isDark) Color(0xFF94A3B8) else Color(0xFF4B5563)),
+                        color = if (isSelected) (if (isDark) Color(0xFFFDBA74) else BrandOrange) else (if (isDark) Color(0xFF94A3B8) else Color(0xFF4B5563)),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center
@@ -319,8 +321,8 @@ fun ShapeToolPanel(
                 valueRange = 1f..50f,
                 modifier = Modifier.weight(1f),
                 colors = SliderDefaults.colors(
-                    thumbColor = Color(0xFF2563EB),
-                    activeTrackColor = Color(0xFF2563EB),
+                    thumbColor = BrandOrange,
+                    activeTrackColor = BrandOrange,
                     inactiveTrackColor = if (isDark) Color(0xFF475569) else Color(0xFFE2E8F0)
                 )
             )
@@ -343,8 +345,8 @@ fun ShapeToolPanel(
                 valueRange = 0.05f..1f,
                 modifier = Modifier.weight(1f),
                 colors = SliderDefaults.colors(
-                    thumbColor = Color(0xFF2563EB),
-                    activeTrackColor = Color(0xFF2563EB),
+                    thumbColor = BrandOrange,
+                    activeTrackColor = BrandOrange,
                     inactiveTrackColor = if (isDark) Color(0xFF475569) else Color(0xFFE2E8F0)
                 )
             )
@@ -368,8 +370,8 @@ fun ShapeToolPanel(
                 enabled = activeSpec.supportsRadius,
                 modifier = Modifier.weight(1f),
                 colors = SliderDefaults.colors(
-                    thumbColor = Color(0xFF2563EB),
-                    activeTrackColor = Color(0xFF2563EB),
+                    thumbColor = BrandOrange,
+                    activeTrackColor = BrandOrange,
                     inactiveTrackColor = if (isDark) Color(0xFF475569) else Color(0xFFE2E8F0)
                 )
             )
@@ -428,10 +430,10 @@ fun ShapeToolPanel(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (state.showShapeDimensions) (if (isDark) Color(0xFF1E3A8A) else Color(0xFFEFF6FF)) else (if (isDark) Color(0xFF0F172A) else Color(0xFFF8FAFC)))
+                    .background(if (state.showShapeDimensions) (if (isDark) Color(0xFF431407) else Color(0xFFFFF7ED)) else (if (isDark) Color(0xFF0F172A) else Color(0xFFF8FAFC)))
                     .border(
                         1.dp,
-                        if (state.showShapeDimensions) Color(0xFF2563EB) else (if (isDark) Color(0xFF334155) else Color(0xFFCBD5E1)),
+                        if (state.showShapeDimensions) BrandOrange else (if (isDark) Color(0xFF334155) else Color(0xFFCBD5E1)),
                         RoundedCornerShape(8.dp)
                     )
                     .clickable { viewModel.toggleShapeDimensions() }
@@ -444,14 +446,14 @@ fun ShapeToolPanel(
                     Icon(
                         imageVector = Icons.Default.Straighten,
                         contentDescription = "Dimensions",
-                        tint = if (state.showShapeDimensions) Color(0xFF2563EB) else (if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)),
+                        tint = if (state.showShapeDimensions) BrandOrange else (if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)),
                         modifier = Modifier.size(15.dp)
                     )
                     Text(
                         text = if (state.showShapeDimensions) stringResource(R.string.shape_dims_active) else stringResource(R.string.shape_dims),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (state.showShapeDimensions) Color(0xFF2563EB) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF475569))
+                        color = if (state.showShapeDimensions) BrandOrange else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF475569))
                     )
                 }
             }
@@ -507,7 +509,7 @@ fun ShapeToolPanel(
                         .background(if (isDark) Color(0xFF334155) else Color(0xFFE5E7EB))
                         .border(
                             width = if (isNoneSelected) 2.dp else 1.dp,
-                            color = if (isNoneSelected) Color(0xFF2563EB) else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB)),
+                            color = if (isNoneSelected) BrandOrange else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB)),
                             shape = CircleShape
                         )
                         .clickable { viewModel.setShapeColor(0) },
@@ -526,7 +528,7 @@ fun ShapeToolPanel(
                         .background(Color(colorInt))
                         .border(
                             width = if (isSelected) 2.dp else 1.dp,
-                            color = if (isSelected) Color(0xFF2563EB) else Color(0xFFD1D5DB),
+                            color = if (isSelected) BrandOrange else Color(0xFFD1D5DB),
                             shape = CircleShape
                         )
                         .clickable { viewModel.setShapeColor(colorInt) },

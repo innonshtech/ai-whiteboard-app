@@ -68,7 +68,8 @@ fun DrawScope.drawVectorInk(
     scale: Float,
     offsetX: Float,
     offsetY: Float,
-    selectedIds: Set<String>
+    selectedIds: Set<String>,
+    hasLassoSelection: Boolean = false
 ) {
     val viewport = CanvasTransform.calculateViewportWorldBounds(
         viewportSize = size,
@@ -89,7 +90,7 @@ fun DrawScope.drawVectorInk(
                 renderStroke(context, stroke, scale, false)
             }
         }
-        if (selectedStrokes.isNotEmpty()) drawSelectionBox(selectedStrokes, scale)
+        if (selectedStrokes.isNotEmpty() && !hasLassoSelection) drawSelectionBox(selectedStrokes, scale)
         for (stroke in selectedStrokes) {
             if (stroke.strokeType == StrokeType.IMAGE) continue
             renderStroke(context, stroke, scale, false)
@@ -123,13 +124,6 @@ private fun DrawScope.drawSelectionBox(strokes: List<Stroke>, scale: Float) {
     val boxWidth = boxRight - boxLeft
     val boxHeight = boxBottom - boxTop
 
-    // 1. Semi-transparent wash inside selection matching user reference photo
-    drawRoundRect(
-        color = Color(0x338A8870),
-        topLeft = Offset(boxLeft, boxTop),
-        size = Size(boxWidth, boxHeight),
-        cornerRadius = CornerRadius(4f, 4f)
-    )
 
     // 2. Faint small dashed blue border line around selection (matching photo)
     val strokeW = (1.5f / scale.coerceAtLeast(0.3f)).coerceIn(1.2f, 2.5f)

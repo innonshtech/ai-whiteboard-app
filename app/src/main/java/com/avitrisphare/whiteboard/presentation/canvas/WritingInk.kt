@@ -230,7 +230,7 @@ fun InkToolPanel(
     viewModel: CanvasViewModel,
     onClose: () -> Unit = {}
 ) {
-    var editingSecondary by remember(state.useSecondaryPenColor) { mutableStateOf(state.useSecondaryPenColor) }
+    val editingSecondary = state.useSecondaryPenColor
     var showColorWheel by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     val currentColor = if (editingSecondary) state.secondaryColor else state.selectedColor
@@ -257,8 +257,8 @@ fun InkToolPanel(
 
     Column(
         modifier = Modifier
-            .width(352.dp)
-            .heightIn(max = 540.dp)
+            .width(340.dp)
+            .heightIn(max = 210.dp)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 2.dp, vertical = 2.dp)
     ) {
@@ -742,7 +742,6 @@ fun InkToolPanel(
                                 shape = RoundedCornerShape(8.dp)
                             )
                             .clickable {
-                                editingSecondary = false
                                 viewModel.setActivePenSlot(1)
                             }
                             .padding(horizontal = 8.dp, vertical = 6.dp)
@@ -758,13 +757,13 @@ fun InkToolPanel(
                             Spacer(Modifier.width(6.dp))
                             Column {
                                 Text(
-                                    text = "SLOT A",
+                                    text = if (!editingSecondary) "SLOT A (Active)" else "SLOT A",
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (!editingSecondary) BrandOrange else Color(0xFF475569)
                                 )
                                 Text(
-                                    text = String.format("#%06X", state.selectedColor and 0xFFFFFF),
+                                    text = "${state.inkTool.label} · ${state.strokeWidth.toInt()}px",
                                     fontSize = 8.5.sp,
                                     color = Color(0xFF64748B)
                                 )
@@ -812,7 +811,6 @@ fun InkToolPanel(
                                 shape = RoundedCornerShape(8.dp)
                             )
                             .clickable {
-                                editingSecondary = true
                                 viewModel.setActivePenSlot(2)
                             }
                             .padding(horizontal = 8.dp, vertical = 6.dp)
@@ -828,13 +826,13 @@ fun InkToolPanel(
                             Spacer(Modifier.width(6.dp))
                             Column {
                                 Text(
-                                    text = "SLOT B",
+                                    text = if (editingSecondary) "SLOT B (Active)" else "SLOT B",
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (editingSecondary) BrandOrange else Color(0xFF475569)
                                 )
                                 Text(
-                                    text = String.format("#%06X", state.secondaryColor and 0xFFFFFF),
+                                    text = "${state.secondaryInkTool.label} · ${state.secondaryStrokeWidth.toInt()}px",
                                     fontSize = 8.5.sp,
                                     color = Color(0xFF64748B)
                                 )
