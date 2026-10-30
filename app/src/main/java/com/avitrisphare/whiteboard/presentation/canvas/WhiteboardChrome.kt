@@ -1033,6 +1033,154 @@ fun AvitriSphareWhiteboardChrome(
                         }
                     }
                 }
+            } else {
+                // ── Mindmap / Connector Selection Toolbar ──────────────────────────────
+                val mindmapNode = remember(selectedStrokes) {
+                    selectedStrokes.firstOrNull { isMindMapNode(it) }
+                }
+                val mindmapBorderColor = remember(selectedStrokes) {
+                    selectedStrokes.firstOrNull()?.colorValue ?: 0xFF1B1F2A.toInt()
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
+                    border = BorderStroke(1.dp, if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFE2E8F0)),
+                    shadowElevation = 6.dp,
+                    modifier = Modifier
+                        .offset { IntOffset(selectionToolbarOffset.x.roundToInt(), selectionToolbarOffset.y.roundToInt()) }
+                        .wrapContentWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                            .pointerInput(Unit) {
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    selectionToolbarOffset = Offset(
+                                        (selectionToolbarOffset.x + dragAmount.x).coerceIn(-1800f, 1800f),
+                                        (selectionToolbarOffset.y + dragAmount.y).coerceIn(-1800f, 300f)
+                                    )
+                                }
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // Drag handle
+                        Icon(
+                            imageVector = Icons.Default.DragHandle,
+                            contentDescription = "Drag toolbar",
+                            tint = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                            modifier = Modifier.size(16.dp)
+                        )
+
+                        // Count badge when multiple items selected
+                        if (selectedStrokes.size > 1) {
+                            Text(
+                                "${selectedStrokes.size}",
+                                color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        // Color swatches for border/node color
+                        val borderPalette = PEN_COLORS.take(7)
+                        borderPalette.forEach { color ->
+                            val isSelected = mindmapBorderColor == color
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(color))
+                                    .then(
+                                        if (isSelected) Modifier.border(2.dp, BrandOrange, CircleShape)
+                                        else Modifier.border(0.8.dp, Color(0x33000000), CircleShape)
+                                    )
+                                    .clickable { viewModel.recolorSelected(color) }
+                            )
+                        }
+
+                        // Edit text button for single mindmap node
+                        if (mindmapNode != null && state.editingTextId == null) {
+                            Text(
+                                text = if (mindmapNode.text.isNotEmpty()) "Edit text" else "Type text",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(BrandOrange)
+                                    .clickable { onEditNodeText(mindmapNode.id, mindmapNode.text) }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        // Copy button
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
+                                .clickable { onCopySelection() }
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy",
+                                tint = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF475569),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(Modifier.width(3.dp))
+                            Text(
+                                text = "Copy",
+                                color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        // Delete button
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFFEE2E2))
+                                .clickable { viewModel.deleteSelectedStrokes() }
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Remove",
+                                tint = Color(0xFFDC2626),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(Modifier.width(3.dp))
+                            Text(
+                                text = "Remove",
+                                color = Color(0xFFDC2626),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        // Close / dismiss button
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .clickable { onDismissSelectionToolbar(true) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close toolbar",
+                                tint = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF64748B),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -1507,10 +1655,17 @@ fun AvitriSphareWhiteboardChrome(
                                             active = activeDockTool == ActiveDockTool.PEN,
                                             modifier = Modifier.onGloballyPositioned { toolIconBounds["ink"] = it.boundsInRoot() },
                                             onPenClick = {
-                                                if (state.useSecondaryPenColor) {
-                                                    viewModel.setSecondaryInkTool(state.secondaryInkTool)
+                                                if (activeDockTool == ActiveDockTool.PEN) {
+                                                    val nextSlot = if (state.useSecondaryPenColor) 1 else 2
+                                                    viewModel.setActivePenSlot(nextSlot)
+                                                    val label = if (nextSlot == 1) "Slot A" else "Slot B"
+                                                    Toast.makeText(context, "$label active", Toast.LENGTH_SHORT).show()
                                                 } else {
-                                                    viewModel.setTool(state.inkTool)
+                                                    if (state.useSecondaryPenColor) {
+                                                        viewModel.setSecondaryInkTool(state.secondaryInkTool)
+                                                    } else {
+                                                        viewModel.setTool(state.inkTool)
+                                                    }
                                                 }
                                                 panel = null
                                             },
@@ -2016,7 +2171,7 @@ fun AvitriSphareWhiteboardChrome(
                             }
                         )
                     }
-                    "geometry" -> DockPopover(maxWidth = 460.dp, scrollable = false) {
+                    "geometry" -> DockPopover(maxWidth = 380.dp, maxHeight = 240.dp, scrollable = false) {
 
                         GeometryToolPanel(
                             state = state,
@@ -2282,7 +2437,7 @@ fun AvitriSphareWhiteboardChrome(
                             }
                         }
                     }
-                    "utilities" -> DockPopover(maxWidth = 580.dp, scrollable = false) {
+                    "utilities" -> DockPopover(maxWidth = 580.dp, maxHeight = 210.dp, scrollable = false) {
                         val utilityTools = setOf(
                             WhiteboardTool.SPOTLIGHT,
                             WhiteboardTool.SHADE,
@@ -2300,7 +2455,7 @@ fun AvitriSphareWhiteboardChrome(
                             stringResource(R.string.tab_view)
                         )
                         ToolCategoryTabs(tabs, toolTab) { toolTab = it }
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(8.dp))
                         val tiles = when (toolTab) {
                             0 -> listOf(
                                 ToolTile(Icons.Default.PanTool, stringResource(R.string.util_hand), Color(0xFF2563EB), state.currentTool == WhiteboardTool.HAND) {
@@ -2400,22 +2555,28 @@ fun AvitriSphareWhiteboardChrome(
                                 }
                             }
                         }
-                        ToolIconGrid(tiles)
-                        if (toolTab == 0 && state.smartWriteEnabled) {
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                stringResource(R.string.smart_write_tip),
-                                fontSize = 11.sp,
-                                color = Color(0xFF6B7280)
-                            )
-                        }
-                        if (toolTab == 4) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Each split panel keeps its own ink.",
-                                fontSize = 11.sp,
-                                color = Color(0xFF6B7280)
-                            )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            ToolIconGrid(tiles)
+                            if (toolTab == 0 && state.smartWriteEnabled) {
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    stringResource(R.string.smart_write_tip),
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF6B7280)
+                                )
+                            }
+                            if (toolTab == 4) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Each split panel keeps its own ink.",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF6B7280)
+                                )
+                            }
                         }
                     }
                     "eraser" -> DockPopover(maxWidth = 280.dp, scrollable = false) {
@@ -2425,7 +2586,7 @@ fun AvitriSphareWhiteboardChrome(
                             onClose = { panel = null }
                         )
                     }
-                    "ink" -> DockPopover(maxWidth = 380.dp, maxHeight = 560.dp, scrollable = false) {
+                    "ink" -> DockPopover(maxWidth = 360.dp, maxHeight = 210.dp, scrollable = false) {
                         InkToolPanel(state = state, viewModel = viewModel, onClose = {
                             panel = null
                         })
@@ -3000,7 +3161,7 @@ private fun ToolCategoryTabs(
 
 @Composable
 private fun ToolIconGrid(tiles: List<ToolTile>) {
-    val columns = 5
+    val columns = 6
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -3025,13 +3186,13 @@ private fun ToolIconTile(tile: ToolTile, modifier: Modifier = Modifier, isDark: 
             .clip(RoundedCornerShape(12.dp))
             .background(if (tile.selected) (if (isDark) Color(0xFF334155) else Color(0xFFEEF2FF)) else Color.Transparent)
             .clickable(onClick = tile.onClick)
-            .padding(vertical = 8.dp, horizontal = 2.dp),
+            .padding(vertical = 4.dp, horizontal = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             modifier = Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(16.dp))
+                .size(46.dp)
+                .clip(RoundedCornerShape(14.dp))
                 .background(tile.tint.copy(alpha = if (isDark) 0.22f else 0.12f)),
             contentAlignment = Alignment.Center
         ) {
@@ -3039,19 +3200,19 @@ private fun ToolIconTile(tile: ToolTile, modifier: Modifier = Modifier, isDark: 
                 tile.icon,
                 contentDescription = tile.label,
                 tint = tile.tint,
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.size(24.dp)
             )
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(4.dp))
         Text(
             tile.label,
             color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1F2937),
-            fontSize = 12.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            lineHeight = 14.sp
+            lineHeight = 13.sp
         )
     }
 }

@@ -76,6 +76,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
     private var offsetX = 0f
     private var offsetY = 0f
     private var selected: Set<String> = emptySet()
+    private var hasLassoSelection: Boolean = false
     private var activeLive: LiveInk? = null
     var onMoveMedia: ((strokeId: String, deltaX: Float, deltaY: Float) -> Unit)? = null
 
@@ -173,7 +174,8 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         offsetY: Float,
         selected: Set<String>,
         customBackgroundUri: String = "",
-        pageIndex: Int = 0
+        pageIndex: Int = 0,
+        hasLassoSelection: Boolean = false
     ) {
         if (previewing) return
         val customBgChanged = customBackgroundUri != this.customBackgroundUri
@@ -182,15 +184,13 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         val pageChanged = pageIndexChanged || background != this.pageBackground || showGrid != this.showGrid || dark != this.dark || customBgChanged
         val moved = scale != this.scale || offsetX != this.offsetX || offsetY != this.offsetY
 
-        // Fast change check: if stroke list reference and selection reference haven't changed, ink has NOT changed.
         // Prevents redrawing the entire board when modals open/close, pens change, or colors swap!
+        val lassoChanged = this.hasLassoSelection != hasLassoSelection
+        this.hasLassoSelection = hasLassoSelection
         val inkChanged = pageIndexChanged ||
-            (sourceStrokes !== strokes && (
-                strokes.size != this.strokes.size ||
-                this.strokes.isEmpty() != strokes.isEmpty() ||
-                (strokes.isNotEmpty() && (strokes.first().id != this.strokes.firstOrNull()?.id || strokes.last().id != this.strokes.lastOrNull()?.id || strokes.last() !== this.strokes.lastOrNull()))
-            )) ||
-            (sourceSelected !== selected && (selected.size != this.selected.size || selected != this.selected))
+            (sourceStrokes !== strokes) ||
+            (sourceSelected !== selected && (selected.size != this.selected.size || selected != this.selected)) ||
+            lassoChanged
 
         this.pageBackground = background
         this.customBackgroundUri = customBackgroundUri
@@ -919,7 +919,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
                     }
                 }
             } else {
-                drawVectorInk(context, strokes, scale, offsetX, offsetY, selected)
+                drawVectorInk(context, strokes, scale, offsetX, offsetY, selected, hasLassoSelection)
             }
         }
     }

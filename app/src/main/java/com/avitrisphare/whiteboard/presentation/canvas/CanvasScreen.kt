@@ -255,10 +255,11 @@ fun List<Offset>.toSmoothedPath(): Path {
 private class PointerInkTrack(
     val id: Long,
     val isStylus: Boolean,
-    val color: Int,
-    val baseWidth: Float,
-    val strokeType: StrokeType,
-    val isHighlighter: Boolean,
+    var color: Int,
+    var baseWidth: Float,
+    var strokeType: StrokeType,
+    var isHighlighter: Boolean,
+    var tipResolved: Boolean = true,
     initialWorld: Offset,
     initialPressure: Float
 ) {
@@ -342,10 +343,11 @@ private fun DrawScope.drawCenteredNodeText(
         val rawParagraphs = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
         val lineCount = maxOf(rawParagraphs.size, 1)
 
-        val hTarget = ((maxHeight * 0.70f) / lineCount).coerceIn(12f, 48f)
         val maxLen = rawParagraphs.maxOfOrNull { it.length }?.coerceAtLeast(1) ?: 1
-        val wTarget = if (text.isNotBlank()) ((maxWidth * 0.90f) / (maxLen * 0.55f)).coerceAtLeast(12f) else hTarget
-        val baseSize = minOf(hTarget, wTarget).coerceIn(12f, 60f)
+        val hTarget = ((maxHeight * 0.75f) / lineCount).coerceAtLeast(6f)
+        val wTarget = if (text.isNotBlank()) ((maxWidth * 0.90f) / (maxLen * 0.55f)).coerceAtLeast(6f) else hTarget
+        val maxBoxAllowedSize = maxOf(40f, minOf(maxWidth, maxHeight) * 0.45f)
+        val baseSize = minOf(hTarget, wTarget).coerceIn(6f, maxBoxAllowedSize)
 
         val tPaint = Paint().apply {
             color = resolvedColor
@@ -399,9 +401,9 @@ private fun DrawScope.drawCenteredNodeText(
         var lines = wrapTextForSize(candidateSize)
         var totalH = lines.size * candidateSize * 1.25f
 
-        val minAllowed = 12f
-        while (candidateSize > minAllowed && (totalH > maxHeight || lines.any { tPaint.measureText(it) > maxWidth * 1.02f })) {
-            candidateSize -= 1.0f
+        val minAllowed = 6f
+        while (candidateSize > minAllowed && (totalH > maxHeight || lines.any { tPaint.measureText(it) > maxWidth })) {
+            candidateSize -= 0.5f
             lines = wrapTextForSize(candidateSize)
             totalH = lines.size * candidateSize * 1.25f
         }
@@ -410,7 +412,16 @@ private fun DrawScope.drawCenteredNodeText(
         val lineH = candidateSize * 1.25f
         val startY = cy - ((lines.size - 1) * lineH) / 2f + (candidateSize * 0.35f)
         lines.forEachIndexed { i, line ->
-            drawText(line, cx, startY + i * lineH, tPaint)
+            val toDraw = if (candidateSize <= minAllowed && tPaint.measureText(line) > maxWidth) {
+                var truncated = line
+                while (truncated.isNotEmpty() && tPaint.measureText("$truncated...") > maxWidth) {
+                    truncated = truncated.dropLast(1)
+                }
+                if (truncated.isNotEmpty()) "$truncated..." else line
+            } else {
+                line
+            }
+            drawText(toDraw, cx, startY + i * lineH, tPaint)
         }
     }
 }
@@ -918,7 +929,7 @@ fun DrawScope.renderStroke(
                     textAlign = if (isMeasurement) Paint.Align.CENTER else Paint.Align.LEFT
                 }
                 if (isMeasurement) {
-                    val mText = stroke.text
+                    val mText = stroke.text.replace("┬░", "\u00B0")
                     val textH = paint.textSize
                     paint.color = if (stroke.colorValue != 0) stroke.colorValue else 0xFF0F172A.toInt()
                     if (angleDeg != 0f) {
@@ -1330,6 +1341,7 @@ fun CanvasScreen(
     var textInputValue by remember { mutableStateOf("") }
     var exportedUri by remember { mutableStateOf<Uri?>(null) }
     var lassoPoints by remember { mutableStateOf(listOf<Offset>()) }
+    var lassoSelectionPath by remember { mutableStateOf<List<Offset>?>(null) }
     var timerState by remember { mutableStateOf(TimerUiState()) }
     var stopwatchState by remember { mutableStateOf(StopwatchUiState()) }
     var calculatorState by remember { mutableStateOf(CalculatorUiState()) }
@@ -1388,6 +1400,8 @@ fun CanvasScreen(
     LaunchedEffect(state.selectedStrokeIds) {
         if (state.selectedStrokeIds.isNotEmpty()) {
             selectionToolbarDismissed = false
+        } else {
+            lassoSelectionPath = null
         }
     }
 
@@ -1508,6 +1522,7 @@ fun CanvasScreen(
     LaunchedEffect(state.currentTool) {
         if (state.currentTool != WhiteboardTool.LASSO) {
             lassoPoints = emptyList()
+            lassoSelectionPath = null
         }
         viewModel.dismissSmartWrite()
     }
@@ -1795,6 +1810,7 @@ fun CanvasScreen(
                     state.secondaryStrokeWidth,
                     state.secondaryInkTool,
                     state.inkTool,
+                    state.useSecondaryPenColor,
                     state.eraserMode,
                     state.eraserSize,
                     state.isToolLocked,
@@ -1890,6 +1906,8 @@ fun CanvasScreen(
                         val isStylusType = rawToolType == MotionEvent.TOOL_TYPE_STYLUS || down.type == PointerType.Stylus
                         val majorPx = touchContacts.majorPx(down.position)
                         val minorPx = touchContacts.minorPx(down.position)
+                        val contactSizePx = touchContacts.size(down.position)
+                        val hasContactData = (majorPx > 0.1f || contactSizePx > 0f)
                         val isPenNib = touchContacts.isPenNib(
                             position = down.position,
                             isEraser = isEraserType,
@@ -1897,40 +1915,35 @@ fun CanvasScreen(
                             xdpi = xdpi
                         )
 
-                        val contactSizePx = if (majorPx > 0f) {
-                            if (minorPx > 0f) (majorPx + minorPx) / 2f else majorPx
+                        val isSecondaryPen = if (hasContactData) {
+                            if (state.useSecondaryPenColor) isPenNib else !isPenNib
                         } else {
-                            0f
+                            state.useSecondaryPenColor
                         }
-                        val secondaryStrokeWidth = if (state.secondaryStrokeWidth > 0f) {
-                            state.secondaryStrokeWidth
-                        } else if (contactSizePx > 0f) {
-                            if (contactSizePx <= 5.0f) {
-                                (contactSizePx * 5f).coerceIn(14f, 32f)
-                            } else {
-                                contactSizePx.coerceIn(12f, 44f)
-                            }
+                        val activeInkColor = if (!isSecondaryPen) state.selectedColor else state.secondaryColor
+                        val activeInkWidth = if (!isSecondaryPen) {
+                            state.strokeWidth
                         } else {
-                            if (isEraserType) 16f else 20f
+                            if (state.secondaryStrokeWidth > 0f) state.secondaryStrokeWidth else 12f
                         }
-
-                        val activeInkColor = if (isPenNib) state.selectedColor else state.secondaryColor
-                        val activeInkWidth = if (isPenNib) state.strokeWidth else secondaryStrokeWidth
-                        android.util.Log.i("AvitriTouch", "DECISION down.id=${down.id.value} pos=${down.position} tool=$rawToolType stylusDraw=$stylusDraw majorPx=$majorPx minorPx=$minorPx xdpi=$xdpi -> isPenNib=$isPenNib (color=${if (isPenNib) "PRIMARY" else "SECONDARY"}, width=$activeInkWidth)")
+                        android.util.Log.i("AvitriTouch", "DECISION down.id=${down.id.value} pos=${down.position} tool=$rawToolType stylusDraw=$stylusDraw majorPx=$majorPx minorPx=$minorPx xdpi=$xdpi -> isPenNib=$isPenNib isSecondary=$isSecondaryPen (color=${if (!isSecondaryPen) "PRIMARY" else "SECONDARY"}, width=$activeInkWidth)")
 
                         val activeTool = if (isPalmEraser) {
                             WhiteboardTool.ERASER
                         } else if (stylusDraw) {
-                            if (isEraserType) {
+                            if (isEraserType && latestState.currentTool == WhiteboardTool.ERASER) {
                                 WhiteboardTool.ERASER
                             } else if (isShapeActive) {
                                 state.currentTool
+                            } else if (latestState.currentTool !in WRITING_TOOLS) {
+                                // SELECT, HAND, LASSO, ERASER, etc. — honour the current tool even for stylus
+                                latestState.currentTool
                             } else {
-                                if (isPenNib) latestState.inkTool else latestState.secondaryInkTool
+                                if (!isSecondaryPen) latestState.inkTool else latestState.secondaryInkTool
                             }
                         } else {
                             if (latestState.currentTool in WRITING_TOOLS) {
-                                if (isPenNib) latestState.inkTool else latestState.secondaryInkTool
+                                if (!isSecondaryPen) latestState.inkTool else latestState.secondaryInkTool
                             } else {
                                 latestState.currentTool
                             }
@@ -1958,6 +1971,7 @@ fun CanvasScreen(
                                 baseWidth = activeInkWidth,
                                 strokeType = activeTool.toStrokeType(),
                                 isHighlighter = activeTool == WhiteboardTool.HIGHLIGHTER,
+                                tipResolved = hasContactData,
                                 initialWorld = downWorld,
                                 initialPressure = downPressure
                             )
@@ -2006,25 +2020,15 @@ fun CanvasScreen(
                                 val safeScale = canvasScale.coerceAtLeast(0.001f)
                                 Offset(last.x + dx / safeScale, last.y + dy / safeScale)
                             }
-                            liveInk.stroke = if (isPenNib) {
-                                if (stylusDraw) {
-                                    template.copy(
-                                        strokeWidth = stylusPressureWidth(
-                                            activeInkWidth,
-                                            inkPressures.lastOrNull() ?: 1f
-                                        )
+                            liveInk.stroke = if (stylusDraw) {
+                                template.copy(
+                                    strokeWidth = stylusPressureWidth(
+                                        activeInkWidth,
+                                        inkPressures.lastOrNull() ?: 1f
                                     )
-                                } else {
-                                    template
-                                }
+                                )
                             } else {
-                                val curMajor = touchContacts.majorPx(down.position)
-                                val curMinor = touchContacts.minorPx(down.position)
-                                val curContact = if (curMajor > 0f) (if (curMinor > 0f) (curMajor + curMinor) / 2f else curMajor) else 0f
-                                val liveWidth = if (curContact > 0f) {
-                                    if (curContact <= 5.0f) (curContact * 5f).coerceIn(14f, 32f) else curContact.coerceIn(12f, 44f)
-                                } else activeInkWidth
-                                template.copy(strokeWidth = liveWidth)
+                                template
                             }
                             boardStage?.setLiveInk(liveInk)
                         }
@@ -2116,6 +2120,7 @@ fun CanvasScreen(
                         var strokeHit = false
                         var resizeStrokeId: String? = null
                         var resizeHandle: ShapeHandleHit? = null
+                        var resizeInitialBounds: Rect? = null
                         var activeWebInteractId: String? = null
                         var webGestureDownTime = 0L
                         var groupResizeHandle: ShapeHandle? = null
@@ -2229,8 +2234,9 @@ fun CanvasScreen(
                                     viewModel.state.value.strokes.filter { it.id in state.selectedStrokeIds }
                                 } else emptyList()
                                 val isLockedSelection = selectedStrokes.isNotEmpty() && selectedStrokes.all { it.stickerKind.contains(":locked") }
+                                val isMultiSelection = selectedStrokes.size > 1
                                 val groupHit = if (selectedStrokes.isNotEmpty() && !isLockedSelection) {
-                                    hitSelectionBoundsHandle(selectedStrokes, downWorld, handleSlop)
+                                    hitSelectionBoundsHandle(selectedStrokes, downWorld, 18f / canvasScale.coerceAtLeast(0.001f))
                                 } else null
                                 val headerH = (44f * context.resources.displayMetrics.density) / canvasScale.coerceAtLeast(0.001f)
 
@@ -2262,14 +2268,17 @@ fun CanvasScreen(
                                     viewModel.beginSelectionScale()
                                     selectionToolbarDismissed = true
                                 } else {
-                                    val selectedHandle = if (!isLockedSelection) {
+                                    val selectedHandle = if (!isLockedSelection && !isMultiSelection) {
                                         selectedStrokes.firstNotNullOfOrNull { stroke ->
-                                            hitShapeHandle(stroke, downWorld, handleSlop)?.let { stroke.id to it }
+                                            val slop = if (isMindMapNode(stroke)) 18f / canvasScale.coerceAtLeast(0.001f) else handleSlop
+                                            hitShapeHandle(stroke, downWorld, slop)?.let { stroke.id to it }
                                         }
                                     } else null
                                     if (selectedHandle != null) {
                                         resizeStrokeId = selectedHandle.first
                                         resizeHandle = selectedHandle.second
+                                        val targetStroke = selectedStrokes.first { it.id == selectedHandle.first }
+                                        resizeInitialBounds = targetStroke.bounds
                                         selectionToolbarDismissed = true
                                     } else {
                                         val isMultiSelection = selectedStrokes.size > 1
@@ -2336,14 +2345,18 @@ fun CanvasScreen(
                                     val moveSlop = 24f / canvasScale.coerceAtLeast(0.001f)
                                     val selectedStrokes = viewModel.state.value.strokes.filter { it.id in state.selectedStrokeIds }
                                     val isLocked = selectedStrokes.isNotEmpty() && selectedStrokes.all { it.stickerKind.contains(":locked") }
-                                    val selectedHandle = if (!isLocked) {
+                                    val isMultiSelection = selectedStrokes.size > 1
+                                    val selectedHandle = if (!isLocked && !isMultiSelection) {
                                         selectedStrokes.firstNotNullOfOrNull { stroke ->
-                                            hitShapeHandle(stroke, downWorld, handleSlop)?.let { stroke.id to it }
+                                            val slop = if (isMindMapNode(stroke)) 18f / canvasScale.coerceAtLeast(0.001f) else handleSlop
+                                            hitShapeHandle(stroke, downWorld, slop)?.let { stroke.id to it }
                                         }
                                     } else null
                                     if (selectedHandle != null) {
                                         resizeStrokeId = selectedHandle.first
                                         resizeHandle = selectedHandle.second
+                                        val targetStroke = selectedStrokes.first { it.id == selectedHandle.first }
+                                        resizeInitialBounds = targetStroke.bounds
                                         selectionToolbarDismissed = true
                                     } else {
                                         val selectedWeb = selectedStrokes.singleOrNull { it.strokeType == StrokeType.WEB_EMBED || it.strokeType == StrokeType.VIDEO }
@@ -2371,15 +2384,17 @@ fun CanvasScreen(
                                                 lassoPoints = listOf(downWorld)
                                             }
                                         } else {
-                                            val hitSelected = selectedStrokes.isNotEmpty() && selectedStrokes.any { stroke ->
+                                            val hitInsideLasso = lassoSelectionPath != null && LassoCutEngine.pointInPolygon(downWorld, lassoSelectionPath!!)
+                                            val hitSelected = hitInsideLasso || (selectedStrokes.isNotEmpty() && selectedStrokes.any { stroke ->
                                                 val b = strokeSelectionBounds(stroke)
                                                 downWorld.x >= b.left - moveSlop && downWorld.x <= b.right + moveSlop &&
                                                 downWorld.y >= b.top - moveSlop && downWorld.y <= b.bottom + moveSlop
-                                            }
+                                            })
                                             if (hitSelected) {
                                                 if (!isLocked) isDraggingSelection = true
                                             } else {
                                                 viewModel.clearSelection()
+                                                lassoSelectionPath = null
                                                 lassoPoints = listOf(downWorld)
                                             }
                                         }
@@ -2480,9 +2495,9 @@ fun CanvasScreen(
                                     if (!erasing && writingNow && !penCommittedForPalm) {
                                         if (inkPoints.size >= 2 && inkTemplate != null) {
                                             val finishedWidth = if (stylusDraw) {
-                                                stylusPressureWidth(state.strokeWidth, inkPressures.average().toFloat())
+                                                stylusPressureWidth(activeInkWidth, inkPressures.average().toFloat())
                                             } else {
-                                                state.strokeWidth
+                                                activeInkWidth
                                             }
                                             viewModel.commitStroke(
                                                 inkTemplate.copy(
@@ -2520,15 +2535,28 @@ fun CanvasScreen(
                                             val ptrStylus = change.isStylusPointer()
                                             val ptrMajor = touchContacts.majorPx(change.id)
                                             val ptrMinor = touchContacts.minorPx(change.id)
+                                            val ptrSize = touchContacts.size(change.id)
+                                            val ptrHasContact = (ptrMajor > 0.1f || ptrSize > 0f)
                                             val ptrNib = isPenNibContact(
                                                 isEraser = false,
                                                 isStylus = ptrStylus,
                                                 majorPx = ptrMajor,
                                                 minorPx = ptrMinor,
-                                                xdpi = xdpi
+                                                xdpi = xdpi,
+                                                size = ptrSize
                                             )
-                                            val ptrColor = if (ptrNib) state.selectedColor else state.secondaryColor
-                                            val ptrWidth = if (ptrNib) state.strokeWidth else secondaryStrokeWidth
+                                            val ptrSecondary = if (ptrHasContact) {
+                                                if (state.useSecondaryPenColor) ptrNib else !ptrNib
+                                            } else {
+                                                state.useSecondaryPenColor
+                                            }
+                                            val ptrColor = if (!ptrSecondary) state.selectedColor else state.secondaryColor
+                                            val ptrWidth = if (!ptrSecondary) {
+                                                state.strokeWidth
+                                            } else {
+                                                if (state.secondaryStrokeWidth > 0f) state.secondaryStrokeWidth else 12f
+                                            }
+                                            val ptrTool = if (!ptrSecondary) latestState.inkTool else latestState.secondaryInkTool
                                             val ptrPressure = if (ptrStylus) stylusPressure(change.pressure) else change.inkPressure()
                                             val ptrWorld = CanvasTransform.screenToWorld(
                                                 screenPoint = change.position,
@@ -2540,13 +2568,40 @@ fun CanvasScreen(
                                                 isStylus = ptrStylus,
                                                 color = ptrColor,
                                                 baseWidth = ptrWidth,
-                                                strokeType = activeTool.toStrokeType(),
-                                                isHighlighter = activeTool == WhiteboardTool.HIGHLIGHTER,
+                                                strokeType = ptrTool.toStrokeType(),
+                                                isHighlighter = ptrTool == WhiteboardTool.HIGHLIGHTER,
+                                                tipResolved = ptrHasContact,
                                                 initialWorld = ptrWorld,
                                                 initialPressure = ptrPressure
                                             )
                                             activeTracks[change.id.value] = track
                                         } else {
+                                            if (!track.tipResolved && track.points.size <= 5) {
+                                                val curMajor = touchContacts.majorPx(change.id)
+                                                val curMinor = touchContacts.minorPx(change.id)
+                                                val curSize = touchContacts.size(change.id)
+                                                if (curMajor > 0.1f || curSize > 0f) {
+                                                    val curNib = isPenNibContact(
+                                                        isEraser = false,
+                                                        isStylus = track.isStylus,
+                                                        majorPx = curMajor,
+                                                        minorPx = curMinor,
+                                                        xdpi = xdpi,
+                                                        size = curSize
+                                                    )
+                                                    val curSecondary = if (latestState.useSecondaryPenColor) curNib else !curNib
+                                                    track.color = if (!curSecondary) latestState.selectedColor else latestState.secondaryColor
+                                                    track.baseWidth = if (!curSecondary) {
+                                                        latestState.strokeWidth
+                                                    } else {
+                                                        if (latestState.secondaryStrokeWidth > 0f) latestState.secondaryStrokeWidth else 12f
+                                                    }
+                                                    val curTool = if (!curSecondary) latestState.inkTool else latestState.secondaryInkTool
+                                                    track.strokeType = curTool.toStrokeType()
+                                                    track.isHighlighter = curTool == WhiteboardTool.HIGHLIGHTER
+                                                    track.tipResolved = true
+                                                }
+                                            }
                                             val pressure = if (track.isStylus) stylusPressure(change.pressure) else change.inkPressure()
                                             if (track.isStylus) {
                                                 change.historical.forEach { sample ->
@@ -2686,9 +2741,9 @@ fun CanvasScreen(
                                                     replaceMathTool(updated)
                                                     val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
                                                     val text = if (tool.kind == MathToolKind.RULER) {
-                                                        "${formatCentimetres(updated.span, pxPerCm)} ÔÇó $deg┬░"
+                                                        "${formatCentimetres(updated.span, pxPerCm)} \u2022 $deg\u00B0"
                                                     } else {
-                                                        "$deg┬░"
+                                                        "$deg\u00B0"
                                                     }
                                                     mathReadout = text to change.position + Offset(0f, -38f)
                                                 }
@@ -2808,9 +2863,51 @@ fun CanvasScreen(
                                         )
                                     } else if (groupResizeHandle != null && groupResizeInitialBounds != null) {
                                         viewModel.scaleSelectedStrokes(groupResizeInitialBounds!!, groupResizeHandle!!, curWorld)
+                                        val cur = viewModel.state.value
+                                        boardStage?.syncPage(
+                                            strokes = cur.strokes,
+                                            background = cur.canvasBackground,
+                                            showGrid = cur.showGrid,
+                                            dark = cur.isDarkCanvas,
+                                            scale = cur.scale,
+                                            offsetX = cur.offsetX,
+                                            offsetY = cur.offsetY,
+                                            selected = cur.selectedStrokeIds,
+                                            customBackgroundUri = cur.pageCustomBackgroundUris.getOrElse(cur.pageIndex) { "" },
+                                            pageIndex = cur.pageIndex
+                                        )
+                                    } else if (resizeStrokeId != null && resizeHandle != null && resizeInitialBounds != null) {
+                                        viewModel.beginSelectionMove()
+                                        viewModel.resizeStrokeWithInitialBounds(resizeStrokeId, resizeHandle, curWorld, resizeInitialBounds!!)
+                                        val cur = viewModel.state.value
+                                        boardStage?.syncPage(
+                                            strokes = cur.strokes,
+                                            background = cur.canvasBackground,
+                                            showGrid = cur.showGrid,
+                                            dark = cur.isDarkCanvas,
+                                            scale = cur.scale,
+                                            offsetX = cur.offsetX,
+                                            offsetY = cur.offsetY,
+                                            selected = cur.selectedStrokeIds,
+                                            customBackgroundUri = cur.pageCustomBackgroundUris.getOrElse(cur.pageIndex) { "" },
+                                            pageIndex = cur.pageIndex
+                                        )
                                     } else if (resizeStrokeId != null && resizeHandle != null) {
                                         viewModel.beginSelectionMove()
                                         viewModel.resizeStroke(resizeStrokeId, resizeHandle, curWorld)
+                                        val cur = viewModel.state.value
+                                        boardStage?.syncPage(
+                                            strokes = cur.strokes,
+                                            background = cur.canvasBackground,
+                                            showGrid = cur.showGrid,
+                                            dark = cur.isDarkCanvas,
+                                            scale = cur.scale,
+                                            offsetX = cur.offsetX,
+                                            offsetY = cur.offsetY,
+                                            selected = cur.selectedStrokeIds,
+                                            customBackgroundUri = cur.pageCustomBackgroundUris.getOrElse(cur.pageIndex) { "" },
+                                            pageIndex = cur.pageIndex
+                                        )
                                     } else if (activeTool == WhiteboardTool.SELECT && selectingBox) {
                                         boardStage?.setMarquee(downWorld, curWorld)
                                     } else if ((activeTool == WhiteboardTool.SELECT || activeTool == WhiteboardTool.LASSO) && isDraggingSelection) {
@@ -2822,6 +2919,23 @@ fun CanvasScreen(
                                         val delta = Offset(curWorld.x - prevWorld.x, curWorld.y - prevWorld.y)
                                         viewModel.beginSelectionMove()
                                         viewModel.moveSelectedStrokes(delta)
+                                        if (lassoSelectionPath != null) {
+                                            lassoSelectionPath = lassoSelectionPath!!.map { it + delta }
+                                        }
+                                        val cur = viewModel.state.value
+                                        boardStage?.syncPage(
+                                            strokes = cur.strokes,
+                                            background = cur.canvasBackground,
+                                            showGrid = cur.showGrid,
+                                            dark = cur.isDarkCanvas,
+                                            scale = cur.scale,
+                                            offsetX = cur.offsetX,
+                                            offsetY = cur.offsetY,
+                                            selected = cur.selectedStrokeIds,
+                                            customBackgroundUri = cur.pageCustomBackgroundUris.getOrElse(cur.pageIndex) { "" },
+                                            pageIndex = cur.pageIndex,
+                                            hasLassoSelection = lassoSelectionPath != null
+                                        )
                                     } else if (activeTool == WhiteboardTool.LASER) {
                                         viewModel.addLaserPoint(curWorld)
                                     } else if (activeTool == WhiteboardTool.LASSO && !isDraggingSelection && resizeStrokeId == null) {
@@ -3125,7 +3239,7 @@ fun CanvasScreen(
                                 val leftBaseWorld = CanvasTransform.screenToWorld(leftBaseScreen, canvasScale, offset)
                                 when (mathGesture.zone) {
                                     MathToolZone.ANGLE_MODE_1 -> {
-                                        // Left Angle: from Left baseline (180┬░) to arm
+                                        // Left Angle: from Left baseline (180°) to arm
                                         val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
                                         viewModel.commitStroke(straightStroke(centerWorld, leftBaseWorld, state.selectedColor, state.strokeWidth))
                                         viewModel.commitStroke(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
@@ -3149,12 +3263,17 @@ fun CanvasScreen(
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
                                         val labelScreen = tool.center + midD * (arcR + 32f)
                                         viewModel.commitStroke(
-                                            measurementLabel("${leftAngleDeg.roundToInt()}┬░", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${leftAngleDeg.roundToInt()}\u00B0", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
-                                        Toast.makeText(context, "Left Angle ${leftAngleDeg.roundToInt()}┬░ drawn", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Left Angle ${leftAngleDeg.roundToInt()}\u00B0 drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     MathToolZone.ANGLE_MODE_ARC_LEFT -> {
-                                        // Left Arc: circular arc only from Left baseline (180┬░) down to arm
+                                        // Left Arc: circular arc only from Left baseline (180°) down to arm
+                                        viewModel.cancelCurrentStroke()
+                                        liveInk.stroke = null
+                                        boardStage?.setLiveInk(null)
+                                        rulerLivePreview = null
+
                                         val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
                                         val arcScreenPoints = mutableListOf<Offset>()
                                         val steps = (leftAngleDeg / 2.5f).roundToInt().coerceAtLeast(8)
@@ -3171,16 +3290,15 @@ fun CanvasScreen(
                                                 state.strokeWidth
                                             )
                                         )
-                                        val midRad = Math.toRadians((180.0 - leftAngleDeg / 2.0)).toFloat()
-                                        val midD = dir * cos(midRad) - perp * sin(midRad)
-                                        val labelScreen = tool.center + midD * (tool.span + 32f)
-                                        viewModel.commitStroke(
-                                            measurementLabel("${leftAngleDeg.roundToInt()}┬░", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
-                                        )
-                                        Toast.makeText(context, "Left Arc (${leftAngleDeg.roundToInt()}┬░) drawn", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Left Arc (${leftAngleDeg.roundToInt()}\u00B0) drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     MathToolZone.ANGLE_MODE_ARC -> {
-                                        // Right Arc: circular arc only from Right baseline (0┬░) up to arm
+                                        // Right Arc: circular arc only from Right baseline (0°) up to arm
+                                        viewModel.cancelCurrentStroke()
+                                        liveInk.stroke = null
+                                        boardStage?.setLiveInk(null)
+                                        rulerLivePreview = null
+
                                         val arcScreenPoints = mutableListOf<Offset>()
                                         val steps = (pDeg / 2.5f).roundToInt().coerceAtLeast(8)
                                         for (i in 0..steps) {
@@ -3196,16 +3314,10 @@ fun CanvasScreen(
                                                 state.strokeWidth
                                             )
                                         )
-                                        val midRad = Math.toRadians((pDeg / 2f).toDouble()).toFloat()
-                                        val midD = dir * cos(midRad) - perp * sin(midRad)
-                                        val labelScreen = tool.center + midD * (tool.span + 32f)
-                                        viewModel.commitStroke(
-                                            measurementLabel("${pDeg.roundToInt()}┬░", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
-                                        )
-                                        Toast.makeText(context, "Right Arc (${pDeg.roundToInt()}┬░) drawn", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Right Arc (${pDeg.roundToInt()}\u00B0) drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     MathToolZone.ANGLE_MODE_2 -> {
-                                        // Right Angle: from Right baseline (0┬░) to arm
+                                        // Right Angle: from Right baseline (0°) to arm
                                         viewModel.commitStroke(straightStroke(centerWorld, rightBaseWorld, state.selectedColor, state.strokeWidth))
                                         viewModel.commitStroke(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
                                         val arcScreenPoints = mutableListOf<Offset>()
@@ -3228,9 +3340,9 @@ fun CanvasScreen(
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
                                         val labelScreen = tool.center + midD * (arcR + 32f)
                                         viewModel.commitStroke(
-                                            measurementLabel("${pDeg.roundToInt()}┬░", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                            measurementLabel("${pDeg.roundToInt()}\u00B0", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
                                         )
-                                        Toast.makeText(context, "Right Angle ${pDeg.roundToInt()}┬░ drawn", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Right Angle ${pDeg.roundToInt()}\u00B0 drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     else -> Unit
                                 }
@@ -3280,13 +3392,17 @@ fun CanvasScreen(
                                     viewModel.endSelectionMove()
                                 } else if (lassoPoints.size >= 3) {
                                     viewModel.lassoSelect(lassoPoints)
+                                    val curSelected = viewModel.state.value.selectedStrokeIds
+                                    lassoSelectionPath = if (curSelected.isNotEmpty()) lassoPoints else null
                                 } else if (resizeStrokeId == null && moved < 10f) {
                                     viewModel.clearSelection()
+                                    lassoSelectionPath = null
                                 }
                                 lassoPoints = emptyList()
                                 isDraggingSelection = false
                                 resizeStrokeId = null
                                 resizeHandle = null
+                                resizeInitialBounds = null
                                 activeWebInteractId = null
                                 if (state.selectedStrokeIds.isNotEmpty()) {
                                     selectionToolbarDismissed = false
@@ -3387,7 +3503,8 @@ fun CanvasScreen(
                         offsetY = page.offsetY,
                         selected = page.selectedStrokeIds,
                         customBackgroundUri = page.pageCustomBackgroundUris.getOrElse(page.pageIndex) { "" },
-                        pageIndex = page.pageIndex
+                        pageIndex = page.pageIndex,
+                        hasLassoSelection = lassoSelectionPath != null
                     )
                     stage.currentStroke = page.currentStroke
                     val document = page.document
@@ -3488,8 +3605,9 @@ fun CanvasScreen(
                         drawCircle(Color(0xFFFF2A2A), radius, center)
                         drawCircle(Color.White, radius * 0.45f, center)
                     }
-                    if (lassoPoints.size >= 2) {
-                        val lassoPath = lassoPoints.toSmoothedPath()
+                    val activeLasso = if (lassoPoints.size >= 2) lassoPoints else if (state.selectedStrokeIds.isNotEmpty()) lassoSelectionPath else null
+                    if (activeLasso != null && activeLasso.size >= 2) {
+                        val lassoPath = activeLasso.toSmoothedPath()
                         drawPath(
                             path = lassoPath,
                             color = Color(0x206366F1)
@@ -5995,6 +6113,20 @@ fun CanvasScreen(
             onConfirm = {
                 editingNodeStrokeId?.let { id ->
                     viewModel.updateStrokeText(id, editingNodeText)
+                    val latest = viewModel.state.value
+                    boardStage?.syncPage(
+                        strokes = latest.strokes,
+                        background = latest.canvasBackground,
+                        showGrid = latest.showGrid,
+                        dark = latest.isDarkCanvas,
+                        scale = latest.scale,
+                        offsetX = latest.offsetX,
+                        offsetY = latest.offsetY,
+                        selected = latest.selectedStrokeIds,
+                        customBackgroundUri = latest.pageCustomBackgroundUris.getOrElse(latest.pageIndex) { "" },
+                        pageIndex = latest.pageIndex
+                    )
+                    boardStage?.invalidate()
                 }
                 editingNodeStrokeId = null
             }

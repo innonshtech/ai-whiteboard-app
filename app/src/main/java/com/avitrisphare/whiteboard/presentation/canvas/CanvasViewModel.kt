@@ -128,8 +128,6 @@ val DEFAULT_TOOLBAR_TOOLS: List<String> = listOf(
 val ALL_CUSTOMIZABLE_TOOLS: List<String> = listOf(
     "select",
     "pen",
-    "smart_write",
-    "shape_rec",
     "flowchart",
     "stickers",
     "shapes",
@@ -1698,7 +1696,52 @@ class CanvasViewModel @Inject constructor(
         val current = _state.value.selectedStrokeIds
         val isCurrentMindmap = current.isNotEmpty() && strokes.any { it.id in current && (isMindMapNode(it) || it.strokeType == StrokeType.CONNECTOR) }
         val finalSelection = if (addToExisting && isCurrentMindmap) current + newConnected else newConnected
-        _state.update { it.copy(selectedStrokeIds = finalSelection) }
+
+        val vpW = if (viewportWidth > 1f) viewportWidth else 1920f
+        val vpH = if (viewportHeight > 1f) viewportHeight else 1080f
+        val selectedNodes = strokes.filter { it.id in finalSelection && isMindMapNode(it) }
+
+        if (selectedNodes.isNotEmpty()) {
+            val minX = selectedNodes.minOf { it.bounds.left }
+            val maxX = selectedNodes.maxOf { it.bounds.right }
+            val minY = selectedNodes.minOf { it.bounds.top }
+            val maxY = selectedNodes.maxOf { it.bounds.bottom }
+
+            val selWidth = (maxX - minX).coerceAtLeast(100f)
+            val selHeight = (maxY - minY).coerceAtLeast(100f)
+            val availW = (vpW - 100f).coerceAtLeast(200f)
+            val availH = (vpH - 180f).coerceAtLeast(200f)
+
+            var targetScale = _state.value.scale
+            if (selWidth * targetScale > availW || selHeight * targetScale > availH) {
+                targetScale = minOf(availW / selWidth, availH / selHeight).coerceIn(0.2f, 1.0f)
+            }
+
+            val selCenterWorldX = (minX + maxX) / 2f
+            val selCenterWorldY = (minY + maxY) / 2f
+
+            val adjOffsetX = (vpW / 2f) - selCenterWorldX * targetScale
+            val adjOffsetY = (vpH / 2f) - selCenterWorldY * targetScale
+
+            _state.update { it.copy(selectedStrokeIds = finalSelection, scale = targetScale, offsetX = adjOffsetX, offsetY = adjOffsetY) }
+        } else {
+            _state.update { it.copy(selectedStrokeIds = finalSelection) }
+        }
+    }
+
+    fun getScreenWorldBounds(): Rect {
+        val vpW = if (viewportWidth > 1f) viewportWidth else 1920f
+        val vpH = if (viewportHeight > 1f) viewportHeight else 1080f
+        val doc = _state.value.document
+        if (doc != null && doc.pageWidth > 10f && doc.pageHeight > 10f) {
+            return Rect(16f, 16f, doc.pageWidth - 16f, doc.pageHeight - 16f)
+        }
+        val safeScale = _state.value.scale.coerceAtLeast(0.01f)
+        val left = (-_state.value.offsetX / safeScale).coerceAtLeast(0f) + 16f
+        val top = (-_state.value.offsetY / safeScale).coerceAtLeast(0f) + 16f
+        val right = ((vpW - _state.value.offsetX) / safeScale) - 16f
+        val bottom = ((vpH - _state.value.offsetY) / safeScale) - 16f
+        return Rect(left, top, maxOf(left + 200f, right), maxOf(top + 200f, bottom))
     }
 
     fun applyMindmapLayout(nodeId: String, isHorizontal: Boolean) {
@@ -1762,15 +1805,31 @@ class CanvasViewModel @Inject constructor(
     fun moveSelectedStrokes(delta: Offset) {
         if (delta == Offset.Zero || _state.value.selectedStrokeIds.isEmpty()) return
         val selectedIds = _state.value.selectedStrokeIds
+        val boundary = getScreenWorldBounds()
         _state.update { s ->
             val selectedNodes = s.strokes.filter { it.id in selectedIds && isMindMapNode(it) }
+            val otherNodes = s.strokes.filter { it.id !in selectedIds && isMindMapNode(it) }
+
+            val safeDelta = if (selectedNodes.isNotEmpty()) {
+                MindmapEngine.clampMovementDelta(
+                    movingBounds = selectedNodes.map { it.bounds },
+                    otherBounds = otherNodes.map { it.bounds },
+                    delta = delta,
+                    boundary = boundary
+                )
+            } else {
+                delta
+            }
+
+            if (safeDelta == Offset.Zero) return@update s
+
             val movedStrokes = s.strokes.map { stroke ->
                 val shouldMove = (stroke.id in selectedIds ||
                     (stroke.linkToId.isNotEmpty() && stroke.linkToId in selectedIds && stroke.strokeType != StrokeType.CONNECTOR) ||
                     (stroke.strokeType in HANDWRITING_TYPES && selectedNodes.any { node -> node.bounds.contains(stroke.bounds.center) })) &&
                     !stroke.stickerKind.contains(":locked")
                 if (shouldMove) {
-                    val newPoints = stroke.points.map { Offset(it.x + delta.x, it.y + delta.y) }
+                    val newPoints = stroke.points.map { Offset(it.x + safeDelta.x, it.y + safeDelta.y) }
                     stroke.copy(points = newPoints)
                 } else {
                     stroke
@@ -2015,6 +2074,7 @@ class CanvasViewModel @Inject constructor(
 
     fun updateStrokeText(id: String, newText: String) {
         saveToUndoStack()
+        val boundary = getScreenWorldBounds()
         _state.update { s ->
             val cleaned = s.strokes.filterNot { it.linkToId == id && it.strokeType == StrokeType.TEXT }
             val updated = cleaned.map { stroke ->
@@ -2026,19 +2086,20 @@ class CanvasViewModel @Inject constructor(
                     val currW = stroke.bounds.width
                     val currH = stroke.bounds.height
 
-                    val minNeededW = if (maxLineLen > 0) (maxLineLen * 11.5f + 40f) else currW
-                    val minNeededH = (lineCount * 26f + 28f)
+                    // Only auto-increase when text length actually exceeds current box width/height
+                    val neededW = maxLineLen * 10f + 32f
+                    val neededH = lineCount * 24f + 24f
 
-                    val newW = maxOf(currW, minNeededW).coerceIn(160f, 900f)
-                    val newH = maxOf(currH, minNeededH).coerceIn(64f, 700f)
+                    val targetW = if (neededW > currW) neededW.coerceIn(currW, 800f) else currW
+                    val targetH = if (neededH > currH) neededH.coerceIn(currH, 600f) else currH
 
-                    val newPoints = if (stroke.points.size >= 2 && (newW > currW || newH > currH)) {
+                    val newPoints = if (stroke.points.size >= 2 && (targetW > currW || targetH > currH)) {
                         val cx = stroke.bounds.center.x
                         val cy = stroke.bounds.center.y
-                        listOf(
-                            Offset(cx - newW / 2f, cy - newH / 2f),
-                            Offset(cx + newW / 2f, cy + newH / 2f)
-                        )
+                        val proposedRect = Rect(cx - targetW / 2f, cy - targetH / 2f, cx + targetW / 2f, cy + targetH / 2f)
+                        val otherBoxes = cleaned.filter { it.id != id && isMindMapNode(it) }.map { it.bounds }
+                        val safeRect = MindmapEngine.clampResizedBox(stroke.bounds, proposedRect, otherBoxes, boundary)
+                        listOf(safeRect.topLeft, safeRect.bottomRight)
                     } else {
                         stroke.points
                     }
@@ -2094,6 +2155,163 @@ class CanvasViewModel @Inject constructor(
         scheduleSave()
     }
 
+    fun resizeStrokeWithInitialBounds(id: String, hit: ShapeHandleHit, point: Offset, initialBounds: Rect) {
+        val orig = _state.value.strokes.find { it.id == id } ?: return
+        val isParentNode = isMindMapNode(orig)
+        val boundary = getScreenWorldBounds()
+        val otherBoxes = if (isParentNode) {
+            _state.value.strokes.filter { it.id != id && isMindMapNode(it) }.map { it.bounds }
+        } else emptyList()
+
+        val minW = 60f
+        val minH = 36f
+
+        var left = initialBounds.left
+        var top = initialBounds.top
+        var right = initialBounds.right
+        var bottom = initialBounds.bottom
+
+        when (hit.kind) {
+            ShapeHandle.BOTTOM_RIGHT -> {
+                val desiredW = (point.x - initialBounds.left).coerceAtLeast(minW)
+                val desiredH = (point.y - initialBounds.top).coerceAtLeast(minH)
+                var candRight = minOf(initialBounds.left + desiredW, boundary.right)
+                var candBottom = minOf(initialBounds.top + desiredH, boundary.bottom)
+
+                for (o in otherBoxes) {
+                    val xOverlap = (left < o.right && candRight > o.left)
+                    if (xOverlap && initialBounds.bottom <= o.top) {
+                        candBottom = minOf(candBottom, (o.top - 8f).coerceAtLeast(top + minH))
+                    }
+                    val yOverlap = (top < o.bottom && candBottom > o.top)
+                    if (yOverlap && initialBounds.right <= o.left) {
+                        candRight = minOf(candRight, (o.left - 8f).coerceAtLeast(left + minW))
+                    }
+                }
+                right = candRight
+                bottom = candBottom
+            }
+            ShapeHandle.TOP_RIGHT -> {
+                val desiredW = (point.x - initialBounds.left).coerceAtLeast(minW)
+                val desiredH = (initialBounds.bottom - point.y).coerceAtLeast(minH)
+                var candRight = minOf(initialBounds.left + desiredW, boundary.right)
+                var candTop = maxOf(initialBounds.bottom - desiredH, boundary.top)
+
+                for (o in otherBoxes) {
+                    val xOverlap = (left < o.right && candRight > o.left)
+                    if (xOverlap && initialBounds.top >= o.bottom) {
+                        candTop = maxOf(candTop, (o.bottom + 8f).coerceAtMost(bottom - minH))
+                    }
+                    val yOverlap = (candTop < o.bottom && bottom > o.top)
+                    if (yOverlap && initialBounds.right <= o.left) {
+                        candRight = minOf(candRight, (o.left - 8f).coerceAtLeast(left + minW))
+                    }
+                }
+                right = candRight
+                top = candTop
+            }
+            ShapeHandle.BOTTOM_LEFT -> {
+                val desiredW = (initialBounds.right - point.x).coerceAtLeast(minW)
+                val desiredH = (point.y - initialBounds.top).coerceAtLeast(minH)
+                var candLeft = maxOf(initialBounds.right - desiredW, boundary.left)
+                var candBottom = minOf(initialBounds.top + desiredH, boundary.bottom)
+
+                for (o in otherBoxes) {
+                    val xOverlap = (candLeft < o.right && right > o.left)
+                    if (xOverlap && initialBounds.bottom <= o.top) {
+                        candBottom = minOf(candBottom, (o.top - 8f).coerceAtLeast(top + minH))
+                    }
+                    val yOverlap = (top < o.bottom && candBottom > o.top)
+                    if (yOverlap && initialBounds.left >= o.right) {
+                        candLeft = maxOf(candLeft, (o.right + 8f).coerceAtMost(right - minW))
+                    }
+                }
+                left = candLeft
+                bottom = candBottom
+            }
+            ShapeHandle.TOP_LEFT -> {
+                val desiredW = (initialBounds.right - point.x).coerceAtLeast(minW)
+                val desiredH = (initialBounds.bottom - point.y).coerceAtLeast(minH)
+                var candLeft = maxOf(initialBounds.right - desiredW, boundary.left)
+                var candTop = maxOf(initialBounds.bottom - desiredH, boundary.top)
+
+                for (o in otherBoxes) {
+                    val xOverlap = (candLeft < o.right && right > o.left)
+                    if (xOverlap && initialBounds.top >= o.bottom) {
+                        candTop = maxOf(candTop, (o.bottom + 8f).coerceAtMost(bottom - minH))
+                    }
+                    val yOverlap = (candTop < o.bottom && bottom > o.top)
+                    if (yOverlap && initialBounds.left >= o.right) {
+                        candLeft = maxOf(candLeft, (o.right + 8f).coerceAtMost(right - minW))
+                    }
+                }
+                left = candLeft
+                top = candTop
+            }
+            else -> {
+                resizeStroke(id, hit, point)
+                return
+            }
+        }
+
+        val candRect = Rect(left, top, right, bottom)
+        if (otherBoxes.any { it.overlaps(candRect) }) {
+            return
+        }
+
+        val resizedTarget = orig.copy(points = listOf(candRect.topLeft, candRect.bottomRight))
+        _state.update { s ->
+            val updated = s.strokes.map { stroke ->
+                if (stroke.id == id) resizedTarget else stroke
+            }
+            val oldB = initialBounds
+            val newB = candRect
+            val sx = if (oldB.width > 0f) newB.width / oldB.width else 1f
+            val sy = if (oldB.height > 0f) newB.height / oldB.height else 1f
+            val avgS = (sx + sy) / 2f
+
+            val fullyScaled = updated.map { stroke ->
+                if (stroke.linkToId == id && stroke.strokeType != StrokeType.CONNECTOR) {
+                    val scaledPts = stroke.points.map { pt ->
+                        Offset(newB.left + (pt.x - oldB.left) * sx, newB.top + (pt.y - oldB.top) * sy)
+                    }
+                    val clampedPts = if (stroke.strokeType == StrokeType.IMAGE && scaledPts.size >= 2) {
+                        val pad = 4f
+                        val p1 = scaledPts.first()
+                        val p2 = scaledPts.last()
+                        val clLeft = minOf(p1.x, p2.x).coerceAtLeast(newB.left + pad)
+                        val clTop = minOf(p1.y, p2.y).coerceAtLeast(newB.top + pad)
+                        val clRight = maxOf(p1.x, p2.x).coerceAtMost(newB.right - pad).coerceAtLeast(clLeft + 16f)
+                        val clBottom = maxOf(p1.y, p2.y).coerceAtMost(newB.bottom - pad).coerceAtLeast(clTop + 16f)
+                        listOf(Offset(clLeft, clTop), Offset(clRight, clBottom))
+                    } else scaledPts
+                    val newW = if (stroke.strokeType == StrokeType.IMAGE) stroke.strokeWidth else (stroke.strokeWidth * avgS).coerceIn(1f, 60f)
+                    stroke.copy(points = clampedPts, strokeWidth = newW)
+                } else stroke
+            }
+
+            val strokeMap = fullyScaled.associateBy { it.id }
+            val withConnectors = fullyScaled.map { stroke ->
+                if (stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId == id || stroke.linkToId == id)) {
+                    val from = strokeMap[stroke.linkFromId]
+                    val to = strokeMap[stroke.linkToId]
+                    if (from != null && to != null) {
+                        val (p1, p2) = if (stroke.stickerKind == "straight") {
+                            MindmapEngine.calculateStraightAnchors(from.bounds, to.bounds)
+                        } else if (from.stickerKind.startsWith("flow:") || to.stickerKind.startsWith("flow:") || stroke.stickerKind.isEmpty()) {
+                            from.bounds.center to to.bounds.center
+                        } else {
+                            MindmapEngine.calculateAnchors(from.bounds, to.bounds)
+                        }
+                        stroke.copy(points = listOf(p1, p2))
+                    } else stroke
+                } else stroke
+            }
+            s.copy(strokes = withConnectors)
+        }
+        scheduleSave()
+    }
+
     fun resizeStroke(id: String, hit: ShapeHandleHit, point: Offset) {
         _state.update { s ->
             val orig = s.strokes.find { it.id == id }
@@ -2102,6 +2320,14 @@ class CanvasViewModel @Inject constructor(
             val parentNode = if (isLinkedImage) s.strokes.find { it.id == orig?.linkToId } else null
 
             var resizedTarget = if (orig != null) resizeShape(orig, hit, point) else orig
+
+            // If resizing a mind map box, prevent overlap with other mind map boxes and clamp to screen
+            if (isParentNode && orig != null && resizedTarget != null && resizedTarget.points.size >= 2) {
+                val boundary = getScreenWorldBounds()
+                val otherBoxes = s.strokes.filter { it.id != id && isMindMapNode(it) }.map { it.bounds }
+                val clampedRect = MindmapEngine.clampResizedBox(orig.bounds, resizedTarget.bounds, otherBoxes, boundary)
+                resizedTarget = resizedTarget.copy(points = listOf(clampedRect.topLeft, clampedRect.bottomRight))
+            }
 
             // If resizing an image inside a parent box, clamp strictly within parent bounds
             if (isLinkedImage && parentNode != null && resizedTarget != null && resizedTarget.points.size >= 2) {
@@ -2827,9 +3053,11 @@ class CanvasViewModel @Inject constructor(
         saveToUndoStack()
 
         // Position within visible viewport avoiding collision with existing mind maps
+        val boundary = getScreenWorldBounds()
         val effectiveCenter = MindmapEngine.calculateNonOverlappingCenter(
             existingStrokes = _state.value.strokes,
-            requestedCenter = center
+            requestedCenter = center,
+            boundary = boundary
         )
 
         val templateStrokes = MindmapEngine.generateTemplate(kind, effectiveCenter)
