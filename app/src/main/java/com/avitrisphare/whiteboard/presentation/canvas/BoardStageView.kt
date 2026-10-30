@@ -182,7 +182,6 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         val pageChanged = pageIndexChanged || background != this.pageBackground || showGrid != this.showGrid || dark != this.dark || customBgChanged
         val moved = scale != this.scale || offsetX != this.offsetX || offsetY != this.offsetY
 
-        // Fast change check: if stroke list reference and selection reference haven't changed, ink has NOT changed.
         // Prevents redrawing the entire board when modals open/close, pens change, or colors swap!
         val lassoChanged = this.hasLassoSelection != hasLassoSelection
         this.hasLassoSelection = hasLassoSelection
