@@ -39,6 +39,8 @@ app/schemas/
 
 # Documents and reports
 *.pdf
+*.html
+logo/
 
 # Local test screenshots
 board_*.png

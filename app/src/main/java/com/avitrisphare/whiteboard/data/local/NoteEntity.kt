@@ -9,6 +9,7 @@ data class NoteEntity(
     @PrimaryKey
     val id: String,
     val title: String,
+    val subtitle: String = "",
     val createdAt: Long,
     val updatedAt: Long = System.currentTimeMillis(),
     val strokeDataPath: String,

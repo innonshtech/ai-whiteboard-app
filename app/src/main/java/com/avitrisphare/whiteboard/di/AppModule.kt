@@ -37,8 +37,10 @@ object DatabaseModule {
                 NoteDatabase.MIGRATION_1_2, 
                 NoteDatabase.MIGRATION_2_3, 
                 NoteDatabase.MIGRATION_3_4,
-                NoteDatabase.MIGRATION_4_5
+                NoteDatabase.MIGRATION_4_5,
+                NoteDatabase.MIGRATION_5_6
             )
+            .fallbackToDestructiveMigration()
             .addCallback(object : androidx.room.RoomDatabase.Callback() {
                 override fun onOpen(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                     super.onOpen(db)
@@ -56,8 +58,8 @@ object DatabaseModule {
                     val id = java.util.UUID.randomUUID().toString()
                     val now = System.currentTimeMillis()
                     db.execSQL(
-                        "INSERT INTO notes (id, title, createdAt, updatedAt, strokeDataPath, isFavorite, tags, folder, canvasBackground) " +
-                        "VALUES ('$id', 'Welcome to AvitriSphare', $now, $now, '', 0, 'tutorial', '', 'dotted')"
+                        "INSERT INTO notes (id, title, subtitle, createdAt, updatedAt, strokeDataPath, isFavorite, tags, folder, canvasBackground) " +
+                        "VALUES ('$id', 'Welcome to AvitriSphare', '', $now, $now, '', 0, 'tutorial', '', 'dotted')"
                     )
                     
                     // Seed strokes file

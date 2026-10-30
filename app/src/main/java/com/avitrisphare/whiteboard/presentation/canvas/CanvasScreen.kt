@@ -1,5 +1,8 @@
 package com.avitrisphare.whiteboard.presentation.canvas
 
+import androidx.compose.material.icons.filled.Draw
+import androidx.compose.ui.window.DialogProperties
+import com.avitrisphare.whiteboard.core.theme.BrandOrange
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -252,10 +255,11 @@ fun List<Offset>.toSmoothedPath(): Path {
 private class PointerInkTrack(
     val id: Long,
     val isStylus: Boolean,
-    val color: Int,
-    val baseWidth: Float,
-    val strokeType: StrokeType,
-    val isHighlighter: Boolean,
+    var color: Int,
+    var baseWidth: Float,
+    var strokeType: StrokeType,
+    var isHighlighter: Boolean,
+    var tipResolved: Boolean = true,
     initialWorld: Offset,
     initialPressure: Float
 ) {
@@ -1371,6 +1375,7 @@ fun CanvasScreen(
     var imageQuery by remember { mutableStateOf("") }
     var imageSearchTerm by remember { mutableStateOf("") }
     var youtubeQuery by remember { mutableStateOf("") }
+    var youtubeSearchTerm by remember { mutableStateOf("") }
     val composeView = LocalView.current
     val touchContacts = remember(composeView) { TouchContacts(composeView) }
     val xdpi = remember {
@@ -1801,6 +1806,7 @@ fun CanvasScreen(
                     state.secondaryStrokeWidth,
                     state.secondaryInkTool,
                     state.inkTool,
+                    state.useSecondaryPenColor,
                     state.eraserMode,
                     state.eraserSize,
                     state.isToolLocked,
@@ -1896,6 +1902,8 @@ fun CanvasScreen(
                         val isStylusType = rawToolType == MotionEvent.TOOL_TYPE_STYLUS || down.type == PointerType.Stylus
                         val majorPx = touchContacts.majorPx(down.position)
                         val minorPx = touchContacts.minorPx(down.position)
+                        val contactSizePx = touchContacts.size(down.position)
+                        val hasContactData = (majorPx > 0.1f || contactSizePx > 0f)
                         val isPenNib = touchContacts.isPenNib(
                             position = down.position,
                             isEraser = isEraserType,
@@ -1903,40 +1911,32 @@ fun CanvasScreen(
                             xdpi = xdpi
                         )
 
-                        val contactSizePx = if (majorPx > 0f) {
-                            if (minorPx > 0f) (majorPx + minorPx) / 2f else majorPx
+                        val isSecondaryPen = if (hasContactData) {
+                            if (state.useSecondaryPenColor) isPenNib else !isPenNib
                         } else {
-                            0f
+                            state.useSecondaryPenColor
                         }
-                        val secondaryStrokeWidth = if (state.secondaryStrokeWidth > 0f) {
-                            state.secondaryStrokeWidth
-                        } else if (contactSizePx > 0f) {
-                            if (contactSizePx <= 5.0f) {
-                                (contactSizePx * 5f).coerceIn(14f, 32f)
-                            } else {
-                                contactSizePx.coerceIn(12f, 44f)
-                            }
+                        val activeInkColor = if (!isSecondaryPen) state.selectedColor else state.secondaryColor
+                        val activeInkWidth = if (!isSecondaryPen) {
+                            state.strokeWidth
                         } else {
-                            if (isEraserType) 16f else 20f
+                            if (state.secondaryStrokeWidth > 0f) state.secondaryStrokeWidth else 12f
                         }
-
-                        val activeInkColor = if (isPenNib) state.selectedColor else state.secondaryColor
-                        val activeInkWidth = if (isPenNib) state.strokeWidth else secondaryStrokeWidth
-                        android.util.Log.i("AvitriTouch", "DECISION down.id=${down.id.value} pos=${down.position} tool=$rawToolType stylusDraw=$stylusDraw majorPx=$majorPx minorPx=$minorPx xdpi=$xdpi -> isPenNib=$isPenNib (color=${if (isPenNib) "PRIMARY" else "SECONDARY"}, width=$activeInkWidth)")
+                        android.util.Log.i("AvitriTouch", "DECISION down.id=${down.id.value} pos=${down.position} tool=$rawToolType stylusDraw=$stylusDraw majorPx=$majorPx minorPx=$minorPx xdpi=$xdpi -> isPenNib=$isPenNib isSecondary=$isSecondaryPen (color=${if (!isSecondaryPen) "PRIMARY" else "SECONDARY"}, width=$activeInkWidth)")
 
                         val activeTool = if (isPalmEraser) {
                             WhiteboardTool.ERASER
                         } else if (stylusDraw) {
-                            if (isEraserType) {
+                            if (isEraserType && latestState.currentTool == WhiteboardTool.ERASER) {
                                 WhiteboardTool.ERASER
                             } else if (isShapeActive) {
                                 state.currentTool
                             } else {
-                                if (isPenNib) latestState.inkTool else latestState.secondaryInkTool
+                                if (!isSecondaryPen) latestState.inkTool else latestState.secondaryInkTool
                             }
                         } else {
                             if (latestState.currentTool in WRITING_TOOLS) {
-                                if (isPenNib) latestState.inkTool else latestState.secondaryInkTool
+                                if (!isSecondaryPen) latestState.inkTool else latestState.secondaryInkTool
                             } else {
                                 latestState.currentTool
                             }
@@ -1964,6 +1964,7 @@ fun CanvasScreen(
                                 baseWidth = activeInkWidth,
                                 strokeType = activeTool.toStrokeType(),
                                 isHighlighter = activeTool == WhiteboardTool.HIGHLIGHTER,
+                                tipResolved = hasContactData,
                                 initialWorld = downWorld,
                                 initialPressure = downPressure
                             )
@@ -2012,25 +2013,15 @@ fun CanvasScreen(
                                 val safeScale = canvasScale.coerceAtLeast(0.001f)
                                 Offset(last.x + dx / safeScale, last.y + dy / safeScale)
                             }
-                            liveInk.stroke = if (isPenNib) {
-                                if (stylusDraw) {
-                                    template.copy(
-                                        strokeWidth = stylusPressureWidth(
-                                            activeInkWidth,
-                                            inkPressures.lastOrNull() ?: 1f
-                                        )
+                            liveInk.stroke = if (stylusDraw) {
+                                template.copy(
+                                    strokeWidth = stylusPressureWidth(
+                                        activeInkWidth,
+                                        inkPressures.lastOrNull() ?: 1f
                                     )
-                                } else {
-                                    template
-                                }
+                                )
                             } else {
-                                val curMajor = touchContacts.majorPx(down.position)
-                                val curMinor = touchContacts.minorPx(down.position)
-                                val curContact = if (curMajor > 0f) (if (curMinor > 0f) (curMajor + curMinor) / 2f else curMajor) else 0f
-                                val liveWidth = if (curContact > 0f) {
-                                    if (curContact <= 5.0f) (curContact * 5f).coerceIn(14f, 32f) else curContact.coerceIn(12f, 44f)
-                                } else activeInkWidth
-                                template.copy(strokeWidth = liveWidth)
+                                template
                             }
                             boardStage?.setLiveInk(liveInk)
                         }
@@ -2243,7 +2234,7 @@ fun CanvasScreen(
                                 val headerH = 38f / canvasScale.coerceAtLeast(0.001f)
 
                                 fun beginWebOrDrag(hit: com.avitrisphare.whiteboard.domain.model.Stroke) {
-                                    if (hit.strokeType == StrokeType.WEB_EMBED) {
+                                    if (hit.strokeType == StrokeType.WEB_EMBED || hit.strokeType == StrokeType.VIDEO) {
                                         val hb = strokeSelectionBounds(hit)
                                         if (downWorld.y > hb.top + headerH) {
                                             activeWebInteractId = hit.id
@@ -2305,7 +2296,7 @@ fun CanvasScreen(
                                         })
                                         if (hitSelected) {
                                             if (!isLockedSelection) {
-                                                val selectedWeb = selectedStrokes.singleOrNull { it.strokeType == StrokeType.WEB_EMBED }
+                                                val selectedWeb = selectedStrokes.singleOrNull { it.strokeType == StrokeType.WEB_EMBED || it.strokeType == StrokeType.VIDEO }
                                                 if (selectedWeb != null) {
                                                     beginWebOrDrag(selectedWeb)
                                                 } else {
@@ -2361,7 +2352,7 @@ fun CanvasScreen(
                                         resizeInitialBounds = targetStroke.bounds
                                         selectionToolbarDismissed = true
                                     } else {
-                                        val selectedWeb = selectedStrokes.singleOrNull { it.strokeType == StrokeType.WEB_EMBED }
+                                        val selectedWeb = selectedStrokes.singleOrNull { it.strokeType == StrokeType.WEB_EMBED || it.strokeType == StrokeType.VIDEO }
                                         val headerH = 38f / canvasScale.coerceAtLeast(0.001f)
                                         if (selectedWeb != null) {
                                             val b = strokeSelectionBounds(selectedWeb)
@@ -2495,9 +2486,9 @@ fun CanvasScreen(
                                     if (!erasing && writingNow && !penCommittedForPalm) {
                                         if (inkPoints.size >= 2 && inkTemplate != null) {
                                             val finishedWidth = if (stylusDraw) {
-                                                stylusPressureWidth(state.strokeWidth, inkPressures.average().toFloat())
+                                                stylusPressureWidth(activeInkWidth, inkPressures.average().toFloat())
                                             } else {
-                                                state.strokeWidth
+                                                activeInkWidth
                                             }
                                             viewModel.commitStroke(
                                                 inkTemplate.copy(
@@ -2535,15 +2526,28 @@ fun CanvasScreen(
                                             val ptrStylus = change.isStylusPointer()
                                             val ptrMajor = touchContacts.majorPx(change.id)
                                             val ptrMinor = touchContacts.minorPx(change.id)
+                                            val ptrSize = touchContacts.size(change.id)
+                                            val ptrHasContact = (ptrMajor > 0.1f || ptrSize > 0f)
                                             val ptrNib = isPenNibContact(
                                                 isEraser = false,
                                                 isStylus = ptrStylus,
                                                 majorPx = ptrMajor,
                                                 minorPx = ptrMinor,
-                                                xdpi = xdpi
+                                                xdpi = xdpi,
+                                                size = ptrSize
                                             )
-                                            val ptrColor = if (ptrNib) state.selectedColor else state.secondaryColor
-                                            val ptrWidth = if (ptrNib) state.strokeWidth else secondaryStrokeWidth
+                                            val ptrSecondary = if (ptrHasContact) {
+                                                if (state.useSecondaryPenColor) ptrNib else !ptrNib
+                                            } else {
+                                                state.useSecondaryPenColor
+                                            }
+                                            val ptrColor = if (!ptrSecondary) state.selectedColor else state.secondaryColor
+                                            val ptrWidth = if (!ptrSecondary) {
+                                                state.strokeWidth
+                                            } else {
+                                                if (state.secondaryStrokeWidth > 0f) state.secondaryStrokeWidth else 12f
+                                            }
+                                            val ptrTool = if (!ptrSecondary) latestState.inkTool else latestState.secondaryInkTool
                                             val ptrPressure = if (ptrStylus) stylusPressure(change.pressure) else change.inkPressure()
                                             val ptrWorld = CanvasTransform.screenToWorld(
                                                 screenPoint = change.position,
@@ -2555,13 +2559,40 @@ fun CanvasScreen(
                                                 isStylus = ptrStylus,
                                                 color = ptrColor,
                                                 baseWidth = ptrWidth,
-                                                strokeType = activeTool.toStrokeType(),
-                                                isHighlighter = activeTool == WhiteboardTool.HIGHLIGHTER,
+                                                strokeType = ptrTool.toStrokeType(),
+                                                isHighlighter = ptrTool == WhiteboardTool.HIGHLIGHTER,
+                                                tipResolved = ptrHasContact,
                                                 initialWorld = ptrWorld,
                                                 initialPressure = ptrPressure
                                             )
                                             activeTracks[change.id.value] = track
                                         } else {
+                                            if (!track.tipResolved && track.points.size <= 5) {
+                                                val curMajor = touchContacts.majorPx(change.id)
+                                                val curMinor = touchContacts.minorPx(change.id)
+                                                val curSize = touchContacts.size(change.id)
+                                                if (curMajor > 0.1f || curSize > 0f) {
+                                                    val curNib = isPenNibContact(
+                                                        isEraser = false,
+                                                        isStylus = track.isStylus,
+                                                        majorPx = curMajor,
+                                                        minorPx = curMinor,
+                                                        xdpi = xdpi,
+                                                        size = curSize
+                                                    )
+                                                    val curSecondary = if (latestState.useSecondaryPenColor) curNib else !curNib
+                                                    track.color = if (!curSecondary) latestState.selectedColor else latestState.secondaryColor
+                                                    track.baseWidth = if (!curSecondary) {
+                                                        latestState.strokeWidth
+                                                    } else {
+                                                        if (latestState.secondaryStrokeWidth > 0f) latestState.secondaryStrokeWidth else 12f
+                                                    }
+                                                    val curTool = if (!curSecondary) latestState.inkTool else latestState.secondaryInkTool
+                                                    track.strokeType = curTool.toStrokeType()
+                                                    track.isHighlighter = curTool == WhiteboardTool.HIGHLIGHTER
+                                                    track.tipResolved = true
+                                                }
+                                            }
                                             val pressure = if (track.isStylus) stylusPressure(change.pressure) else change.inkPressure()
                                             if (track.isStylus) {
                                                 change.historical.forEach { sample ->
@@ -3733,6 +3764,7 @@ fun CanvasScreen(
             onInsertVideo = { videoPickerLauncher.launch(arrayOf("video/*")) },
             onYouTube = {
                 youtubeQuery = ""
+                youtubeSearchTerm = ""
                 showYouTubeDialog = true
             },
             shadeFromTop = shadeFromTop,
@@ -4560,85 +4592,201 @@ fun CanvasScreen(
         val smartOffer = state.smartWriteOffer
         LaunchedEffect(smartOffer) {
             if (smartOffer != null) {
-                delay(5000L)
+                delay(7000L)
                 viewModel.dismissSmartWrite()
             }
         }
         if (smartOffer != null) {
-            val anchor = CanvasTransform.worldToScreen(
+            val bottomAnchor = CanvasTransform.worldToScreen(
                 smartOffer.anchor,
                 canvasScale,
                 Offset(canvasOffsetX, canvasOffsetY)
             )
-            val dockTop = chromeBounds.dock?.top ?: Float.MAX_VALUE
-            val rawY = if (anchor.y + 70f >= dockTop) {
-                (anchor.y - 70f).coerceAtLeast(80f)
+            val topAnchor = CanvasTransform.worldToScreen(
+                smartOffer.topAnchor,
+                canvasScale,
+                Offset(canvasOffsetX, canvasOffsetY)
+            )
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val isLongText = smartOffer.candidates.any { it.length > 18 || it.contains(" ") }
+            val popupHeightPx = with(density) { (if (isLongText) 90.dp else 56.dp).toPx() }
+            val popupWidthPx = with(density) { (if (isLongText) 440.dp else 360.dp).toPx() }
+            val dockTop = chromeBounds.dock?.top ?: (canvasSize.height - with(density) { 88.dp.toPx() })
+            val topMarginPx = with(density) { 76.dp.toPx() }
+            val bottomSafeLimit = (dockTop - with(density) { 10.dp.toPx() })
+
+            // Place below handwriting if room, otherwise flip above; if neither fits, clamp cleanly above bottom dock
+            val targetY = if (bottomAnchor.y + with(density) { 12.dp.toPx() } + popupHeightPx <= bottomSafeLimit) {
+                bottomAnchor.y + with(density) { 12.dp.toPx() }
+            } else if (topAnchor.y - with(density) { 12.dp.toPx() } - popupHeightPx >= topMarginPx) {
+                topAnchor.y - with(density) { 12.dp.toPx() } - popupHeightPx
             } else {
-                (anchor.y + 12f).coerceAtLeast(80f)
+                bottomSafeLimit - popupHeightPx
             }
-            val safeX = anchor.x.coerceIn(16f, (canvasSize.width - 500f).coerceAtLeast(16f))
-            val safeY = rawY.coerceIn(80f, (dockTop - 65f).coerceAtLeast(80f))
+
+            val safeX = topAnchor.x.coerceIn(16f, (canvasSize.width - popupWidthPx - 16f).coerceAtLeast(16f))
+            val safeY = targetY.coerceIn(topMarginPx, (bottomSafeLimit - popupHeightPx).coerceAtLeast(topMarginPx))
+
             Surface(
                 modifier = Modifier
                     .offset { IntOffset(safeX.roundToInt(), safeY.roundToInt()) }
-                    .widthIn(max = 480.dp),
+                    .widthIn(min = 260.dp, max = 520.dp),
                 shape = RoundedCornerShape(16.dp),
                 color = Color.White,
-                shadowElevation = 8.dp
+                shadowElevation = 10.dp,
+                border = BorderStroke(1.dp, Color(0xFFFFEDD5))
             ) {
-                Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     if (smartOffer.lowConfidence) {
-                        Text(
-                            "Low confidence ÔÇö please check",
-                            color = Color(0xFFD97706),
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(bottom = 6.dp)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .padding(bottom = 6.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFFEF3C7))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                "⚠️ Low confidence — please check",
+                                color = Color(0xFFB45309),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        PEN_COLORS.take(6).forEach { color ->
+
+                    if (isLongText) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Tap to convert:",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BrandOrange
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                PEN_COLORS.take(5).forEach { color ->
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(end = 5.dp)
+                                            .size(16.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(color))
+                                            .border(
+                                                width = if (smartOffer.color == color) 2.dp else 1.dp,
+                                                color = if (smartOffer.color == color) BrandOrange else Color(0xFFD1D5DB),
+                                                shape = CircleShape
+                                            )
+                                            .clickable { viewModel.recolorSmartWrite(color) }
+                                    )
+                                }
+                            }
                             Box(
                                 modifier = Modifier
-                                    .padding(end = 6.dp)
-                                    .size(18.dp)
+                                    .size(22.dp)
                                     .clip(CircleShape)
-                                    .background(Color(color))
-                                    .border(
-                                        width = if (smartOffer.color == color) 2.dp else 1.dp,
-                                        color = if (smartOffer.color == color) Color(0xFF3B82F6) else Color(0xFFE2E8F0),
-                                        shape = CircleShape
-                                    )
-                                    .clickable { viewModel.recolorSmartWrite(color) }
-                            )
-                        }
-                        smartOffer.candidates.forEach { candidate ->
-                            Text(
-                                text = candidate,
-                                color = Color(0xFF1E293B),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier
-                                    .padding(end = 6.dp)
-                                    .clip(RoundedCornerShape(10.dp))
                                     .background(Color(0xFFF1F5F9))
-                                    .clickable { viewModel.acceptSmartWrite(candidate) }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
+                                    .clickable { viewModel.dismissSmartWrite() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Close",
+                                    tint = Color(0xFF64748B),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
                         }
-                        Text(
-                            text = "Close",
-                            color = Color(0xFF64748B),
-                            fontSize = 12.sp,
-                            modifier = Modifier
-                                .clickable { viewModel.dismissSmartWrite() }
-                                .padding(horizontal = 6.dp, vertical = 6.dp)
-                        )
+
+                        Spacer(Modifier.height(6.dp))
+
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            smartOffer.candidates.forEach { candidate ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFFF8FAFC))
+                                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
+                                        .clickable { viewModel.acceptSmartWrite(candidate) }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Draw,
+                                        contentDescription = null,
+                                        tint = BrandOrange,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = candidate,
+                                        color = Color(0xFF1E293B),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            PEN_COLORS.take(5).forEach { color ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(color))
+                                        .border(
+                                            width = if (smartOffer.color == color) 2.dp else 1.dp,
+                                            color = if (smartOffer.color == color) BrandOrange else Color(0xFFD1D5DB),
+                                            shape = CircleShape
+                                        )
+                                        .clickable { viewModel.recolorSmartWrite(color) }
+                                )
+                            }
+                            smartOffer.candidates.forEach { candidate ->
+                                Text(
+                                    text = candidate,
+                                    color = Color(0xFF1E293B),
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFFFFF7ED))
+                                        .border(1.dp, Color(0xFFFFEDD5), RoundedCornerShape(8.dp))
+                                        .clickable { viewModel.acceptSmartWrite(candidate) }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFF1F5F9))
+                                    .clickable { viewModel.dismissSmartWrite() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Close",
+                                    tint = Color(0xFF64748B),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
 
-        val editing = state.strokes.firstOrNull { it.id == state.editingTextId }
+                val editing = state.strokes.firstOrNull { it.id == state.editingTextId }
         if (editing != null && editing.points.isNotEmpty()) {
             val origin = CanvasTransform.worldToScreen(
                 editing.points.first(),
@@ -5283,68 +5431,242 @@ fun CanvasScreen(
         val dialogBg = if (isDark) Color(0xFF1E293B) else Color.White
         val subtitleColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
 
-        Dialog(onDismissRequest = { showImageSearch = false }) {
+        Dialog(
+            onDismissRequest = { showImageSearch = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = dialogBg,
-                border = if (isDark) BorderStroke(1.dp, Color(0xFF334155)) else null,
-                modifier = Modifier.fillMaxWidth()
+                shadowElevation = 14.dp,
+                border = BorderStroke(1.dp, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)),
+                modifier = Modifier
+                    .widthIn(min = 360.dp, max = 800.dp)
+                    .fillMaxWidth(0.92f)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    BoardModalHeader("Google Images", onDismiss = { showImageSearch = false }, isDark = isDark)
-                    Text(
-                        "Search stays in this window. Tap a picture to paste it on the board.",
-                        fontSize = 12.sp,
-                        color = subtitleColor
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = imageQuery,
-                        onValueChange = { imageQuery = it },
-                        singleLine = true,
-                        placeholder = { Text("Search images", color = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)) },
-                        textStyle = TextStyle(
-                            color = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827),
-                            fontSize = 14.sp
-                        ),
-                        colors = boardFieldColors(isDark),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { imageSearchTerm = imageQuery.trim() }),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    TextButton(onClick = { imageSearchTerm = imageQuery.trim() }) {
-                        Text("Search in this window", color = if (isDark) Color(0xFF818CF8) else Color(0xFF5B5BD6))
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFFF7ED))
+                                    .border(1.dp, Color(0xFFFFEDD5), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Image,
+                                    contentDescription = null,
+                                    tint = BrandOrange,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Google Images",
+                                    color = if (isDark) Color.White else Color(0xFF0F172A),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Tap any picture to paste it onto the whiteboard",
+                                    fontSize = 11.5.sp,
+                                    color = subtitleColor
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(if (isDark) Color(0xFF334155) else Color(0xFFF1F5F9))
+                                .clickable { showImageSearch = false },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
                     }
-                    AndroidView(
-                        factory = { viewContext ->
-                            android.webkit.WebView(viewContext).apply {
-                                browseInsideApp(onImage = { raw ->
-                                    val image = googleImageResultUrl(raw) ?: raw
-                                    if (image.startsWith("http://") || image.startsWith("https://")) {
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Search input bar with orange Search action button
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = imageQuery,
+                            onValueChange = { imageQuery = it },
+                            singleLine = true,
+                            placeholder = { Text("Search images on Google...", color = if (isDark) Color(0xFF94A3B8) else Color(0xFF9CA3AF)) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = BrandOrange,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            textStyle = TextStyle(
+                                color = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827),
+                                fontSize = 14.sp
+                            ),
+                            colors = boardFieldColors(isDark),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { imageSearchTerm = imageQuery.trim() }),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .height(52.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(BrandOrange)
+                                .clickable { imageSearchTerm = imageQuery.trim() }
+                                .padding(horizontal = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Search",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // Quick topic chips
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val quickTopics = listOf("Diagram", "Physics", "Chemistry", "Biology", "Math", "Car", "Nature", "Map")
+                        quickTopics.forEach { topic ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isDark) Color(0xFF334155) else Color(0xFFF8FAFC))
+                                    .border(1.dp, if (isDark) Color(0xFF475569) else Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        imageQuery = topic
+                                        imageSearchTerm = topic
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = topic,
+                                    fontSize = 11.sp,
+                                    color = if (isDark) Color(0xFFCBD5E1) else Color(0xFF475569),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // WebView Frame
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(420.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
+                    ) {
+                        AndroidView(
+                            factory = { viewContext ->
+                                android.webkit.WebView(viewContext).apply {
+                                    setBackgroundColor(android.graphics.Color.WHITE)
+                                    browseInsideApp(onImage = { raw ->
+                                        val image = googleImageResultUrl(raw) ?: raw
+                                        if (image.startsWith("http://") || image.startsWith("https://") || image.startsWith("data:image/")) {
+                                            val centerWorld = CanvasTransform.screenToWorld(
+                                                screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
+                                                scale = canvasScale,
+                                                offset = Offset(canvasOffsetX, canvasOffsetY)
+                                            )
+                                            viewModel.addImage(image, centerWorld)
+                                            android.widget.Toast.makeText(context, "Image copied to canvas!", android.widget.Toast.LENGTH_SHORT).show()
+                                            showImageSearch = false
+                                        }
+                                    })
+                                }
+                            },
+                            update = { web ->
+                                val target = if (imageSearchTerm.isBlank()) {
+                                    "https://images.google.com"
+                                } else {
+                                    googleImageSearchUrl(imageSearchTerm)
+                                }
+                                if (web.tag != target) {
+                                    web.tag = target
+                                    web.loadUrl(target)
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Bottom info and clipboard row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "💡 Tap any picture to copy & paste onto canvas",
+                            fontSize = 11.sp,
+                            color = subtitleColor
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isDark) Color(0xFF334155) else Color(0xFFF1F5F9))
+                                .clickable {
+                                    val clip = (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)
+                                        ?.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
+                                    if (!clip.isNullOrBlank() && (clip.startsWith("http://") || clip.startsWith("https://") || clip.startsWith("data:image/"))) {
                                         val centerWorld = CanvasTransform.screenToWorld(
                                             screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
                                             scale = canvasScale,
                                             offset = Offset(canvasOffsetX, canvasOffsetY)
                                         )
-                                        viewModel.addImage(image, centerWorld)
+                                        viewModel.addImage(clip, centerWorld)
+                                        android.widget.Toast.makeText(context, "Pasted from clipboard!", android.widget.Toast.LENGTH_SHORT).show()
                                         showImageSearch = false
+                                    } else {
+                                        android.widget.Toast.makeText(context, "No image link found in clipboard", android.widget.Toast.LENGTH_SHORT).show()
                                     }
-                                })
-                            }
-                        },
-                        update = { web ->
-                            val target = if (imageSearchTerm.isBlank()) {
-                                "https://www.google.com/search?tbm=isch&udm=2"
-                            } else {
-                                googleImageSearchUrl(imageSearchTerm)
-                            }
-                            if (web.tag != target) {
-                                web.tag = target
-                                web.loadUrl(target)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().height(420.dp)
-                    )
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                "📋 Paste link from Clipboard",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = BrandOrange
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -5355,66 +5677,284 @@ fun CanvasScreen(
         val dialogBg = if (isDark) Color(0xFF1E293B) else Color.White
         val subtitleColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
 
-        Dialog(onDismissRequest = { showYouTubeDialog = false }) {
+        Dialog(
+            onDismissRequest = { showYouTubeDialog = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = dialogBg,
-                border = if (isDark) BorderStroke(1.dp, Color(0xFF334155)) else null,
-                modifier = Modifier.fillMaxWidth()
+                shadowElevation = 14.dp,
+                border = BorderStroke(1.dp, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)),
+                modifier = Modifier
+                    .widthIn(min = 360.dp, max = 800.dp)
+                    .fillMaxWidth(0.92f)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    BoardModalHeader("YouTube", onDismiss = { showYouTubeDialog = false }, isDark = isDark)
-                    Text("Paste a link or tap a video in the results.", fontSize = 12.sp, color = subtitleColor)
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = youtubeQuery,
-                        onValueChange = { youtubeQuery = it },
-                        singleLine = true,
-                        placeholder = { Text("Link or search", color = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)) },
-                        textStyle = TextStyle(
-                            color = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827),
-                            fontSize = 14.sp
-                        ),
-                        colors = boardFieldColors(isDark),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = {
-                        val centerWorld = CanvasTransform.screenToWorld(
-                            screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
-                            scale = canvasScale,
-                            offset = Offset(canvasOffsetX, canvasOffsetY)
-                        )
-                        if (youtubeVideoId(youtubeQuery) != null) {
-                            viewModel.addYouTube(youtubeQuery, centerWorld)
-                            showYouTubeDialog = false
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFEF2F2))
+                                    .border(1.dp, Color(0xFFFEE2E2), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = Color(0xFFEF4444),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "YouTube",
+                                    color = if (isDark) Color.White else Color(0xFF0F172A),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Search or tap a video to add it to your whiteboard",
+                                    fontSize = 11.5.sp,
+                                    color = subtitleColor
+                                )
+                            }
                         }
-                    }) { Text("Place link on board", color = if (isDark) Color(0xFF818CF8) else Color(0xFF5B5BD6)) }
-                    AndroidView(
-                        factory = { viewContext ->
-                            android.webkit.WebView(viewContext).apply {
-                                browseInsideApp(onNavigate = { url ->
-                                    if (youtubeVideoId(url) == null) return@browseInsideApp false
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(if (isDark) Color(0xFF334155) else Color(0xFFF1F5F9))
+                                .clickable { showYouTubeDialog = false },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Search input bar with orange Search action button
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = youtubeQuery,
+                            onValueChange = { youtubeQuery = it },
+                            singleLine = true,
+                            placeholder = { Text("Search YouTube videos or paste link...", color = if (isDark) Color(0xFF94A3B8) else Color(0xFF9CA3AF)) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = BrandOrange,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            textStyle = TextStyle(
+                                color = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827),
+                                fontSize = 14.sp
+                            ),
+                            colors = boardFieldColors(isDark),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = {
+                                val trimmed = youtubeQuery.trim()
+                                if (youtubeVideoId(trimmed) != null) {
                                     val centerWorld = CanvasTransform.screenToWorld(
                                         screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
                                         scale = canvasScale,
                                         offset = Offset(canvasOffsetX, canvasOffsetY)
                                     )
-                                    viewModel.addYouTube(url, centerWorld)
+                                    viewModel.addYouTube(trimmed, centerWorld)
+                                    android.widget.Toast.makeText(context, "YouTube video added to canvas!", android.widget.Toast.LENGTH_SHORT).show()
                                     showYouTubeDialog = false
-                                    true
-                                })
+                                } else {
+                                    youtubeSearchTerm = trimmed
+                                }
+                            }),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .height(52.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(BrandOrange)
+                                .clickable {
+                                    val trimmed = youtubeQuery.trim()
+                                    if (youtubeVideoId(trimmed) != null) {
+                                        val centerWorld = CanvasTransform.screenToWorld(
+                                            screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
+                                            scale = canvasScale,
+                                            offset = Offset(canvasOffsetX, canvasOffsetY)
+                                        )
+                                        viewModel.addYouTube(trimmed, centerWorld)
+                                        android.widget.Toast.makeText(context, "YouTube video added to canvas!", android.widget.Toast.LENGTH_SHORT).show()
+                                        showYouTubeDialog = false
+                                    } else {
+                                        youtubeSearchTerm = trimmed
+                                    }
+                                }
+                                .padding(horizontal = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Search",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // Quick educational topic chips
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val quickTopics = listOf("Physics", "Math", "Chemistry", "Biology", "Science", "History", "Coding", "Tutorial", "Animation")
+                        quickTopics.forEach { topic ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isDark) Color(0xFF334155) else Color(0xFFF8FAFC))
+                                    .border(1.dp, if (isDark) Color(0xFF475569) else Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        youtubeQuery = topic
+                                        youtubeSearchTerm = topic
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = topic,
+                                    fontSize = 11.sp,
+                                    color = if (isDark) Color(0xFFCBD5E1) else Color(0xFF475569),
+                                    fontWeight = FontWeight.Medium
+                                )
                             }
-                        },
-                        update = { web ->
-                            val target = if (youtubeQuery.isBlank()) "https://m.youtube.com" else youtubeSearchUrl(youtubeQuery)
-                            if (web.tag != target) {
-                                web.tag = target
-                                web.loadUrl(target)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().height(420.dp)
-                    )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // WebView Frame
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(420.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
+                    ) {
+                        AndroidView(
+                            factory = { viewContext ->
+                                android.webkit.WebView(viewContext).apply {
+                                    setBackgroundColor(android.graphics.Color.WHITE)
+                                    browseInsideApp(
+                                        onVideo = { url ->
+                                            if (youtubeVideoId(url) != null) {
+                                                val centerWorld = CanvasTransform.screenToWorld(
+                                                    screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
+                                                    scale = canvasScale,
+                                                    offset = Offset(canvasOffsetX, canvasOffsetY)
+                                                )
+                                                viewModel.addYouTube(url, centerWorld)
+                                                android.widget.Toast.makeText(context, "YouTube video added to canvas!", android.widget.Toast.LENGTH_SHORT).show()
+                                                showYouTubeDialog = false
+                                            }
+                                        },
+                                        onNavigate = { url ->
+                                            if (youtubeVideoId(url) != null) {
+                                                val centerWorld = CanvasTransform.screenToWorld(
+                                                    screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
+                                                    scale = canvasScale,
+                                                    offset = Offset(canvasOffsetX, canvasOffsetY)
+                                                )
+                                                viewModel.addYouTube(url, centerWorld)
+                                                android.widget.Toast.makeText(context, "YouTube video added to canvas!", android.widget.Toast.LENGTH_SHORT).show()
+                                                showYouTubeDialog = false
+                                                true
+                                            } else false
+                                        }
+                                    )
+                                }
+                            },
+                            update = { web ->
+                                val target = if (youtubeSearchTerm.isBlank()) {
+                                    "https://m.youtube.com"
+                                } else {
+                                    youtubeSearchUrl(youtubeSearchTerm)
+                                }
+                                if (web.tag != target) {
+                                    web.tag = target
+                                    web.loadUrl(target)
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Bottom info and clipboard row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "💡 Tap any video to place it on the whiteboard",
+                            fontSize = 11.sp,
+                            color = subtitleColor
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isDark) Color(0xFF334155) else Color(0xFFF1F5F9))
+                                .clickable {
+                                    val clip = (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)
+                                        ?.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
+                                    if (!clip.isNullOrBlank() && youtubeVideoId(clip) != null) {
+                                        val centerWorld = CanvasTransform.screenToWorld(
+                                            screenPoint = Offset(canvasSize.width / 2f, canvasSize.height / 2f),
+                                            scale = canvasScale,
+                                            offset = Offset(canvasOffsetX, canvasOffsetY)
+                                        )
+                                        viewModel.addYouTube(clip, centerWorld)
+                                        android.widget.Toast.makeText(context, "Pasted YouTube video from clipboard!", android.widget.Toast.LENGTH_SHORT).show()
+                                        showYouTubeDialog = false
+                                    } else {
+                                        android.widget.Toast.makeText(context, "No YouTube video link found in clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                "📋 Paste link from Clipboard",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = BrandOrange
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -5529,24 +6069,48 @@ fun CanvasScreen(
     }
 
     if (showEditTitleDialog) {
-        var editedTitle by remember { mutableStateOf(state.noteTitle) }
+        var editedTitle by remember(state.noteTitle) { mutableStateOf(state.noteTitle) }
+        var editedSubtitle by remember(state.noteSubtitle) { mutableStateOf(state.noteSubtitle) }
         BoardModal(
             title = stringResource(R.string.dialog_edit_title),
             onDismiss = { showEditTitleDialog = false },
             confirmLabel = stringResource(R.string.save),
             isDark = state.isDarkTheme,
             onConfirm = {
-                viewModel.updateTitle(editedTitle.ifBlank { "Untitled" })
+                viewModel.updateTitleAndSubtitle(editedTitle.ifBlank { "Untitled" }, editedSubtitle)
                 showEditTitleDialog = false
             }
         ) {
-            OutlinedTextField(
-                value = editedTitle,
-                onValueChange = { editedTitle = it },
-                singleLine = true,
-                colors = boardFieldColors(state.isDarkTheme),
-                modifier = Modifier.fillMaxWidth()
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Board Title",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF475569)
+                )
+                OutlinedTextField(
+                    value = editedTitle,
+                    onValueChange = { editedTitle = it },
+                    singleLine = true,
+                    colors = boardFieldColors(state.isDarkTheme),
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("e.g. Grade 11-C · Physics", fontSize = 13.sp) }
+                )
+                Text(
+                    "Subtitle / Topic",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF475569)
+                )
+                OutlinedTextField(
+                    value = editedSubtitle,
+                    onValueChange = { editedSubtitle = it },
+                    singleLine = true,
+                    colors = boardFieldColors(state.isDarkTheme),
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("e.g. Projectile motion", fontSize = 13.sp) }
+                )
+            }
         }
     }
 

@@ -68,7 +68,8 @@ data class SmartWriteOffer(
     val candidates: List<String>,
     val lowConfidence: Boolean,
     val color: Int,
-    val anchor: Offset
+    val anchor: Offset,
+    val topAnchor: Offset = anchor
 )
 
 const val SMART_WRITE_LOW_SCORE = 0.55f
