@@ -1739,6 +1739,26 @@ class CanvasViewModel @Inject constructor(
         scheduleSave()
     }
 
+    fun moveStroke(strokeId: String, delta: Offset) {
+        if (delta == Offset.Zero) return
+        saveToUndoStack()
+        redoActionStack.clear()
+        redoStack.clear()
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes.map { stroke ->
+                    if (stroke.id == strokeId && !stroke.stickerKind.contains(":locked")) {
+                        val newPoints = stroke.points.map { Offset(it.x + delta.x, it.y + delta.y) }
+                        stroke.copy(points = newPoints)
+                    } else stroke
+                },
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        scheduleSave()
+    }
+
     fun moveSelectedStrokes(delta: Offset) {
         if (delta == Offset.Zero || _state.value.selectedStrokeIds.isEmpty()) return
         val selectedIds = _state.value.selectedStrokeIds
