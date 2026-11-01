@@ -2,12 +2,14 @@ package com.avitrisphare.whiteboard.presentation.canvas.utility
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import com.avitrisphare.whiteboard.presentation.canvas.translation.IndianLanguage
 
 enum class UtilityToolKind(val label: String) {
     TIMER("Timer"),
     STOPWATCH("Stopwatch"),
     CALCULATOR("Calculator"),
-    PERIODIC_TABLE("Periodic Table")
+    PERIODIC_TABLE("Periodic Table"),
+    TRANSLATOR("AI Translator")
 }
 
 data class TimerUiState(
@@ -97,4 +99,26 @@ data class PeriodicTableUiState(
     val position: Offset = Offset(40f, 80f),
     val zoomScale: Float = 1.0f,
     val isDarkMode: Boolean = false
+)
+
+data class TranslatorUiState(
+    val sourceText: String = "",
+    val translatedText: String = "",
+    val targetLanguage: IndianLanguage = IndianLanguage.HINDI,
+    val isTranslating: Boolean = false,
+    val isDownloadingModel: Boolean = false,
+    val errorMessage: String? = null,
+    val isMinimized: Boolean = false,
+    val isVisible: Boolean = false,
+    val position: Offset = Offset(120f, 140f)
+)
+
+data class QuickTranslatePopoverState(
+    val targetStrokeId: String = "",
+    val originalText: String = "",
+    val translatedText: String = "",
+    val selectedLanguage: IndianLanguage = IndianLanguage.HINDI,
+    val isTranslating: Boolean = false,
+    val isVisible: Boolean = false
+
 )

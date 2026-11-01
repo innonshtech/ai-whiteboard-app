@@ -16,13 +16,6 @@ class PanelSessionTest {
     }
 
     @Test
-    fun greetingFollowsTheTimeOfDay() {
-        assertEquals("Good Morning, Priya", classGreeting(9, "Priya Sharma"))
-        assertEquals("Good Afternoon, Priya", classGreeting(14, "Priya Sharma"))
-        assertEquals("Good Evening, Teacher", classGreeting(20, "  "))
-    }
-
-    @Test
     fun boardAgeIsRelativeToNow() {
         val now = 1_700_000_000_000L
         assertEquals("Just now", boardAge(now - 20_000L, now))

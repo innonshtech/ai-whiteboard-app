@@ -154,6 +154,7 @@ data class CanvasState(
     val inkTool: WhiteboardTool = WhiteboardTool.PEN,
     val isToolLocked: Boolean = false,
     val isDrawToShapeEnabled: Boolean = false,
+    val isMultiTouchEnabled: Boolean = false,
     val smartWriteEnabled: Boolean = false,
     val smartWriteLanguageTag: String = "en",
     val smartWriteIntervalMs: Long = 500L,
@@ -749,6 +750,15 @@ class CanvasViewModel @Inject constructor(
             .edit()
             .putBoolean(SHAPE_RECOGNITION_KEY, enabled)
             .apply()
+    }
+
+    fun toggleMultiTouch() {
+        val next = !_state.value.isMultiTouchEnabled
+        _state.update { it.copy(isMultiTouchEnabled = next) }
+    }
+
+    fun setMultiTouchEnabled(enabled: Boolean) {
+        _state.update { it.copy(isMultiTouchEnabled = enabled) }
     }
 
     fun setSmartWriteEnabled(enabled: Boolean) {
@@ -4199,7 +4209,8 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun updateTransform(scale: Float, offsetX: Float, offsetY: Float) {
-        _state.update { it.copy(scale = scale, offsetX = offsetX, offsetY = offsetY) }
+        val clampedScale = scale.coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE)
+        _state.update { it.copy(scale = clampedScale, offsetX = offsetX, offsetY = offsetY) }
     }
 
     fun resetTransform() {

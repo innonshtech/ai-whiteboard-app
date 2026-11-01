@@ -289,6 +289,8 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
                     fingerPeak = fingers
                     gestureStartX = center.first
                     gestureStartY = center.second
+                    lastCenterX = center.first
+                    lastCenterY = center.second
                     pinchSpan = fingerSpan(event)
                     val index = hitPane(frames, center.first, center.second)
                     if (index >= 0) {
@@ -305,8 +307,13 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
                 if (fingers == 2 && fingerPeak == 2) {
                     val span = fingerSpan(event)
                     val index = drawingPane
-                    if (pinchSpan > 12f && span > 12f && index in cells.indices) {
-                        zoomPane(index, center.first - frames[index].left, center.second - frames[index].top, span / pinchSpan)
+                    val panDx = center.first - lastCenterX
+                    val panDy = center.second - lastCenterY
+                    lastCenterX = center.first
+                    lastCenterY = center.second
+                    val factor = if (pinchSpan > 12f && span > 12f) span / pinchSpan else 1f
+                    if (index in cells.indices) {
+                        zoomPane(index, center.first - frames[index].left, center.second - frames[index].top, factor, panDx, panDy)
                     }
                     pinchSpan = span
                 }
@@ -337,14 +344,23 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
         fingerPeak = 0
         gestureTravel = 0f
         pinchSpan = 0f
+        lastCenterX = 0f
+        lastCenterY = 0f
         drawingPane = -1
     }
 
-    private fun zoomPane(index: Int, focusX: Float, focusY: Float, factor: Float) {
+    private fun zoomPane(index: Int, focusX: Float, focusY: Float, factor: Float, panDx: Float = 0f, panDy: Float = 0f) {
         val stage = cells[index].stage
-        val newScale = (stage.viewScale() * factor).coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE)
-        val world = stage.toWorld(focusX, focusY)
-        stage.previewTransform(newScale, focusX - world.x * newScale, focusY - world.y * newScale)
+        val oldScale = stage.viewScale()
+        val newScale = (oldScale * factor).coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE)
+        val newOffset = CanvasTransform.calculatePivotZoomOffset(
+            oldScale = oldScale,
+            newScale = newScale,
+            oldOffset = Offset(stage.viewOffsetX(), stage.viewOffsetY()),
+            centroid = Offset(focusX, focusY),
+            panDelta = Offset(panDx, panDy)
+        )
+        stage.previewTransform(newScale, newOffset.x, newOffset.y)
     }
 
     private fun drawGesture(event: MotionEvent, frames: List<PaneFrame>, stylusIndex: Int): Boolean {
@@ -634,6 +650,8 @@ class SplitBoardView(context: Context) : FrameLayout(context) {
     private var gestureEndY = 0f
     private var gestureTravel = 0f
     private var pinchSpan = 0f
+    private var lastCenterX = 0f
+    private var lastCenterY = 0f
     private var stylusInk = false
     private var drawTool = WhiteboardTool.PEN
     private var drawPointerId = -1

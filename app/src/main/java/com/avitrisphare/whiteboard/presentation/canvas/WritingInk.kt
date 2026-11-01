@@ -542,6 +542,67 @@ fun InkToolPanel(
                     }
                 }
 
+                Spacer(Modifier.height(8.dp))
+
+                // Multi Touch inside Intelligent Canvas Assist
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (state.isMultiTouchEnabled) Color(0xFFFFF7ED) else Color.White)
+                        .border(
+                            width = 1.dp,
+                            color = if (state.isMultiTouchEnabled) BrandOrange else Color(0xFFE2E8F0),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .clickable {
+                            viewModel.toggleMultiTouch()
+                        }
+                        .padding(horizontal = 8.dp, vertical = 7.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Gesture,
+                            contentDescription = null,
+                            tint = if (state.isMultiTouchEnabled) BrandOrange else Color(0xFF64748B),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Multi Touch",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1E293B)
+                            )
+                            Text(
+                                text = if (state.isMultiTouchEnabled) "Multi-finger writing (draw with 2+ fingers)" else "Canvas navigation (pinch zoom & two-finger pan)",
+                                fontSize = 9.sp,
+                                color = Color(0xFF64748B)
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .width(22.dp)
+                                .height(13.dp)
+                                .clip(CircleShape)
+                                .background(if (state.isMultiTouchEnabled) BrandOrange else Color(0xFFCBD5E1))
+                                .padding(horizontal = 2.dp),
+                            contentAlignment = if (state.isMultiTouchEnabled) Alignment.CenterEnd else Alignment.CenterStart
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(9.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White)
+                            )
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = "ⓘ Vector ink converts to editable symbols and Bezier geometry",

@@ -140,6 +140,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -147,6 +148,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -165,6 +167,12 @@ import com.avitrisphare.whiteboard.presentation.canvas.utility.StopwatchUiState
 import com.avitrisphare.whiteboard.presentation.canvas.utility.TimerFloatingPanel
 import com.avitrisphare.whiteboard.presentation.canvas.utility.TimerUiState
 import com.avitrisphare.whiteboard.presentation.canvas.utility.UtilityToolKind
+import com.avitrisphare.whiteboard.presentation.canvas.utility.TranslatorUiState
+import com.avitrisphare.whiteboard.presentation.canvas.utility.QuickTranslatePopoverState
+import com.avitrisphare.whiteboard.presentation.canvas.translation.IndianLanguage
+import com.avitrisphare.whiteboard.presentation.canvas.translation.OnDeviceTranslatorEngine
+import com.avitrisphare.whiteboard.presentation.canvas.translation.QuickTranslatePopover
+import com.avitrisphare.whiteboard.presentation.canvas.translation.TranslatorFloatingPanel
 import com.avitrisphare.whiteboard.presentation.canvas.export.ExportLessonDialog
 import com.avitrisphare.whiteboard.presentation.canvas.export.ExportFormat
 import com.avitrisphare.whiteboard.presentation.canvas.export.ExportDestination
@@ -1346,13 +1354,25 @@ fun CanvasScreen(
     var stopwatchState by remember { mutableStateOf(StopwatchUiState()) }
     var calculatorState by remember { mutableStateOf(CalculatorUiState()) }
     var periodicTableState by remember { mutableStateOf(PeriodicTableUiState()) }
+    var translatorState by remember { mutableStateOf(TranslatorUiState()) }
+    var quickTranslateState by remember { mutableStateOf(QuickTranslatePopoverState()) }
+    val translatorEngine = remember { OnDeviceTranslatorEngine() }
+    val coroutineScope = rememberCoroutineScope()
+
+    DisposableEffect(Unit) {
+        onDispose {
+            translatorEngine.close()
+        }
+    }
+
     var toolZOrder by remember {
         mutableStateOf(
             listOf(
                 UtilityToolKind.TIMER,
                 UtilityToolKind.STOPWATCH,
                 UtilityToolKind.CALCULATOR,
-                UtilityToolKind.PERIODIC_TABLE
+                UtilityToolKind.PERIODIC_TABLE,
+                UtilityToolKind.TRANSLATOR
             )
         )
     }
@@ -1817,7 +1837,8 @@ fun CanvasScreen(
                     state.selectedStrokeIds,
                     state.isDrawToShapeEnabled,
                     state.palmEraserEnabled,
-                    state.restrictEraserToSelection
+                    state.restrictEraserToSelection,
+                    state.isMultiTouchEnabled
                 ) {
                     awaitEachGesture {
                         fun PointerInputChange.isStylusPointer(): Boolean {
@@ -2522,6 +2543,147 @@ fun CanvasScreen(
                             }
                             if (fingerScratch.size > fingerPeak) fingerPeak = fingerScratch.size
 
+                            val isMultiTouch = !anyStylusPressed && (fingerScratch.size >= 2 || wasMultiTouch)
+                            if (isMultiTouch && !(writingNow && latestState.isMultiTouchEnabled)) {
+                                if (!wasMultiTouch) {
+                                    wasMultiTouch = true
+                                    activeTracks.clear()
+                                    finishedMultiStrokes.clear()
+                                    boardStage?.clearLiveStrokes()
+                                    if (writingNow) {
+                                        liveInk.stroke = null
+                                        liveInk.predicted = null
+                                        boardStage?.setLiveInk(null)
+                                        viewModel.cancelCurrentStroke()
+                                    }
+                                    if (isShapeActive || activeTool in listOf(
+                                            WhiteboardTool.RECTANGLE,
+                                            WhiteboardTool.DIAMOND,
+                                            WhiteboardTool.CIRCLE,
+                                            WhiteboardTool.ARROW,
+                                            WhiteboardTool.LINE,
+                                            WhiteboardTool.FRAME,
+                                            WhiteboardTool.TRIANGLE,
+                                            WhiteboardTool.STAR,
+                                            WhiteboardTool.ELLIPSE,
+                                            WhiteboardTool.SQUARE,
+                                            WhiteboardTool.HEXAGON,
+                                            WhiteboardTool.ROUND_RECT,
+                                            WhiteboardTool.CUBE,
+                                            WhiteboardTool.CYLINDER,
+                                            WhiteboardTool.CONE,
+                                            WhiteboardTool.PYRAMID,
+                                            WhiteboardTool.SHAPE
+                                        )
+                                    ) {
+                                        shapePoints = emptyList()
+                                        viewModel.cancelCurrentStroke()
+                                    }
+                                    if (selectingBox) {
+                                        selectingBox = false
+                                        boardStage?.setMarquee(null, null)
+                                    }
+                                    if (lassoPoints.isNotEmpty()) {
+                                        lassoPoints = emptyList()
+                                    }
+                                    if (erasing) {
+                                        eraserSession.active = false
+                                        eraserSession.changed = false
+                                        boardStage?.clearGestureStrokes()
+                                        boardStage?.hideEraserCursor()
+                                    }
+                                }
+
+                                val centroid = if (fingerScratch.isNotEmpty()) {
+                                    var sumX = 0f
+                                    var sumY = 0f
+                                    for (f in fingerScratch) {
+                                        sumX += f.position.x
+                                        sumY += f.position.y
+                                    }
+                                    Offset(sumX / fingerScratch.size, sumY / fingerScratch.size)
+                                } else {
+                                    prevPosition
+                                }
+
+                                if (gestureStart == null) {
+                                    gestureStart = centroid
+                                    gestureEnd = centroid
+                                } else {
+                                    val travel = (centroid - gestureStart!!).getDistance()
+                                    if (travel > gestureTravel) gestureTravel = travel
+                                    gestureEnd = centroid
+                                }
+
+                                val pinchedTool = if (fingerScratch.size != 2) {
+                                    null
+                                } else {
+                                    mathGesture.toolId?.let { id -> mathTools.find { it.id == id } }
+                                        ?: hitTestPlacedTools(mathTools, centroid)?.tool
+                                }
+
+                                if (pinchedTool != null) {
+                                    mathGesture.twoFinger = true
+                                    mathGesture.rulerDrawing = false
+                                    mathGesture.arcMode = false
+                                    viewModel.cancelCurrentStroke()
+                                    rulerLivePreview = null
+                                    val pan = event.calculatePan()
+                                    val rotation = event.calculateRotation()
+                                    val zoom = event.calculateZoom()
+                                    val newSpan = if (zoom != 1f && (pinchedTool.kind == MathToolKind.RULER || pinchedTool.kind == MathToolKind.COMPASS)) {
+                                        (pinchedTool.span * zoom).coerceIn(180f, 3600f)
+                                    } else pinchedTool.span
+                                    val updated = translateAndRotate(
+                                        pinchedTool.copy(span = newSpan),
+                                        pan,
+                                        rotation
+                                    )
+                                    replaceMathTool(updated)
+                                    if (updated.kind == MathToolKind.RULER) {
+                                        val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
+                                        mathReadout = "${formatCentimetres(updated.span, pxPerCm)} - ${deg}\u00B0" to centroid + Offset(0f, -42f)
+                                    } else {
+                                        mathReadout = null
+                                    }
+                                } else if (fingerScratch.size == 2 && fingerPeak <= 2) {
+                                    val f0 = fingerScratch[0]
+                                    val f1 = fingerScratch[1]
+
+                                    if (f0.previousPressed && f1.previousPressed) {
+                                        val curCentroid = (f0.position + f1.position) / 2f
+                                        val prevCentroid = (f0.previousPosition + f1.previousPosition) / 2f
+                                        val panDelta = curCentroid - prevCentroid
+
+                                        val curDist = (f0.position - f1.position).getDistance()
+                                        val prevDist = (f0.previousPosition - f1.previousPosition).getDistance()
+                                        val rawZoom = if (prevDist > 1f && curDist > 1f) curDist / prevDist else 1f
+                                        val zoomFactor = rawZoom.coerceIn(0.5f, 2.0f)
+
+                                        val targetScale = (gestureScale * zoomFactor).coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE)
+                                        val newOffset = CanvasTransform.calculatePivotZoomOffset(
+                                            oldScale = gestureScale,
+                                            newScale = targetScale,
+                                            oldOffset = Offset(gestureOffsetX, gestureOffsetY),
+                                            centroid = curCentroid,
+                                            panDelta = panDelta
+                                        )
+
+                                        gestureScale = targetScale
+                                        gestureOffsetX = newOffset.x
+                                        gestureOffsetY = newOffset.y
+                                        canvasScale = gestureScale
+                                        canvasOffsetX = gestureOffsetX
+                                        canvasOffsetY = gestureOffsetY
+                                        transformMoved = true
+                                        boardStage?.previewTransform(canvasScale, canvasOffsetX, canvasOffsetY)
+                                    }
+                                }
+                                prevPosition = centroid
+                                event.changes.forEach { it.consume() }
+                                continue
+                            }
+
                             if (writingNow) {
                                 val gap = inkSampleGapPx(state.inkSampleGapMm, xdpi, canvasScale)
                                 for (change in event.changes) {
@@ -2632,39 +2794,6 @@ fun CanvasScreen(
                                 }
                                 boardStage?.setLiveStrokes(activeTracks.values.map { it.toStroke() })
                             } else {
-                                val centroid = event.calculateCentroid(useCurrent = true)
-                                val pinchedTool = if (fingerScratch.size != 2) {
-                                    null
-                                } else {
-                                    mathGesture.toolId?.let { id -> mathTools.find { it.id == id } }
-                                        ?: hitTestPlacedTools(mathTools, centroid)?.tool
-                                }
-                                if (pinchedTool != null) {
-                                    mathGesture.twoFinger = true
-                                    mathGesture.rulerDrawing = false
-                                    mathGesture.arcMode = false
-                                    viewModel.cancelCurrentStroke()
-                                    rulerLivePreview = null
-                                    val pan = event.calculatePan()
-                                    val rotation = event.calculateRotation()
-                                    val zoom = event.calculateZoom()
-                                    val newSpan = if (zoom != 1f && (pinchedTool.kind == MathToolKind.RULER || pinchedTool.kind == MathToolKind.COMPASS)) {
-                                        (pinchedTool.span * zoom).coerceIn(180f, 3600f)
-                                    } else pinchedTool.span
-                                    val updated = translateAndRotate(
-                                        pinchedTool.copy(span = newSpan),
-                                        pan,
-                                        rotation
-                                    )
-                                    replaceMathTool(updated)
-                                    if (updated.kind == MathToolKind.RULER) {
-                                        val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
-                                        mathReadout = "${formatCentimetres(updated.span, pxPerCm)} ÔÇó $deg┬░" to centroid + Offset(0f, -42f)
-                                    } else {
-                                        mathReadout = null
-                                    }
-                                    event.changes.forEach { it.consume() }
-                                }
                                 val change = if (erasingByHand) {
                                     realPressed.firstOrNull { !it.isStylusPointer() && !it.isMousePointer() }
                                         ?: realPressed.firstOrNull { it.id == down.id }
@@ -2849,8 +2978,10 @@ fun CanvasScreen(
                                         val panY = change.position.y - prevPosition.y
                                         canvasOffsetX += panX
                                         canvasOffsetY += panY
+                                        gestureOffsetX = canvasOffsetX
+                                        gestureOffsetY = canvasOffsetY
                                         transformMoved = true
-                                        boardStage?.setTransform(canvasScale, canvasOffsetX, canvasOffsetY)
+                                        boardStage?.previewTransform(canvasScale, canvasOffsetX, canvasOffsetY)
                                     } else if (activeWebInteractId != null) {
                                         val webId = activeWebInteractId
                                         boardStage?.dispatchTouchToMedia(
@@ -3994,6 +4125,29 @@ fun CanvasScreen(
                     if (next) bringToolToFront(UtilityToolKind.PERIODIC_TABLE)
                 }
             },
+            isTranslatorVisible = translatorState.isVisible,
+            onToggleTranslator = {
+                val next = !translatorState.isVisible
+                translatorState = translatorState.copy(isVisible = next)
+                if (next) bringToolToFront(UtilityToolKind.TRANSLATOR)
+            },
+            onOpenQuickTranslate = { strokeId, originalText ->
+                quickTranslateState = QuickTranslatePopoverState(
+                    targetStrokeId = strokeId,
+                    originalText = originalText,
+                    translatedText = "",
+                    selectedLanguage = IndianLanguage.HINDI,
+                    isTranslating = true,
+                    isVisible = true
+                )
+                coroutineScope.launch {
+                    val res = translatorEngine.translate(originalText, IndianLanguage.HINDI)
+                    quickTranslateState = quickTranslateState.copy(
+                        translatedText = res.getOrDefault(""),
+                        isTranslating = false
+                    )
+                }
+            },
             onOpenStickerEmoji = {
                 viewModel.clearSelection()
                 selectionToolbarDismissed = true
@@ -4281,7 +4435,7 @@ fun CanvasScreen(
         }
 
 
-        // Floating Utility Panels (Timer, Stopwatch, Calculator, Periodic Table)
+        // Floating Utility Panels (Timer, Stopwatch, Calculator, Periodic Table, AI Translator)
         CanvasUtilityPanelsHost(
             toolZOrder = toolZOrder,
             timerState = timerState,
@@ -4292,6 +4446,42 @@ fun CanvasScreen(
             onCalculatorStateChange = { calculatorState = it },
             periodicTableState = periodicTableState,
             onPeriodicTableStateChange = { periodicTableState = it },
+            translatorState = translatorState,
+            onTranslatorStateChange = { translatorState = it },
+            onTranslate = { textToTranslate, targetLang ->
+                translatorState = translatorState.copy(isTranslating = true, errorMessage = null)
+                coroutineScope.launch {
+                    val res = translatorEngine.translate(textToTranslate, targetLang)
+                    translatorState = translatorState.copy(
+                        translatedText = res.getOrDefault(""),
+                        isTranslating = false,
+                        errorMessage = if (res.isFailure) res.exceptionOrNull()?.message else null
+                    )
+                }
+            },
+            onAddTranslationToCanvas = { translatedText ->
+                val centerWorld = CanvasTransform.screenToWorld(
+                    screenPoint = canvasCenter(),
+                    scale = canvasScale,
+                    offset = Offset(canvasOffsetX, canvasOffsetY)
+                )
+                viewModel.addTextOrSticky(
+                    text = translatedText,
+                    worldPoint = centerWorld,
+                    isSticky = false
+                )
+                val latest = viewModel.state.value
+                boardStage?.syncPage(
+                    strokes = latest.strokes,
+                    background = latest.canvasBackground,
+                    showGrid = latest.showGrid,
+                    dark = latest.isDarkCanvas,
+                    scale = latest.scale,
+                    offsetX = latest.offsetX,
+                    offsetY = latest.offsetY,
+                    selected = latest.selectedStrokeIds
+                )
+            },
             onBringToFront = { bringToolToFront(it) }
         )
 
@@ -6422,6 +6612,65 @@ fun CanvasScreen(
                 showLanguageDialog = false
             },
             onDismiss = { showLanguageDialog = false }
+        )
+    }
+
+    if (quickTranslateState.isVisible) {
+        QuickTranslatePopover(
+            originalText = quickTranslateState.originalText,
+            translatedText = quickTranslateState.translatedText,
+            selectedLanguage = quickTranslateState.selectedLanguage,
+            isTranslating = quickTranslateState.isTranslating,
+            isDarkTheme = state.isDarkTheme,
+            onLanguageSelected = { lang ->
+                quickTranslateState = quickTranslateState.copy(selectedLanguage = lang, isTranslating = true)
+                coroutineScope.launch {
+                    val res = translatorEngine.translate(quickTranslateState.originalText, lang)
+                    quickTranslateState = quickTranslateState.copy(
+                        translatedText = res.getOrDefault(""),
+                        isTranslating = false
+                    )
+                }
+            },
+            onApplySideBySide = { bilingualText ->
+                val targetId = quickTranslateState.targetStrokeId
+                if (targetId.isNotBlank()) {
+                    viewModel.updateStrokeText(targetId, bilingualText)
+                    val latest = viewModel.state.value
+                    boardStage?.syncPage(
+                        strokes = latest.strokes,
+                        background = latest.canvasBackground,
+                        showGrid = latest.showGrid,
+                        dark = latest.isDarkCanvas,
+                        scale = latest.scale,
+                        offsetX = latest.offsetX,
+                        offsetY = latest.offsetY,
+                        selected = latest.selectedStrokeIds
+                    )
+                }
+                quickTranslateState = quickTranslateState.copy(isVisible = false)
+            },
+            onApplyReplace = { replacementText ->
+                val targetId = quickTranslateState.targetStrokeId
+                if (targetId.isNotBlank()) {
+                    viewModel.updateStrokeText(targetId, replacementText)
+                    val latest = viewModel.state.value
+                    boardStage?.syncPage(
+                        strokes = latest.strokes,
+                        background = latest.canvasBackground,
+                        showGrid = latest.showGrid,
+                        dark = latest.isDarkCanvas,
+                        scale = latest.scale,
+                        offsetX = latest.offsetX,
+                        offsetY = latest.offsetY,
+                        selected = latest.selectedStrokeIds
+                    )
+                }
+                quickTranslateState = quickTranslateState.copy(isVisible = false)
+            },
+            onDismiss = {
+                quickTranslateState = quickTranslateState.copy(isVisible = false)
+            }
         )
     }
     }

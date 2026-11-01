@@ -102,4 +102,98 @@ class CanvasTransformTest {
         // Point far away (50, 50)
         assertFalse(CanvasTransform.strokeIntersectsPoint(stroke, Offset(50f, 50f), 10f))
     }
+
+    @Test
+    fun `pinch-to-zoom limits enforce 10 percent to 500 percent zoom level`() {
+        assertEquals(0.1f, CanvasTransform.MIN_SCALE, 0.0001f)
+        assertEquals(5.0f, CanvasTransform.MAX_SCALE, 0.0001f)
+        assertEquals("10%", CanvasTransform.formatZoom(0.1f))
+        assertEquals("500%", CanvasTransform.formatZoom(5.0f))
+
+        // Clamping below 10%
+        val zoomedOut = (1.0f * 0.05f).coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE)
+        assertEquals(0.1f, zoomedOut, 0.0001f)
+
+        // Clamping above 500%
+        val zoomedIn = (1.0f * 8.0f).coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE)
+        assertEquals(5.0f, zoomedIn, 0.0001f)
+    }
+
+    @Test
+    fun `two-finger pan moves canvas smoothly in any direction`() {
+        val oldScale = 1.0f
+        val oldOffset = Offset(100f, 200f)
+        val centroid = Offset(400f, 300f)
+
+        // Pan in positive X and Y
+        val panPositive = CanvasTransform.calculatePivotZoomOffset(
+            oldScale = oldScale,
+            newScale = oldScale,
+            oldOffset = oldOffset,
+            centroid = centroid,
+            panDelta = Offset(50f, 75f)
+        )
+        assertEquals(150f, panPositive.x, 0.001f)
+        assertEquals(275f, panPositive.y, 0.001f)
+
+        // Pan in negative X and Y
+        val panNegative = CanvasTransform.calculatePivotZoomOffset(
+            oldScale = oldScale,
+            newScale = oldScale,
+            oldOffset = oldOffset,
+            centroid = centroid,
+            panDelta = Offset(-80f, -120f)
+        )
+        assertEquals(20f, panNegative.x, 0.001f)
+        assertEquals(80f, panNegative.y, 0.001f)
+
+        // Pan in diagonal quadrants at 10% minimum zoom
+        val panAtMinZoom = CanvasTransform.calculatePivotZoomOffset(
+            oldScale = CanvasTransform.MIN_SCALE,
+            newScale = CanvasTransform.MIN_SCALE,
+            oldOffset = Offset(0f, 0f),
+            centroid = centroid,
+            panDelta = Offset(-250f, 350f)
+        )
+        assertEquals(-250f, panAtMinZoom.x, 0.001f)
+        assertEquals(350f, panAtMinZoom.y, 0.001f)
+
+        // Pan in diagonal quadrants at 500% maximum zoom
+        val panAtMaxZoom = CanvasTransform.calculatePivotZoomOffset(
+            oldScale = CanvasTransform.MAX_SCALE,
+            newScale = CanvasTransform.MAX_SCALE,
+            oldOffset = Offset(0f, 0f),
+            centroid = centroid,
+            panDelta = Offset(120f, -400f)
+        )
+        assertEquals(120f, panAtMaxZoom.x, 0.001f)
+        assertEquals(-400f, panAtMaxZoom.y, 0.001f)
+    }
+
+    @Test
+    fun `simultaneous pinch-to-zoom and two-finger pan maintains pivot point`() {
+        val oldScale = 1.0f
+        val newScale = 2.5f
+        val oldOffset = Offset(50f, 80f)
+        val centroid = Offset(300f, 400f)
+        val panDelta = Offset(20f, -15f)
+
+        // The point under centroid in world space before zoom:
+        val worldUnderCentroid = CanvasTransform.screenToWorld(centroid, oldScale, oldOffset)
+
+        val newOffset = CanvasTransform.calculatePivotZoomOffset(
+            oldScale = oldScale,
+            newScale = newScale,
+            oldOffset = oldOffset,
+            centroid = centroid,
+            panDelta = panDelta
+        )
+
+        // After zoom and pan, that world point should be at (centroid + panDelta) in screen space:
+        val expectedScreenPos = centroid + panDelta
+        val actualScreenPos = CanvasTransform.worldToScreen(worldUnderCentroid, newScale, newOffset)
+
+        assertEquals(expectedScreenPos.x, actualScreenPos.x, 0.001f)
+        assertEquals(expectedScreenPos.y, actualScreenPos.y, 0.001f)
+    }
 }

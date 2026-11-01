@@ -356,6 +356,9 @@ fun AvitriSphareWhiteboardChrome(
     onToggleStopwatch: () -> Unit = {},
     isCalculatorVisible: Boolean = false,
     onToggleCalculator: () -> Unit = {},
+    isTranslatorVisible: Boolean = false,
+    onToggleTranslator: () -> Unit = {},
+    onOpenQuickTranslate: (String, String) -> Unit = { _, _ -> },
     isPeriodicTableVisible: Boolean = false,
     onTogglePeriodicTable: () -> Unit = {},
     onPickCustomBackground: () -> Unit = {},
@@ -940,6 +943,34 @@ fun AvitriSphareWhiteboardChrome(
                                         }
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
+                            }
+
+                            val translatableStroke = remember(selectedStrokes) {
+                                selectedStrokes.firstOrNull { it.text.isNotBlank() }
+                            }
+                            if (translatableStroke != null && state.editingTextId == null) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFF6366F1))
+                                        .clickable { onOpenQuickTranslate(translatableStroke.id, translatableStroke.text) }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Language,
+                                        contentDescription = "Translate",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(Modifier.width(3.dp))
+                                    Text(
+                                        text = "Translate",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
                             }
 
                             if (canConvert) {
@@ -2280,6 +2311,7 @@ fun AvitriSphareWhiteboardChrome(
                         PopoverRow(Icons.Default.Timer, stringResource(R.string.util_stopwatch), isStopwatchVisible) { panel = null; onToggleStopwatch() }
                         PopoverRow(Icons.Default.Calculate, stringResource(R.string.util_calculator), isCalculatorVisible) { panel = null; onToggleCalculator() }
                         PopoverRow(Icons.Default.Science, stringResource(R.string.util_periodic), isPeriodicTableVisible) { panel = null; onTogglePeriodicTable() }
+                        PopoverRow(Icons.Default.Language, "AI Translator", isTranslatorVisible) { panel = null; onToggleTranslator() }
                         PopoverRow(Icons.Default.CleaningServices, stringResource(R.string.tool_clean_all)) { panel = null; onCleanAll() }
                         PopoverRow(Icons.Default.LayersClear, stringResource(R.string.clear_all)) { panel = null; onClear() }
                         PopoverRow(Icons.Default.Save, stringResource(R.string.tool_save)) { panel = null; onSave() }
@@ -2501,6 +2533,9 @@ fun AvitriSphareWhiteboardChrome(
                                 },
                                 ToolTile(Icons.Default.Calculate, stringResource(R.string.util_calculator), Color(0xFF0EA5E9), isCalculatorVisible) {
                                     panel = null; onToggleCalculator()
+                                },
+                                ToolTile(Icons.Default.Language, "AI Translator", Color(0xFF6366F1), isTranslatorVisible) {
+                                    panel = null; onToggleTranslator()
                                 },
                                 ToolTile(Icons.Default.Science, stringResource(R.string.util_periodic), Color(0xFF10B981), isPeriodicTableVisible) {
                                     panel = null; onTogglePeriodicTable()

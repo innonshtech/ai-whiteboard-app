@@ -80,6 +80,9 @@ import com.avitrisphare.whiteboard.presentation.canvas.utility.StopwatchUiState
 import com.avitrisphare.whiteboard.presentation.canvas.utility.TimerFloatingPanel
 import com.avitrisphare.whiteboard.presentation.canvas.utility.TimerUiState
 import com.avitrisphare.whiteboard.presentation.canvas.utility.UtilityToolKind
+import com.avitrisphare.whiteboard.presentation.canvas.utility.TranslatorUiState
+import com.avitrisphare.whiteboard.presentation.canvas.translation.IndianLanguage
+import com.avitrisphare.whiteboard.presentation.canvas.translation.TranslatorFloatingPanel
 
 @Composable
 fun boardFieldColors(isDark: Boolean = LocalDarkTheme.current) = OutlinedTextFieldDefaults.colors(
@@ -807,6 +810,10 @@ fun CanvasUtilityPanelsHost(
     onCalculatorStateChange: (CalculatorUiState) -> Unit,
     periodicTableState: PeriodicTableUiState,
     onPeriodicTableStateChange: (PeriodicTableUiState) -> Unit,
+    translatorState: TranslatorUiState = TranslatorUiState(),
+    onTranslatorStateChange: (TranslatorUiState) -> Unit = {},
+    onTranslate: (String, IndianLanguage) -> Unit = { _, _ -> },
+    onAddTranslationToCanvas: (String) -> Unit = {},
     onBringToFront: (UtilityToolKind) -> Unit
 ) {
     toolZOrder.forEach { toolKind ->
@@ -835,6 +842,17 @@ fun CanvasUtilityPanelsHost(
                         state = calculatorState,
                         onStateChange = onCalculatorStateChange,
                         onBringToFront = { onBringToFront(UtilityToolKind.CALCULATOR) }
+                    )
+                }
+            }
+            UtilityToolKind.TRANSLATOR -> {
+                if (translatorState.isVisible) {
+                    TranslatorFloatingPanel(
+                        state = translatorState,
+                        onStateChange = onTranslatorStateChange,
+                        onTranslate = onTranslate,
+                        onAddToCanvas = onAddTranslationToCanvas,
+                        onBringToFront = { onBringToFront(UtilityToolKind.TRANSLATOR) }
                     )
                 }
             }

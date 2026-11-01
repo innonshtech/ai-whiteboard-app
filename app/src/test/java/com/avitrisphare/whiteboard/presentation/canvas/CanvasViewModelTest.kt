@@ -686,5 +686,28 @@ class CanvasViewModelTest {
         assertTrue(state.strokes.contains(stroke0))
         assertTrue(state.strokes.contains(stroke1))
     }
-}
 
+    @Test
+    fun `updateTransform clamps zoom level between 10 percent and 500 percent and preserves arbitrary pan offsets`() {
+        // Below 10% (0.05f) -> clamped to 0.1f (10%)
+        viewModel.updateTransform(0.05f, -1250f, 2400f)
+        val stateUnder = viewModel.state.value
+        assertEquals(0.1f, stateUnder.scale, 0.0001f)
+        assertEquals(-1250f, stateUnder.offsetX, 0.001f)
+        assertEquals(2400f, stateUnder.offsetY, 0.001f)
+
+        // Above 500% (7.5f) -> clamped to 5.0f (500%)
+        viewModel.updateTransform(7.5f, 3500f, -4800f)
+        val stateOver = viewModel.state.value
+        assertEquals(5.0f, stateOver.scale, 0.0001f)
+        assertEquals(3500f, stateOver.offsetX, 0.001f)
+        assertEquals(-4800f, stateOver.offsetY, 0.001f)
+
+        // Normal range (2.0f = 200%)
+        viewModel.updateTransform(2.0f, 500f, 600f)
+        val stateNormal = viewModel.state.value
+        assertEquals(2.0f, stateNormal.scale, 0.0001f)
+        assertEquals(500f, stateNormal.offsetX, 0.001f)
+        assertEquals(600f, stateNormal.offsetY, 0.001f)
+    }
+}
