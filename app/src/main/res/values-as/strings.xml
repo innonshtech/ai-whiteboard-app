@@ -1,0 +1,97 @@
+<resources>
+    <string name="app_name">AvitriSphare</string>
+    <string name="app_subtitle">হোৱাইটব’ৰ্ড</string>
+    <string name="save">সংৰক্ষণ কৰক</string>
+    <string name="cancel">বাতিল কৰক</string>
+    <string name="confirm">নিশ্চিত কৰক</string>
+    <string name="delete">মচি পেলাওক</string>
+    <string name="edit">সম্পাদনা কৰক</string>
+    <string name="close">বন্ধ কৰক</string>
+    <string name="back">উভতি যাওক</string>
+    <string name="open">খোলক</string>
+    <string name="search">সন্ধান কৰক</string>
+    <string name="create">সৃষ্টি কৰক</string>
+    <string name="title">শীৰ্ষক</string>
+    <string name="saved">সংৰক্ষিত হ’ল</string>
+    <string name="color_swapped">ৰং সলনি হ’ল</string>
+    <string name="copied_to_clipboard">ক্লিপব’ৰ্ডত নকল কৰা হ’ল</string>
+    <string name="help_close">বন্ধ কৰক</string>
+    <string name="share">শ্বেয়াৰ কৰক</string>
+
+    <string name="language">ভাষা</string>
+    <string name="change_language">ভাষা সলনি কৰক</string>
+    <string name="select_language">ভাষা বাছক</string>
+
+    <!-- Sidebar Menu -->
+    <string name="menu_rename_board">ব’ৰ্ডৰ নাম সলনি কৰক</string>
+    <string name="menu_open">খোলক</string>
+    <string name="menu_export_lesson">পাঠ ৰপ্তানি কৰক...</string>
+    <string name="menu_open_iwb">GYOASH পাঠ (.iwb) খোলক...</string>
+    <string name="menu_live_collab">লাইভ সহযোগিতা...</string>
+    <string name="menu_command_palette">কমাণ্ড পেলেট</string>
+    <string name="menu_find_on_canvas">কেনভাছত সন্ধান কৰক</string>
+    <string name="menu_help">সহায়</string>
+    <string name="menu_reset_canvas">কেনভাছ পুনৰায় সংহতি কৰক</string>
+
+    <!-- Canvas Bottom Dock Tools -->
+    <string name="tool_select">বাছক</string>
+    <string name="tool_pen">কলম</string>
+    <string name="tool_pencil">পেঞ্চিল</string>
+    <string name="tool_marker">মাৰ্কাৰ</string>
+    <string name="tool_highlighter">হাইলাইটাৰ</string>
+    <string name="tool_brush">ব্ৰাছ</string>
+    <string name="tool_flowchart">ফ্ল’চাৰ্ট</string>
+    <string name="tool_stickers">ষ্টিকাৰ</string>
+    <string name="tool_shapes">আকৃতিসমূহ</string>
+    <string name="tool_eraser">ইৰেজাৰ</string>
+    <string name="tool_laser">লেজাৰ</string>
+    <string name="tool_geometry">জ্যামিতি</string>
+    <string name="tool_tools">সঁজুলি</string>
+    <string name="tool_undo">পূৰ্ববত</string>
+    <string name="tool_redo">পুনৰ কৰক</string>
+    <string name="tool_save">সংৰক্ষণ কৰক</string>
+    <string name="tool_prev_page">পূৰ্ববৰ্তী</string>
+    <string name="tool_next_page">পৰৱৰ্তী</string>
+    <string name="tool_add_page">যোগ কৰক</string>
+    <string name="tool_profile">প্ৰ’ফাইল</string>
+    <string name="tool_main_menu">মুখ্য মেনু</string>
+    <string name="tool_exit">প্ৰস্থান</string>
+    <string name="tool_class">শ্ৰেণী</string>
+    <string name="clear_all">সকলো মচক</string>
+    <string name="tool_clean_all">সকলো পৰিষ্কাৰ কৰক</string>
+
+    <!-- Popover Menu Items -->
+    <string name="magic_pen">আকৃতি চিনাক্তকৰণ</string>
+    <string name="shape_recognition">আকৃতি চিনাক্তকৰণ</string>
+    <string name="smart_write">স্মাৰ্ট ৰাইট</string>
+    <string name="smart_write_tip">আকৃতি চিনাক্তকৰণৰ বাবে স্মাৰ্ট ৰাইট বন্ধ কৰক।</string>
+    <string name="popover_background">পটভূমি</string>
+    <string name="save_slides_pdf">স্লাইড সংৰক্ষণ কৰক (PDF)</string>
+    <string name="popover_zoom_in">জুম ইন</string>
+    <string name="popover_zoom_out">জুম আউট</string>
+    <string name="popover_fit">মিলাওক</string>
+
+    <!-- Utility Tabs & Tools -->
+    <string name="tab_board">ব’ৰ্ড</string>
+    <string name="tab_media">মিডিয়া</string>
+    <string name="tab_utilities">উপযোগিতাসমূহ</string>
+    <string name="tab_lesson">পাঠ</string>
+    <string name="tab_view">দৃশ্য</string>
+    <string name="util_hand">হাত</string>
+    <string name="util_lasso">লেছো</string>
+    <string name="util_bucket_fill">ৰং ভৰাওক</string>
+    <string name="util_stroke_colour">ৰেখাৰ ৰং</string>
+    <string name="util_pdf">পিডিএফ</string>
+    <string name="util_image">ছবি</string>
+    <string name="util_google">গুগল</string>
+    <string name="util_video">ভিডিঅ’</string>
+    <string name="util_youtube">ইউটিউব</string>
+    <string name="util_website">ৱেবছাইট</string>
+    <string name="util_timer">টাইমাৰ</string>
+    <string name="util_stopwatch">ষ্টপৱাটচ</string>
+    <string name="util_calculator">কেলকুলেটৰ</string>
+    <string name="util_periodic">পৰ্যায়বৃত্ত তালিকা</string>
+    <string name="util_spotlight">স্পটলাইট</string>
+    <string name="util_shade">ছাঁ</string>
+    <string name="util_magnifier">আতচী কাঁচ</string>
+</resources>

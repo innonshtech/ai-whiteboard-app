@@ -1,0 +1,110 @@
+<resources>
+    <string name="app_name">AvitriSphare</string>
+    <string name="app_subtitle">વ્હાઇટબોર્ડ</string>
+    <string name="save">સાચવો</string>
+    <string name="cancel">રદ કરો</string>
+    <string name="confirm">પુષ્ટિ કરો</string>
+    <string name="delete">કાઢી નાખો</string>
+    <string name="edit">સંપાદિત કરો</string>
+    <string name="close">બંધ કરો</string>
+    <string name="back">પાછળ</string>
+    <string name="open">ખોલો</string>
+    <string name="search">શોધો</string>
+    <string name="create">બનાવો</string>
+    <string name="title">શીર્ષક</string>
+    <string name="saved">સાચવવામાં આવ્યું</string>
+    <string name="color_swapped">રંગ બદલાયો</string>
+    <string name="copied_to_clipboard">ક્લિપબોર્ડ પર કૉપિ કર્યું</string>
+    <string name="help_close">બંધ કરો</string>
+    <string name="share">શેર કરો</string>
+
+    <!-- Language & Localization -->
+    <string name="language">ભાષા</string>
+    <string name="change_language">ભાષા બદલો</string>
+    <string name="select_language">ભાષા પસંદ કરો</string>
+    <string name="english">English</string>
+    <string name="hindi">हिन्दी (Hindi)</string>
+    <string name="marathi">मराठी (Marathi)</string>
+    <string name="gujarati">ગુજરાતી (Gujarati)</string>
+    <string name="tamil">தமிழ் (Tamil)</string>
+    <string name="telugu">తెలుగు (Telugu)</string>
+    <string name="kannada">ಕನ್ನಡ (Kannada)</string>
+    <string name="malayalam">മലയാളം (Malayalam)</string>
+    <string name="bengali">বাংলা (Bengali)</string>
+    <string name="punjabi">ਪੰਜਾਬੀ (Punjabi)</string>
+    <string name="odia">ଓଡ଼ିଆ (Odia)</string>
+    <string name="urdu">اردو (Urdu)</string>
+
+    <!-- Sidebar Menu -->
+    <string name="menu_rename_board">બોર્ડનું નામ બદલો</string>
+    <string name="menu_open">ખોલો</string>
+    <string name="menu_export_lesson">પાઠ નિકાસ કરો...</string>
+    <string name="menu_open_iwb">GYOASH પાઠ (.iwb) ખોલો...</string>
+    <string name="menu_live_collab">લાઈવ સહયોગ...</string>
+    <string name="menu_command_palette">કમાન્ડ પેલેટ</string>
+    <string name="menu_find_on_canvas">કેનવાસ પર શોધો</string>
+    <string name="menu_help">મદદ</string>
+    <string name="menu_reset_canvas">કેનવાસ રીસેટ કરો</string>
+
+    <!-- Canvas Bottom Dock Tools -->
+    <string name="tool_select">પસંદ કરો</string>
+    <string name="tool_pen">પેન</string>
+    <string name="tool_pencil">પેન્સિલ</string>
+    <string name="tool_marker">માર્કર</string>
+    <string name="tool_highlighter">હાઇલાઇટર</string>
+    <string name="tool_brush">બ્રશ</string>
+    <string name="tool_flowchart">ફ્લોચાર્ટ</string>
+    <string name="tool_stickers">સ્ટીકર્સ</string>
+    <string name="tool_shapes">આકારો</string>
+    <string name="tool_eraser">ઇરેઝર</string>
+    <string name="tool_laser">લેસર</string>
+    <string name="tool_geometry">ભૂમિતિ</string>
+    <string name="tool_tools">સાધનો</string>
+    <string name="tool_undo">પૂર્વવત્</string>
+    <string name="tool_redo">ફરીથી કરો</string>
+    <string name="tool_save">સાચવો</string>
+    <string name="tool_prev_page">પાછલું</string>
+    <string name="tool_next_page">આગલું</string>
+    <string name="tool_add_page">ઉમેરો</string>
+    <string name="tool_profile">પ્રોફાઇલ</string>
+    <string name="tool_main_menu">મુખ્ય મેનુ</string>
+    <string name="tool_exit">બહાર નીકળો</string>
+    <string name="tool_class">વર્ગ</string>
+    <string name="clear_all">બધું સાફ કરો</string>
+    <string name="tool_clean_all">બધું સાફ કરો</string>
+
+    <!-- Popover Menu Items -->
+    <string name="magic_pen">આકાર ઓળખ</string>
+    <string name="shape_recognition">આકાર ઓળખ</string>
+    <string name="smart_write">સ્માર્ટ રાઇટ</string>
+    <string name="smart_write_tip">આકાર ઓળખ માટે સ્માર્ટ રાઇટ બંધ કરો.</string>
+    <string name="popover_background">બેકગ્રાઉન્ડ</string>
+    <string name="save_slides_pdf">સ્લાઇડ્સ સાચવો (PDF)</string>
+    <string name="popover_zoom_in">ઝૂમ ઇન</string>
+    <string name="popover_zoom_out">ઝૂમ આઉટ</string>
+    <string name="popover_fit">કન્ટેન્ટ પ્રમાણે ગોઠવો</string>
+
+    <!-- Utility Tabs & Tools -->
+    <string name="tab_board">બોર્ડ</string>
+    <string name="tab_media">મીડિયા</string>
+    <string name="tab_utilities">ઉપયોગિતાઓ</string>
+    <string name="tab_lesson">પાઠ</string>
+    <string name="tab_view">દૃશ્ય</string>
+    <string name="util_hand">હેન્ડ</string>
+    <string name="util_lasso">લાસો</string>
+    <string name="util_bucket_fill">બકેટ ફિલ</string>
+    <string name="util_stroke_colour">સ્ટ્રોક રંગ</string>
+    <string name="util_pdf">પીડીએફ</string>
+    <string name="util_image">છબી</string>
+    <string name="util_google">ગૂગલ</string>
+    <string name="util_video">વિડિઓ</string>
+    <string name="util_youtube">યૂટ્યુબ</string>
+    <string name="util_website">વેબસાઇટ</string>
+    <string name="util_timer">ટાઈમર</string>
+    <string name="util_stopwatch">સ્ટોપવૉચ</string>
+    <string name="util_calculator">કેલ્ક્યુલેટર</string>
+    <string name="util_periodic">આવર્ત કોષ્ટક</string>
+    <string name="util_spotlight">સ્પોટલાઇટ</string>
+    <string name="util_shade">શેડ</string>
+    <string name="util_magnifier">બૃહદદર્શક</string>
+</resources>

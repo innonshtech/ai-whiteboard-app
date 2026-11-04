@@ -1,0 +1,97 @@
+<resources>
+    <string name="app_name">AvitriSphare</string>
+    <string name="app_subtitle">व्हाइटबोर्ड</string>
+    <string name="save">सांबाळात</string>
+    <string name="cancel">रद्द करात</string>
+    <string name="confirm">निश्चीत करात</string>
+    <string name="delete">काडून उडयात</string>
+    <string name="edit">बदल करात</string>
+    <string name="close">बंद करात</string>
+    <string name="back">फाटीं</string>
+    <string name="open">उगतात</string>
+    <string name="search">सोदात</string>
+    <string name="create">तयार करात</string>
+    <string name="title">माथाळो</string>
+    <string name="saved">सांबाळ्ळें</string>
+    <string name="color_swapped">रंग बदल्लो</string>
+    <string name="copied_to_clipboard">क्लिपबोर्डाचेर काॅपी केलें</string>
+    <string name="help_close">बंद करात</string>
+    <string name="share">वांटात</string>
+
+    <string name="language">भास</string>
+    <string name="change_language">भास बदलात</string>
+    <string name="select_language">भास वेंचून काडात</string>
+
+    <!-- Sidebar Menu -->
+    <string name="menu_rename_board">बोर्डाचें नांव बदलात</string>
+    <string name="menu_open">उगतात</string>
+    <string name="menu_export_lesson">पाठ निर्यात करात...</string>
+    <string name="menu_open_iwb">GYOASH पाठ (.iwb) उगतात...</string>
+    <string name="menu_live_collab">थेट सहकार्य...</string>
+    <string name="menu_command_palette">कमांड पॅलेट</string>
+    <string name="menu_find_on_canvas">कॅनव्हासाचेर सोदात</string>
+    <string name="menu_help">मदत</string>
+    <string name="menu_reset_canvas">कॅनव्हास परतून सेट करात</string>
+
+    <!-- Canvas Bottom Dock Tools -->
+    <string name="tool_select">वेंचात</string>
+    <string name="tool_pen">पेन</string>
+    <string name="tool_pencil">पेन्सील</string>
+    <string name="tool_marker">मार्कर</string>
+    <string name="tool_highlighter">हायलायटर</string>
+    <string name="tool_brush">ब्रश</string>
+    <string name="tool_flowchart">फ्लोचार्ट</string>
+    <string name="tool_stickers">स्टिकर्स</string>
+    <string name="tool_shapes">आकार</string>
+    <string name="tool_eraser">खोडरबर</string>
+    <string name="tool_laser">लेझर</string>
+    <string name="tool_geometry">भूमिती</string>
+    <string name="tool_tools">साधनां</string>
+    <string name="tool_undo">फाटीं व्हरा</string>
+    <string name="tool_redo">परतून करात</string>
+    <string name="tool_save">सांबाळात</string>
+    <string name="tool_prev_page">फाटलो</string>
+    <string name="tool_next_page">फुडलो</string>
+    <string name="tool_add_page">जोडात</string>
+    <string name="tool_profile">प्रोफायल</string>
+    <string name="tool_main_menu">मुखेल मेनु</string>
+    <string name="tool_exit">भायर वचात</string>
+    <string name="tool_class">वर्ग</string>
+    <string name="clear_all">सगळें पुसा</string>
+    <string name="tool_clean_all">सगळें साफ करात</string>
+
+    <!-- Popover Menu Items -->
+    <string name="magic_pen">आकार वळखणी</string>
+    <string name="shape_recognition">आकार वळखणी</string>
+    <string name="smart_write">स्मार्ट बरप</string>
+    <string name="smart_write_tip">आकार वळखणे खातीर स्मार्ट बरप बंद करात.</string>
+    <string name="popover_background">फाटभूंय</string>
+    <string name="save_slides_pdf">स्लायड सांबाळात (PDF)</string>
+    <string name="popover_zoom_in">व्हड करात</string>
+    <string name="popover_zoom_out">ल्हान करात</string>
+    <string name="popover_fit">माप बसयात</string>
+
+    <!-- Utility Tabs & Tools -->
+    <string name="tab_board">बोर्ड</string>
+    <string name="tab_media">माध्यम</string>
+    <string name="tab_utilities">उपयोगिता</string>
+    <string name="tab_lesson">पाठ</string>
+    <string name="tab_view">दिखावो</string>
+    <string name="util_hand">हात</string>
+    <string name="util_lasso">लासो</string>
+    <string name="util_bucket_fill">रंग भरा</string>
+    <string name="util_stroke_colour">रेषेचो रंग</string>
+    <string name="util_pdf">पीडीएफ</string>
+    <string name="util_image">फोटो</string>
+    <string name="util_google">गुगल</string>
+    <string name="util_video">व्हिडिओ</string>
+    <string name="util_youtube">यूट्यूब</string>
+    <string name="util_website">वेबसाइट</string>
+    <string name="util_timer">टायमर</string>
+    <string name="util_stopwatch">स्टॉपवॉच</string>
+    <string name="util_calculator">कॅल्क्युलेटर</string>
+    <string name="util_periodic">आवर्त सारणी</string>
+    <string name="util_spotlight">स्पॉटलायट</string>
+    <string name="util_shade">सांवळी</string>
+    <string name="util_magnifier">भिंग</string>
+</resources>

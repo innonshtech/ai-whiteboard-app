@@ -1,0 +1,110 @@
+<resources>
+    <string name="app_name">AvitriSphare</string>
+    <string name="app_subtitle">হোয়াইটবোর্ড</string>
+    <string name="save">সংরক্ষণ করুন</string>
+    <string name="cancel">বাতিল করুন</string>
+    <string name="confirm">নিশ্চিত করুন</string>
+    <string name="delete">মুছুন</string>
+    <string name="edit">সম্পাদনা</string>
+    <string name="close">বন্ধ করুন</string>
+    <string name="back">ফিরে যান</string>
+    <string name="open">খুলুন</string>
+    <string name="search">অনুসন্ধান</string>
+    <string name="create">তৈরি করুন</string>
+    <string name="title">শিরোনাম</string>
+    <string name="saved">সংরক্ষিত</string>
+    <string name="color_swapped">রং পরিবর্তন করা হয়েছে</string>
+    <string name="copied_to_clipboard">ক্লিপবোর্ডে অনুলিপি করা হয়েছে</string>
+    <string name="help_close">বন্ধ করুন</string>
+    <string name="share">শেয়ার করুন</string>
+
+    <!-- Language & Localization -->
+    <string name="language">ভাষা</string>
+    <string name="change_language">ভাষা পরিবর্তন করুন</string>
+    <string name="select_language">ভাষা নির্বাচন করুন</string>
+    <string name="english">English</string>
+    <string name="hindi">हिन्दी (Hindi)</string>
+    <string name="marathi">मराठी (Marathi)</string>
+    <string name="gujarati">ગુજરાતી (Gujarati)</string>
+    <string name="tamil">தமிழ் (Tamil)</string>
+    <string name="telugu">తెలుగు (Telugu)</string>
+    <string name="kannada">ಕನ್ನಡ (Kannada)</string>
+    <string name="malayalam">മലയാളം (Malayalam)</string>
+    <string name="bengali">বাংলা (Bengali)</string>
+    <string name="punjabi">ਪੰਜਾਬੀ (Punjabi)</string>
+    <string name="odia">ଓଡ଼ିଆ (Odia)</string>
+    <string name="urdu">اردو (Urdu)</string>
+
+    <!-- Sidebar Menu -->
+    <string name="menu_rename_board">বোর্ডের নাম পরিবর্তন করুন</string>
+    <string name="menu_open">খুলুন</string>
+    <string name="menu_export_lesson">পাঠ রপ্তানি করুন...</string>
+    <string name="menu_open_iwb">GYOASH পাঠ (.iwb) খুলুন...</string>
+    <string name="menu_live_collab">লাইভ সহযোগিতা...</string>
+    <string name="menu_command_palette">কমান্ড প্যালেট</string>
+    <string name="menu_find_on_canvas">ক্যানভাসে খুঁজুন</string>
+    <string name="menu_help">সাহায্য</string>
+    <string name="menu_reset_canvas">ক্যানভাস রিসেট করুন</string>
+
+    <!-- Canvas Bottom Dock Tools -->
+    <string name="tool_select">নির্বাচন করুন</string>
+    <string name="tool_pen">কলম</string>
+    <string name="tool_pencil">পেন্সিল</string>
+    <string name="tool_marker">মার্কার</string>
+    <string name="tool_highlighter">হাইলাইটার</string>
+    <string name="tool_brush">ব্রাশ</string>
+    <string name="tool_flowchart">ফ্লোচার্ট</string>
+    <string name="tool_stickers">স্টিকার</string>
+    <string name="tool_shapes">আকৃতি</string>
+    <string name="tool_eraser">ইরেজার</string>
+    <string name="tool_laser">লেজার</string>
+    <string name="tool_geometry">জ্যামিতি</string>
+    <string name="tool_tools">সরঞ্জাম</string>
+    <string name="tool_undo">পূর্বাবস্থা</string>
+    <string name="tool_redo">পুনরায় করুন</string>
+    <string name="tool_save">সংরক্ষণ করুন</string>
+    <string name="tool_prev_page">পূর্ববর্তী</string>
+    <string name="tool_next_page">পরবর্তী</string>
+    <string name="tool_add_page">যোগ করুন</string>
+    <string name="tool_profile">প্রোফাইল</string>
+    <string name="tool_main_menu">প্রধান মেনু</string>
+    <string name="tool_exit">প্রস্থান</string>
+    <string name="tool_class">শ্রেণী</string>
+    <string name="clear_all">সব মুছুন</string>
+    <string name="tool_clean_all">সব পরিষ্কার করুন</string>
+
+    <!-- Popover Menu Items -->
+    <string name="magic_pen">আকৃতি সনাক্তকরণ</string>
+    <string name="shape_recognition">আকৃতি সনাক্তকরণ</string>
+    <string name="smart_write">স্মার্ট রাইট</string>
+    <string name="smart_write_tip">আকৃতি সনাক্তকরণের জন্য স্মার্ট রাইট বন্ধ করুন।</string>
+    <string name="popover_background">পটভূমি</string>
+    <string name="save_slides_pdf">স্লাইড সংরক্ষণ করুন (PDF)</string>
+    <string name="popover_zoom_in">জুম ইন</string>
+    <string name="popover_zoom_out">জুম আউট</string>
+    <string name="popover_fit">মানানসই করুন</string>
+
+    <!-- Utility Tabs & Tools -->
+    <string name="tab_board">বোর্ড</string>
+    <string name="tab_media">মিডিয়া</string>
+    <string name="tab_utilities">ইউটিলিটিস</string>
+    <string name="tab_lesson">পাঠ</string>
+    <string name="tab_view">দৃশ্য</string>
+    <string name="util_hand">হাত</string>
+    <string name="util_lasso">ল্যাসো</string>
+    <string name="util_bucket_fill">রং পূরণ</string>
+    <string name="util_stroke_colour">স্ট্রোকের রং</string>
+    <string name="util_pdf">পিডিএফ</string>
+    <string name="util_image">ছবি</string>
+    <string name="util_google">গুগল</string>
+    <string name="util_video">ভিডিও</string>
+    <string name="util_youtube">ইউটিউব</string>
+    <string name="util_website">ওয়েবসাইট</string>
+    <string name="util_timer">কাউন্টডাউন টাইমার</string>
+    <string name="util_stopwatch">স্টপওয়াচ</string>
+    <string name="util_calculator">ক্যালকুলেটর</string>
+    <string name="util_periodic">পর্যায় সারণী</string>
+    <string name="util_spotlight">স্পটলাইট</string>
+    <string name="util_shade">ছায়া</string>
+    <string name="util_magnifier">আতশকাচ</string>
+</resources>
