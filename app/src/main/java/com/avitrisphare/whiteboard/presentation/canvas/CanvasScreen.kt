@@ -1353,6 +1353,9 @@ fun CanvasScreen(
     }
 
     var showSidebar by remember { mutableStateOf(false) }
+    var lastProtractorDrawCenter by remember { mutableStateOf<Offset?>(null) }
+    var lastProtractorDrawDeg by remember { mutableStateOf<Float?>(null) }
+    var lastProtractorDrawZone by remember { mutableStateOf<MathToolZone?>(null) }
     var showProfileDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showAiPanel by remember { mutableStateOf(false) }
@@ -1859,6 +1862,9 @@ fun CanvasScreen(
                             }
                         },
                         onDoubleTap = { screenTap ->
+                            if (hitTestPlacedTools(mathTools, screenTap) != null) {
+                                return@detectTapGestures
+                            }
                             if (showCanvasPasteMenu) {
                                 showCanvasPasteMenu = false
                             }
@@ -2061,7 +2067,8 @@ fun CanvasScreen(
                         var lastEraseScreen: Offset? = null
                         val activeTracks = LinkedHashMap<Long, PointerInkTrack>()
                         val finishedMultiStrokes = ArrayList<Stroke>()
-                        val writingNow = activeTool in WRITING_TOOLS
+                        val preMathHit = hitTestPlacedTools(mathTools, down.position)
+                        var writingNow = activeTool in WRITING_TOOLS && preMathHit == null
                         if (writingNow) {
                             val downPressure = if (stylusDraw) stylusPressure(down.pressure) else down.inkPressure()
                             val initialTrack = PointerInkTrack(
@@ -2084,7 +2091,7 @@ fun CanvasScreen(
                         val inkPressures = ArrayList<Float>(256)
                         inkPoints.add(downWorld)
                         inkPressures.add(if (stylusDraw) stylusPressure(down.pressure) else down.inkPressure())
-                        if (activeTool in WRITING_TOOLS) {
+                        if (writingNow) {
                             liveInk.begin(downWorld)
                         }
                         var wasMultiTouch = false
@@ -2235,8 +2242,13 @@ fun CanvasScreen(
                             null
                         }
                         if (mathHit != null) {
+                            writingNow = false
+                            activeTracks.clear()
+                            finishedMultiStrokes.clear()
                             liveInk.stroke = null
+                            liveInk.predicted = null
                             boardStage?.setLiveInk(null)
+                            boardStage?.clearLiveStrokes()
                             rulerLivePreview = null
                         }
                         if (mathHit != null) {
@@ -2254,9 +2266,11 @@ fun CanvasScreen(
                                 mathGesture.pivot = endPoint(tool, positive = !mathGesture.draggingPositiveEnd)
                             }
                             if (mathHit.zone == MathToolZone.PENCIL) {
+                                mathGesture.pivot = tool.center
                                 mathGesture.startSpan = tool.span
                                 mathGesture.startAngleDeg = tool.rotationDeg
                                 mathGesture.lastAngleDeg = tool.rotationDeg
+                                mathGesture.sweepDeg = 0f
                             }
                             if (mathHit.zone == MathToolZone.SCALE) {
                                 mathGesture.startSpan = tool.span
@@ -2276,6 +2290,9 @@ fun CanvasScreen(
                                 replaceMathTool(tool.copy(pointerAngleDeg = kotlin.math.round(a * 10f) / 10f))
                             }
                             if (mathHit.zone == MathToolZone.ROTATE) {
+                                if (tool.kind == MathToolKind.COMPASS) {
+                                    mathGesture.pivot = tool.center
+                                }
                                 mathGesture.startAngleDeg = tool.rotationDeg
                                 val radToDeg = 180f / Math.PI.toFloat()
                                 mathGesture.lastAngleDeg = atan2(down.position.y - tool.center.y, down.position.x - tool.center.x) * radToDeg
@@ -2757,7 +2774,7 @@ fun CanvasScreen(
                                     } else {
                                         mathReadout = null
                                     }
-                                } else if (fingerScratch.size == 2 && fingerPeak <= 2) {
+                                } else if (fingerScratch.size == 2 && fingerPeak <= 2 && mathGesture.toolId == null && preMathHit == null) {
                                     val f0 = fingerScratch[0]
                                     val f1 = fingerScratch[1]
 
@@ -2990,10 +3007,11 @@ fun CanvasScreen(
                                                 MathToolZone.PENCIL -> {
                                                     if (tool.kind == MathToolKind.COMPASS) {
                                                         val next = dragCompassPencil(tool, change.position, mathGesture)
-                                                        replaceMathTool(next)
+                                                        val anchored = if (mathGesture.pivot != null) next.copy(center = mathGesture.pivot!!) else next
+                                                        replaceMathTool(anchored)
                                                         if (mathGesture.arcMode) {
                                                             val worldPts = screenPointsToWorld(
-                                                                compassArcScreenPoints(next, mathGesture.startAngleDeg, mathGesture.sweepDeg),
+                                                                compassArcScreenPoints(anchored, mathGesture.startAngleDeg, mathGesture.sweepDeg),
                                                                 canvasScale,
                                                                 Offset(canvasOffsetX, canvasOffsetY)
                                                             )
@@ -3497,7 +3515,7 @@ fun CanvasScreen(
                             rulerLivePreview = null
                             mathReadout = null
                             mathGesture.rulerDrawing = false
-                        } else if (!wasMultiTouch && mathGesture.toolId != null) {
+                        } else if (!mathGesture.twoFinger && mathGesture.toolId != null) {
                             mathReadout = null
                             rulerLivePreview = null
                             val tool = mathTools.find { it.id == mathGesture.toolId }
@@ -3526,147 +3544,210 @@ fun CanvasScreen(
                                  mathGesture.zone == MathToolZone.ANGLE_MODE_ARC_LEFT ||
                                  mathGesture.zone == MathToolZone.ANGLE_MODE_ARC ||
                                  mathGesture.zone == MathToolZone.ANGLE_MODE_2) &&
-                                mathGesture.movedPx <= MATH_TAP_SLOP
+                                mathGesture.movedPx <= maxOf(MATH_TAP_SLOP * 3f, 60f)
                             ) {
+                                viewModel.cancelCurrentStroke()
+                                liveInk.stroke = null
+                                boardStage?.setLiveInk(null)
+                                rulerLivePreview = null
+
                                 val pDeg = tool.pointerAngleDeg
-                                val rad = Math.toRadians(pDeg.toDouble()).toFloat()
-                                val dir = direction(tool.rotationDeg)
-                                val perp = perpendicular(tool.rotationDeg)
-                                val armDir = dir * cos(rad) - perp * sin(rad)
-                                val offset = Offset(canvasOffsetX, canvasOffsetY)
-                                val centerWorld = CanvasTransform.screenToWorld(tool.center, canvasScale, offset)
+                                val isSamePlaceAndAngle = lastProtractorDrawCenter != null &&
+                                    (tool.center - lastProtractorDrawCenter!!).getDistance() <= 12f &&
+                                    kotlin.math.abs((lastProtractorDrawDeg ?: -1f) - pDeg) < 0.5f &&
+                                    lastProtractorDrawZone == mathGesture.zone
 
-                                val safeScale = canvasScale.coerceAtLeast(0.1f)
-                                val armLenWorld = tool.span / safeScale
-                                val arcRWorld = (armLenWorld * 0.40f).coerceAtLeast(20f)
-                                val arcOnlyRWorld = (armLenWorld * 0.70f).coerceAtLeast(30f)
+                                if (isSamePlaceAndAngle) {
+                                    Toast.makeText(context, "Angle already drawn at this position", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    lastProtractorDrawCenter = tool.center
+                                    lastProtractorDrawDeg = pDeg
+                                    lastProtractorDrawZone = mathGesture.zone
 
-                                val armWorld = centerWorld + armDir * armLenWorld
-                                val rightBaseWorld = centerWorld + dir * armLenWorld
-                                val leftBaseWorld = centerWorld - dir * armLenWorld
+                                    val rad = Math.toRadians(pDeg.toDouble()).toFloat()
+                                    val dir = direction(tool.rotationDeg)
+                                    val perp = perpendicular(tool.rotationDeg)
+                                    val armDir = dir * cos(rad) - perp * sin(rad)
+                                    val offset = Offset(canvasOffsetX, canvasOffsetY)
+                                    val centerWorld = CanvasTransform.screenToWorld(tool.center, canvasScale, offset)
 
-                                val protractorTag = "protractor_${tool.id}_${mathGesture.zone.name.lowercase()}"
-                                val newStrokes = mutableListOf<Stroke>()
+                                    val safeScale = canvasScale.coerceAtLeast(0.1f)
+                                    val armLenWorld = tool.span / safeScale
+                                    val cornerArcRWorld = (armLenWorld * 0.16f).coerceIn(22f, 40f)
 
-                                when (mathGesture.zone) {
-                                    MathToolZone.ANGLE_MODE_1 -> {
-                                        // Left Angle: from Left baseline (180°) to arm
-                                        val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
-                                        newStrokes.add(straightStroke(centerWorld, leftBaseWorld, state.selectedColor, state.strokeWidth))
-                                        newStrokes.add(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
-                                        val arcWorldPoints = mutableListOf<Offset>()
-                                        val steps = (leftAngleDeg / 3f).roundToInt().coerceAtLeast(10)
-                                        for (i in 0..steps) {
-                                            val deg = 180f - (leftAngleDeg * i) / steps
-                                            val r = Math.toRadians(deg.toDouble()).toFloat()
-                                            val d = dir * cos(r) - perp * sin(r)
-                                            arcWorldPoints.add(centerWorld + d * arcRWorld)
-                                        }
-                                        newStrokes.add(
-                                            arcStroke(
-                                                arcWorldPoints,
-                                                state.selectedColor,
-                                                (state.strokeWidth * 0.85f).coerceAtLeast(2f)
+                                    val armWorld = centerWorld + armDir * armLenWorld
+                                    val rightBaseWorld = centerWorld + dir * armLenWorld
+                                    val leftBaseWorld = centerWorld - dir * armLenWorld
+
+                                    val newStrokes = mutableListOf<Stroke>()
+
+                                    when (mathGesture.zone) {
+                                        MathToolZone.ANGLE_MODE_1 -> {
+                                            // Left Angle: from Left baseline (180°) to arm originating from corner
+                                            val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
+                                            newStrokes.add(straightStroke(centerWorld, leftBaseWorld, state.selectedColor, state.strokeWidth))
+                                            newStrokes.add(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
+                                            val arcWorldPoints = mutableListOf<Offset>()
+                                            val steps = (leftAngleDeg / 3f).roundToInt().coerceAtLeast(10)
+                                            for (i in 0..steps) {
+                                                val deg = 180f - (leftAngleDeg * i) / steps
+                                                val r = Math.toRadians(deg.toDouble()).toFloat()
+                                                val d = dir * cos(r) - perp * sin(r)
+                                                arcWorldPoints.add(centerWorld + d * cornerArcRWorld)
+                                            }
+                                            newStrokes.add(
+                                                arcStroke(
+                                                    arcWorldPoints,
+                                                    state.selectedColor,
+                                                    (state.strokeWidth * 0.85f).coerceAtLeast(2f)
+                                                )
                                             )
-                                        )
-                                        val midRad = Math.toRadians((180.0 - leftAngleDeg / 2.0)).toFloat()
-                                        val midD = dir * cos(midRad) - perp * sin(midRad)
-                                        val labelWorld = centerWorld + midD * (arcRWorld + 28f)
-                                        newStrokes.add(
-                                            measurementLabel("${leftAngleDeg.roundToInt()}\u00B0", labelWorld, state.selectedColor)
-                                        )
-                                        viewModel.commitProtractorAngle(protractorTag, newStrokes)
-                                        Toast.makeText(context, "Angle ${leftAngleDeg.roundToInt()}\u00B0 drawn", Toast.LENGTH_SHORT).show()
-                                    }
-                                    MathToolZone.ANGLE_MODE_ARC_LEFT -> {
-                                        // Left Arc: circular arc only from Left baseline (180°) down to arm
-                                        viewModel.cancelCurrentStroke()
-                                        liveInk.stroke = null
-                                        boardStage?.setLiveInk(null)
-                                        rulerLivePreview = null
-
-                                        val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
-                                        val arcWorldPoints = mutableListOf<Offset>()
-                                        val steps = (leftAngleDeg / 2.5f).roundToInt().coerceAtLeast(10)
-                                        for (i in 0..steps) {
-                                            val deg = 180f - (leftAngleDeg * i) / steps
-                                            val r = Math.toRadians(deg.toDouble()).toFloat()
-                                            val d = dir * cos(r) - perp * sin(r)
-                                            arcWorldPoints.add(centerWorld + d * arcOnlyRWorld)
-                                        }
-                                        newStrokes.add(
-                                            arcStroke(
-                                                arcWorldPoints,
-                                                state.selectedColor,
-                                                state.strokeWidth
+                                            val midRad = Math.toRadians((180.0 - leftAngleDeg / 2.0)).toFloat()
+                                            val midD = dir * cos(midRad) - perp * sin(midRad)
+                                            val labelWorld = centerWorld + midD * (cornerArcRWorld + 20f)
+                                            newStrokes.add(
+                                                measurementLabel("${leftAngleDeg.roundToInt()}°", labelWorld, state.selectedColor)
                                             )
-                                        )
-                                        viewModel.commitProtractorAngle(protractorTag, newStrokes)
-                                        Toast.makeText(context, "Arc (${leftAngleDeg.roundToInt()}\u00B0) drawn", Toast.LENGTH_SHORT).show()
-                                    }
-                                    MathToolZone.ANGLE_MODE_ARC -> {
-                                        // Right Arc: circular arc only from Right baseline (0°) up to arm
-                                        viewModel.cancelCurrentStroke()
-                                        liveInk.stroke = null
-                                        boardStage?.setLiveInk(null)
-                                        rulerLivePreview = null
-
-                                        val arcWorldPoints = mutableListOf<Offset>()
-                                        val steps = (pDeg / 2.5f).roundToInt().coerceAtLeast(10)
-                                        for (i in 0..steps) {
-                                            val deg = (pDeg * i) / steps
-                                            val r = Math.toRadians(deg.toDouble()).toFloat()
-                                            val d = dir * cos(r) - perp * sin(r)
-                                            arcWorldPoints.add(centerWorld + d * arcOnlyRWorld)
-                                        }
-                                        newStrokes.add(
-                                            arcStroke(
-                                                arcWorldPoints,
-                                                state.selectedColor,
-                                                state.strokeWidth
+                                            viewModel.commitProtractorAngle(newStrokes)
+                                            val latest = viewModel.state.value
+                                            boardStage?.syncPage(
+                                                strokes = latest.strokes,
+                                                background = latest.canvasBackground,
+                                                showGrid = latest.showGrid,
+                                                dark = latest.isDarkCanvas,
+                                                scale = latest.scale,
+                                                offsetX = latest.offsetX,
+                                                offsetY = latest.offsetY,
+                                                selected = latest.selectedStrokeIds,
+                                                customBackgroundUri = latest.pageCustomBackgroundUris.getOrElse(latest.pageIndex) { "" },
+                                                pageIndex = latest.pageIndex
                                             )
-                                        )
-                                        viewModel.commitProtractorAngle(protractorTag, newStrokes)
-                                        Toast.makeText(context, "Arc (${pDeg.roundToInt()}\u00B0) drawn", Toast.LENGTH_SHORT).show()
-                                    }
-                                    MathToolZone.ANGLE_MODE_2 -> {
-                                        // Right Angle: from Right baseline (0°) to arm
-                                        newStrokes.add(straightStroke(centerWorld, rightBaseWorld, state.selectedColor, state.strokeWidth))
-                                        newStrokes.add(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
-                                        val arcWorldPoints = mutableListOf<Offset>()
-                                        val steps = (pDeg / 3f).roundToInt().coerceAtLeast(10)
-                                        for (i in 0..steps) {
-                                            val deg = (pDeg * i) / steps
-                                            val r = Math.toRadians(deg.toDouble()).toFloat()
-                                            val d = dir * cos(r) - perp * sin(r)
-                                            arcWorldPoints.add(centerWorld + d * arcRWorld)
+                                            boardStage?.invalidate()
+                                            Toast.makeText(context, "Angle ${leftAngleDeg.roundToInt()}° drawn", Toast.LENGTH_SHORT).show()
                                         }
-                                        newStrokes.add(
-                                            arcStroke(
-                                                arcWorldPoints,
-                                                state.selectedColor,
-                                                (state.strokeWidth * 0.85f).coerceAtLeast(2f)
+                                        MathToolZone.ANGLE_MODE_ARC_LEFT -> {
+                                            // Left Arc: only the circular arc is drawn (rays drawn only when Angle tool is used)
+                                            val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
+                                            val arcWorldPoints = mutableListOf<Offset>()
+                                            val steps = (leftAngleDeg / 2.5f).roundToInt().coerceAtLeast(10)
+                                            for (i in 0..steps) {
+                                                val deg = 180f - (leftAngleDeg * i) / steps
+                                                val r = Math.toRadians(deg.toDouble()).toFloat()
+                                                val d = dir * cos(r) - perp * sin(r)
+                                                arcWorldPoints.add(centerWorld + d * armLenWorld)
+                                            }
+                                            newStrokes.add(
+                                                arcStroke(
+                                                    arcWorldPoints,
+                                                    state.selectedColor,
+                                                    state.strokeWidth
+                                                )
                                             )
-                                        )
-                                        val midRad = Math.toRadians((pDeg / 2f).toDouble()).toFloat()
-                                        val midD = dir * cos(midRad) - perp * sin(midRad)
-                                        val labelWorld = centerWorld + midD * (arcRWorld + 28f)
-                                        newStrokes.add(
-                                            measurementLabel("${pDeg.roundToInt()}\u00B0", labelWorld, state.selectedColor)
-                                        )
-                                        viewModel.commitProtractorAngle(protractorTag, newStrokes)
-                                        Toast.makeText(context, "Angle ${pDeg.roundToInt()}\u00B0 drawn", Toast.LENGTH_SHORT).show()
+                                            viewModel.commitProtractorAngle(newStrokes)
+                                            val latest = viewModel.state.value
+                                            boardStage?.syncPage(
+                                                strokes = latest.strokes,
+                                                background = latest.canvasBackground,
+                                                showGrid = latest.showGrid,
+                                                dark = latest.isDarkCanvas,
+                                                scale = latest.scale,
+                                                offsetX = latest.offsetX,
+                                                offsetY = latest.offsetY,
+                                                selected = latest.selectedStrokeIds,
+                                                customBackgroundUri = latest.pageCustomBackgroundUris.getOrElse(latest.pageIndex) { "" },
+                                                pageIndex = latest.pageIndex
+                                            )
+                                            boardStage?.invalidate()
+                                            Toast.makeText(context, "Arc (${leftAngleDeg.roundToInt()}°) drawn", Toast.LENGTH_SHORT).show()
+                                        }
+                                        MathToolZone.ANGLE_MODE_ARC -> {
+                                            // Right Arc: only the circular arc is drawn (rays drawn only when Angle tool is used)
+                                            val arcWorldPoints = mutableListOf<Offset>()
+                                            val steps = (pDeg / 2.5f).roundToInt().coerceAtLeast(10)
+                                            for (i in 0..steps) {
+                                                val deg = (pDeg * i) / steps
+                                                val r = Math.toRadians(deg.toDouble()).toFloat()
+                                                val d = dir * cos(r) - perp * sin(r)
+                                                arcWorldPoints.add(centerWorld + d * armLenWorld)
+                                            }
+                                            newStrokes.add(
+                                                arcStroke(
+                                                    arcWorldPoints,
+                                                    state.selectedColor,
+                                                    state.strokeWidth
+                                                )
+                                            )
+                                            viewModel.commitProtractorAngle(newStrokes)
+                                            val latest = viewModel.state.value
+                                            boardStage?.syncPage(
+                                                strokes = latest.strokes,
+                                                background = latest.canvasBackground,
+                                                showGrid = latest.showGrid,
+                                                dark = latest.isDarkCanvas,
+                                                scale = latest.scale,
+                                                offsetX = latest.offsetX,
+                                                offsetY = latest.offsetY,
+                                                selected = latest.selectedStrokeIds,
+                                                customBackgroundUri = latest.pageCustomBackgroundUris.getOrElse(latest.pageIndex) { "" },
+                                                pageIndex = latest.pageIndex
+                                            )
+                                            boardStage?.invalidate()
+                                            Toast.makeText(context, "Arc (${pDeg.roundToInt()}°) drawn", Toast.LENGTH_SHORT).show()
+                                        }
+                                        MathToolZone.ANGLE_MODE_2 -> {
+                                            // Right Angle: from Right baseline (0°) to arm originating from corner
+                                            newStrokes.add(straightStroke(centerWorld, rightBaseWorld, state.selectedColor, state.strokeWidth))
+                                            newStrokes.add(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
+                                            val arcWorldPoints = mutableListOf<Offset>()
+                                            val steps = (pDeg / 3f).roundToInt().coerceAtLeast(10)
+                                            for (i in 0..steps) {
+                                                val deg = (pDeg * i) / steps
+                                                val r = Math.toRadians(deg.toDouble()).toFloat()
+                                                val d = dir * cos(r) - perp * sin(r)
+                                                arcWorldPoints.add(centerWorld + d * cornerArcRWorld)
+                                            }
+                                            newStrokes.add(
+                                                arcStroke(
+                                                    arcWorldPoints,
+                                                    state.selectedColor,
+                                                    (state.strokeWidth * 0.85f).coerceAtLeast(2f)
+                                                )
+                                            )
+                                            val midRad = Math.toRadians((pDeg / 2f).toDouble()).toFloat()
+                                            val midD = dir * cos(midRad) - perp * sin(midRad)
+                                            val labelWorld = centerWorld + midD * (cornerArcRWorld + 20f)
+                                            newStrokes.add(
+                                                measurementLabel("${pDeg.roundToInt()}°", labelWorld, state.selectedColor)
+                                            )
+                                            viewModel.commitProtractorAngle(newStrokes)
+                                            val latest = viewModel.state.value
+                                            boardStage?.syncPage(
+                                                strokes = latest.strokes,
+                                                background = latest.canvasBackground,
+                                                showGrid = latest.showGrid,
+                                                dark = latest.isDarkCanvas,
+                                                scale = latest.scale,
+                                                offsetX = latest.offsetX,
+                                                offsetY = latest.offsetY,
+                                                selected = latest.selectedStrokeIds,
+                                                customBackgroundUri = latest.pageCustomBackgroundUris.getOrElse(latest.pageIndex) { "" },
+                                                pageIndex = latest.pageIndex
+                                            )
+                                            boardStage?.invalidate()
+                                            Toast.makeText(context, "Angle ${pDeg.roundToInt()}° drawn", Toast.LENGTH_SHORT).show()
+                                        }
+                                        else -> Unit
                                     }
-                                    else -> Unit
                                 }
                             } else if (tool != null && tool.kind == MathToolKind.COMPASS && (mathGesture.zone == MathToolZone.PENCIL || mathGesture.zone == MathToolZone.ROTATE)) {
+                                val fixedCenter = mathGesture.pivot ?: tool.center
                                 val worldCenter = CanvasTransform.screenToWorld(
-                                    tool.center,
+                                    fixedCenter,
                                     canvasScale,
                                     Offset(canvasOffsetX, canvasOffsetY)
                                 )
                                 val worldRadius = tool.span / canvasScale.coerceAtLeast(0.001f)
-                                if (mathGesture.movedPx <= MATH_TAP_SLOP || isFullCircleSweep(mathGesture.sweepDeg)) {
+                                if (mathGesture.movedPx <= maxOf(MATH_TAP_SLOP * 2.5f, 40f) || isFullCircleSweep(mathGesture.sweepDeg)) {
                                     viewModel.cancelCurrentStroke()
                                     viewModel.commitStroke(
                                         circleStroke(worldCenter, worldRadius, state.selectedColor, state.strokeWidth)
@@ -3674,6 +3755,20 @@ fun CanvasScreen(
                                 } else if (mathGesture.arcMode) {
                                     viewModel.finishStroke()
                                 }
+                                val latest = viewModel.state.value
+                                boardStage?.syncPage(
+                                    strokes = latest.strokes,
+                                    background = latest.canvasBackground,
+                                    showGrid = latest.showGrid,
+                                    dark = latest.isDarkCanvas,
+                                    scale = latest.scale,
+                                    offsetX = latest.offsetX,
+                                    offsetY = latest.offsetY,
+                                    selected = latest.selectedStrokeIds,
+                                    customBackgroundUri = latest.pageCustomBackgroundUris.getOrElse(latest.pageIndex) { "" },
+                                    pageIndex = latest.pageIndex
+                                )
+                                boardStage?.invalidate()
                             }
                             }
                         mathReadout = null
