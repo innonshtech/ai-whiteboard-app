@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -71,6 +72,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import android.view.inputmethod.InputMethodManager
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import com.avitrisphare.whiteboard.presentation.canvas.utility.CalculatorFloatingPanel
 import com.avitrisphare.whiteboard.presentation.canvas.utility.CalculatorUiState
 import com.avitrisphare.whiteboard.presentation.canvas.utility.PeriodicTableFloatingPanel
@@ -83,6 +93,12 @@ import com.avitrisphare.whiteboard.presentation.canvas.utility.UtilityToolKind
 import com.avitrisphare.whiteboard.presentation.canvas.utility.TranslatorUiState
 import com.avitrisphare.whiteboard.presentation.canvas.translation.IndianLanguage
 import com.avitrisphare.whiteboard.presentation.canvas.translation.TranslatorFloatingPanel
+import android.app.Activity
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 
 @Composable
 fun boardFieldColors(isDark: Boolean = LocalDarkTheme.current) = OutlinedTextFieldDefaults.colors(
@@ -128,6 +144,7 @@ fun BoardModalHeader(title: String, onDismiss: () -> Unit, isDark: Boolean = Loc
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun BoardModal(
     title: String,
@@ -139,7 +156,39 @@ fun BoardModal(
     isDark: Boolean = LocalDarkTheme.current,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    var hideKeyboardAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    Dialog(
+        onDismissRequest = {
+            // Clicking outside anywhere closes the soft keyboard, but keeps the editor dialog open!
+            hideKeyboardAction?.invoke()
+        }
+    ) {
+        val dialogView = LocalView.current
+        val dialogFocusManager = LocalFocusManager.current
+        val dialogKeyboardController = LocalSoftwareKeyboardController.current
+        val imm = remember(dialogView) { dialogView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager }
+
+        val hideKeyboard: () -> Unit = remember(dialogView, dialogFocusManager, dialogKeyboardController, imm) {
+            {
+                dialogFocusManager.clearFocus(force = true)
+                dialogKeyboardController?.hide()
+                val focused = dialogView.findFocus()
+                if (focused != null) {
+                    imm?.hideSoftInputFromWindow(focused.windowToken, 0)
+                    focused.clearFocus()
+                }
+                imm?.hideSoftInputFromWindow(dialogView.windowToken, 0)
+                (dialogView.context as? Activity)?.currentFocus?.let {
+                    imm?.hideSoftInputFromWindow(it.windowToken, 0)
+                }
+            }
+        }
+
+        LaunchedEffect(hideKeyboard) {
+            hideKeyboardAction = hideKeyboard
+        }
+
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = if (isDark) Color(0xFF1E293B) else Color.White,
@@ -148,6 +197,13 @@ fun BoardModal(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    // Clicking inside the modal card outside the input field also hides the keyboard!
+                    hideKeyboard()
+                }
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 BoardModalHeader(title, onDismiss, isDark)
@@ -160,8 +216,24 @@ fun BoardModal(
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        IconButton(
+                            onClick = { hideKeyboard() },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Hide Keyboard",
+                                tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+
                         if (cancelLabel != null) {
-                            TextButton(onClick = onDismiss) {
+                            TextButton(onClick = {
+                                hideKeyboard()
+                                onDismiss()
+                            }) {
                                 Text(
                                     cancelLabel,
                                     color = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280),
@@ -182,7 +254,10 @@ fun BoardModal(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(fill)
-                                    .clickable(onClick = onConfirm)
+                                    .clickable {
+                                        hideKeyboard()
+                                        onConfirm()
+                                    }
                                     .padding(horizontal = 18.dp, vertical = 10.dp)
                             ) {
                                 Text(confirmLabel, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)

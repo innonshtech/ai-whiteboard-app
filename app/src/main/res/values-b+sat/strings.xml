@@ -1,0 +1,97 @@
+<resources>
+    <string name="app_name">AvitriSphare</string>
+    <string name="app_subtitle">ᱯᱩᱸᱰ ᱵᱳᱨᱰ</string>
+    <string name="save">ᱫᱚᱦᱚᱭ ᱢᱮ</string>
+    <string name="cancel">ᱵᱟᱹᱛᱤᱞ ᱢᱮ</string>
+    <string name="confirm">ᱴᱷᱟᱹᱣᱠᱟᱹᱭ ᱢᱮ</string>
+    <string name="delete">ᱜᱮᱫ ᱜᱤᱰᱤ</string>
+    <string name="edit">ᱥᱟᱯᱲᱟᱣ</string>
+    <string name="close">ᱵᱚᱸᱫᱚᱭ ᱢᱮ</string>
+    <string name="back">ᱛᱟᱭᱚᱢ</string>
+    <string name="open">ᱡᱷᱤᱡ ᱢᱮ</string>
+    <string name="search">ᱥᱮᱸᱫᱽᱨᱟ</string>
+    <string name="create">ᱵᱮᱱᱟᱣ ᱢᱮ</string>
+    <string name="title">ᱪᱮᱛᱟᱱ ᱧᱩᱛᱩᱢ</string>
+    <string name="saved">ᱫᱚᱦᱚᱭᱮᱱᱟ</string>
+    <string name="color_swapped">ᱨᱚᱝ ᱵᱚᱫᱚᱞᱮᱱᱟ</string>
+    <string name="copied_to_clipboard">ᱠᱚᱯᱤ ᱮᱱᱟ</string>
+    <string name="help_close">ᱵᱚᱸᱫᱚᱭ ᱢᱮ</string>
+    <string name="share">ᱦᱟᱹᱴᱤᱧ ᱢᱮ</string>
+
+    <string name="language">ᱯᱟᱹᱨᱥᱤ</string>
+    <string name="change_language">ᱯᱟᱹᱨᱥᱤ ᱵᱚᱫᱚᱞ ᱢᱮ</string>
+    <string name="select_language">ᱯᱟᱹᱨᱥᱤ ᱵᱟᱪᱷᱟᱣ ᱢᱮ</string>
+
+    <!-- Sidebar Menu -->
+    <string name="menu_rename_board">ᱵᱳᱨᱰ ᱧᱩᱛᱩᱢ ᱵᱚᱫᱚᱞ</string>
+    <string name="menu_open">ᱡᱷᱤᱡ ᱢᱮ</string>
+    <string name="menu_export_lesson">ᱯᱟᱴᱷ ᱵᱷᱮᱡᱟᱭ ᱢᱮ...</string>
+    <string name="menu_open_iwb">GYOASH ᱯᱟᱴᱷ (.iwb) ᱡᱷᱤᱡ ᱢᱮ...</string>
+    <string name="menu_live_collab">ᱡᱤᱣᱤᱫ ᱜᱚᱲᱚ...</string>
+    <string name="menu_command_palette">ᱦᱩᱠᱩᱢ ᱯᱮᱞᱮᱴ</string>
+    <string name="menu_find_on_canvas">ᱠᱮᱱᱵᱷᱟᱥ ᱨᱮ ᱥᱮᱸᱫᱽᱨᱟ</string>
+    <string name="menu_help">ᱜᱚᱲᱚ</string>
+    <string name="menu_reset_canvas">ᱠᱮᱱᱵᱷᱟᱥ ᱨᱤᱥᱮᱴ ᱢᱮ</string>
+
+    <!-- Canvas Bottom Dock Tools -->
+    <string name="tool_select">ᱵᱟᱪᱷᱟᱣ ᱢᱮ</string>
+    <string name="tool_pen">ᱠᱚᱞᱚᱢ</string>
+    <string name="tool_pencil">ᱯᱮᱱᱥᱤᱞ</string>
+    <string name="tool_marker">ᱢᱟᱨᱠᱟᱨ</string>
+    <string name="tool_highlighter">ᱦᱟᱭᱞᱟᱭᱴᱟᱨ</string>
+    <string name="tool_brush">ᱵᱨᱟᱥ</string>
+    <string name="tool_flowchart">ᱯᱷᱞᱳᱪᱟᱨᱴ</string>
+    <string name="tool_stickers">ᱥᱴᱤᱠᱟᱨ</string>
+    <string name="tool_shapes">ᱨᱩᱯᱠᱩ</string>
+    <string name="tool_eraser">ᱤᱨᱮᱡᱟᱨ</string>
+    <string name="tool_laser">ᱞᱮᱡᱟᱨ</string>
+    <string name="tool_geometry">ᱡᱤᱭᱳᱢᱮᱴᱨᱤ</string>
+    <string name="tool_tools">ᱦᱟᱹᱛᱭᱟᱹᱨ</string>
+    <string name="tool_undo">ᱛᱟᱭᱚᱢ</string>
+    <string name="tool_redo">ᱫᱚᱦᱲᱟ</string>
+    <string name="tool_save">ᱫᱚᱦᱚᱭ ᱢᱮ</string>
+    <string name="tool_prev_page">ᱢᱟᱲᱟᱝ</string>
+    <string name="tool_next_page">ᱛᱟᱭᱚᱢ</string>
+    <string name="tool_add_page">ᱥᱮᱞᱮᱫ ᱢᱮ</string>
+    <string name="tool_profile">ᱯᱨᱳᱯᱷᱟᱭᱤᱞ</string>
+    <string name="tool_main_menu">ᱢᱩᱬᱩᱛ ᱢᱮᱱᱩ</string>
+    <string name="tool_exit">ᱚᱰᱚᱠᱚᱜ</string>
+    <string name="tool_class">ᱠᱞᱟᱥ</string>
+    <string name="clear_all">ᱡᱚᱛᱚ ᱜᱤᱰᱤ</string>
+    <string name="tool_clean_all">ᱯᱩᱨᱟᱹ ᱯᱷᱟᱨᱪᱟ</string>
+
+    <!-- Popover Menu Items -->
+    <string name="magic_pen">ᱨᱩᱯ ᱩᱯᱨᱩᱢ</string>
+    <string name="shape_recognition">ᱨᱩᱯ ᱩᱯᱨᱩᱢ</string>
+    <string name="smart_write">ᱥᱢᱟᱨᱴ ᱚᱞ</string>
+    <string name="smart_write_tip">ᱨᱩᱯ ᱩᱯᱨᱩᱢ ᱞᱟᱹᱜᱤᱫ ᱥᱢᱟᱨᱴ ᱚᱞ ᱵᱚᱸᱫᱚᱭ ᱢᱮ᱾</string>
+    <string name="popover_background">ᱯᱟᱹᱪᱷᱞᱟᱹ</string>
+    <string name="save_slides_pdf">ᱥᱞᱟᱭᱤᱰ ᱫᱚᱦᱚᱭ ᱢᱮ (PDF)</string>
+    <string name="popover_zoom_in">ᱢᱟᱨᱟᱝ ᱢᱮ</string>
+    <string name="popover_zoom_out">ᱦᱩᱰᱤᱧ ᱢᱮ</string>
+    <string name="popover_fit">ᱥᱟᱡᱟᱣ ᱢᱮ</string>
+
+    <!-- Utility Tabs & Tools -->
+    <string name="tab_board">ᱵᱳᱨᱰ</string>
+    <string name="tab_media">ᱢᱤᱰᱤᱭᱟ</string>
+    <string name="tab_utilities">ᱞᱟᱹᱠᱛᱤᱭᱟᱱ</string>
+    <string name="tab_lesson">ᱯᱟᱴᱷ</string>
+    <string name="tab_view">ᱧᱮᱞ</string>
+    <string name="util_hand">ᱛᱤ</string>
+    <string name="util_lasso">ᱞᱟᱥᱳ</string>
+    <string name="util_bucket_fill">ᱨᱚᱝ ᱯᱮᱨᱮᱡ</string>
+    <string name="util_stroke_colour">ᱜᱟᱨ ᱨᱚᱝ</string>
+    <string name="util_pdf">PDF</string>
+    <string name="util_image">ᱪᱤᱛᱟᱹᱨ</string>
+    <string name="util_google">Google</string>
+    <string name="util_video">Video</string>
+    <string name="util_youtube">YouTube</string>
+    <string name="util_website">Website</string>
+    <string name="util_timer">ᱴᱟᱭᱢᱟᱨ</string>
+    <string name="util_stopwatch">ᱥᱴᱚᱯᱣᱟᱪ</string>
+    <string name="util_calculator">ᱞᱮᱠᱷᱟ ᱡᱚᱠᱷᱟ</string>
+    <string name="util_periodic">ᱴᱮᱵᱩᱞ</string>
+    <string name="util_spotlight">ᱥᱯᱚᱴᱞᱟᱭᱤᱴ</string>
+    <string name="util_shade">ᱩᱢᱩᱞ</string>
+    <string name="util_magnifier">ᱢᱟᱨᱟᱝ ᱟᱹᱨᱥᱤ</string>
+</resources>

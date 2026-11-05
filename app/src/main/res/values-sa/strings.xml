@@ -1,0 +1,97 @@
+<resources>
+    <string name="app_name">AvitriSphare</string>
+    <string name="app_subtitle">श्वेतफलकम्</string>
+    <string name="save">रक्षतु</string>
+    <string name="cancel">त्यजतु</string>
+    <string name="confirm">दृढीकरोतु</string>
+    <string name="delete">मार्जतु</string>
+    <string name="edit">संपादयतु</string>
+    <string name="close">पिदधातु</string>
+    <string name="back">प्रतिगच्छतु</string>
+    <string name="open">उद्घाटयतु</string>
+    <string name="search">अन्वेषणम्</string>
+    <string name="create">रचयतु</string>
+    <string name="title">शीर्षकम्</string>
+    <string name="saved">रक्षितम्</string>
+    <string name="color_swapped">वर्णः परिवर्तितः</string>
+    <string name="copied_to_clipboard">अनुलिखितम्</string>
+    <string name="help_close">पिदधातु</string>
+    <string name="share">संविभजतु</string>
+
+    <string name="language">भाषा</string>
+    <string name="change_language">भाषां परिवर्तयतु</string>
+    <string name="select_language">भाषां चिनोतु</string>
+
+    <!-- Sidebar Menu -->
+    <string name="menu_rename_board">फलकस्य नाम परिवर्तयतु</string>
+    <string name="menu_open">उद्घाटयतु</string>
+    <string name="menu_export_lesson">पाठं निर्यापयतु...</string>
+    <string name="menu_open_iwb">GYOASH पाठम् उद्घाटयतु...</string>
+    <string name="menu_live_collab">प्रत्यक्षसहयोगः...</string>
+    <string name="menu_command_palette">आदेशपट्टिका</string>
+    <string name="menu_find_on_canvas">चित्रे अन्विषतु</string>
+    <string name="menu_help">साहाय्यम्</string>
+    <string name="menu_reset_canvas">चित्रफलकं पुनर्निवेशयतु</string>
+
+    <!-- Canvas Bottom Dock Tools -->
+    <string name="tool_select">चिनोतु</string>
+    <string name="tool_pen">लेखनी</string>
+    <string name="tool_pencil">शलाका</string>
+    <string name="tool_marker">अङ्कनी</string>
+    <string name="tool_highlighter">उद्भासिनी</string>
+    <string name="tool_brush">तूलिका</string>
+    <string name="tool_flowchart">प्रवाहचित्रम्</string>
+    <string name="tool_stickers">संलेखाः</string>
+    <string name="tool_shapes">आकाराः</string>
+    <string name="tool_eraser">मार्जकम्</string>
+    <string name="tool_laser">लेसर</string>
+    <string name="tool_geometry">ज्यामितिः</string>
+    <string name="tool_tools">उपकरणानि</string>
+    <string name="tool_undo">पूर्वावस्था</string>
+    <string name="tool_redo">पुनः कुरु</string>
+    <string name="tool_save">रक्षतु</string>
+    <string name="tool_prev_page">पूर्वम्</string>
+    <string name="tool_next_page">अग्रिमम्</string>
+    <string name="tool_add_page">योजयतु</string>
+    <string name="tool_profile">विवरणम्</string>
+    <string name="tool_main_menu">मुख्यसूचिः</string>
+    <string name="tool_exit">निर्गच्छतु</string>
+    <string name="tool_class">कक्षा</string>
+    <string name="clear_all">सर्वं मार्जयतु</string>
+    <string name="tool_clean_all">सर्वं शोधयतु</string>
+
+    <!-- Popover Menu Items -->
+    <string name="magic_pen">आकारप्रत्यभिज्ञा</string>
+    <string name="shape_recognition">आकारप्रत्यभिज्ञा</string>
+    <string name="smart_write">दक्षलेखनम्</string>
+    <string name="smart_write_tip">आकारप्रत्यभिज्ञायै दक्षलेखनं पिदधातु।</string>
+    <string name="popover_background">पृष्ठभूमिः</string>
+    <string name="save_slides_pdf">पत्राणि रक्षतु (PDF)</string>
+    <string name="popover_zoom_in">विस्तारयतु</string>
+    <string name="popover_zoom_out">सङ्कोचयतु</string>
+    <string name="popover_fit">समायोजयतु</string>
+
+    <!-- Utility Tabs & Tools -->
+    <string name="tab_board">फलकम्</string>
+    <string name="tab_media">माध्यमम्</string>
+    <string name="tab_utilities">उपयोगाः</string>
+    <string name="tab_lesson">पाठः</string>
+    <string name="tab_view">दृश्यम्</string>
+    <string name="util_hand">हस्तः</string>
+    <string name="util_lasso">पाशः</string>
+    <string name="util_bucket_fill">वर्णपूरणम्</string>
+    <string name="util_stroke_colour">रेखावर्णः</string>
+    <string name="util_pdf">पीडीएफ</string>
+    <string name="util_image">चित्रम्</string>
+    <string name="util_google">गूगल</string>
+    <string name="util_video">चलचित्रम्</string>
+    <string name="util_youtube">यूट्यूब</string>
+    <string name="util_website">जालस्थानम्</string>
+    <string name="util_timer">कालमापकम्</string>
+    <string name="util_stopwatch">विरामघटी</string>
+    <string name="util_calculator">गणकयन्त्रम्</string>
+    <string name="util_periodic">आवर्तसारणी</string>
+    <string name="util_spotlight">दीपिका</string>
+    <string name="util_shade">छाया</string>
+    <string name="util_magnifier">आवर्धकाचः</string>
+</resources>

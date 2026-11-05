@@ -1,0 +1,110 @@
+<resources>
+    <string name="app_name">AvitriSphare</string>
+    <string name="app_subtitle">വൈറ്റ്ബോർഡ്</string>
+    <string name="save">സേവ് ചെയ്യുക</string>
+    <string name="cancel">റദ്ദാക്കുക</string>
+    <string name="confirm">സ്ഥിരീകരിക്കുക</string>
+    <string name="delete">ഡിലീറ്റ് ചെയ്യുക</string>
+    <string name="edit">എഡിറ്റ് ചെയ്യുക</string>
+    <string name="close">അടയ്ക്കുക</string>
+    <string name="back">പിന്നോട്ട്</string>
+    <string name="open">തുറക്കുക</string>
+    <string name="search">തിരയുക</string>
+    <string name="create">സൃഷ്ടിക്കുക</string>
+    <string name="title">തലക്കെട്ട്</string>
+    <string name="saved">സേവ് ചെയ്തു</string>
+    <string name="color_swapped">നിറം മാറ്റി</string>
+    <string name="copied_to_clipboard">ക്ലിപ്പ്ബോർഡിലേക്ക് പകർത്തി</string>
+    <string name="help_close">അടയ്ക്കുക</string>
+    <string name="share">പങ്കിടുക</string>
+
+    <!-- Language & Localization -->
+    <string name="language">ഭാഷ</string>
+    <string name="change_language">ഭാഷ മാറ്റുക</string>
+    <string name="select_language">ഭാഷ തിരഞ്ഞെടുക്കുക</string>
+    <string name="english">English</string>
+    <string name="hindi">हिन्दी (Hindi)</string>
+    <string name="marathi">मराठी (Marathi)</string>
+    <string name="gujarati">ગુજરાતી (Gujarati)</string>
+    <string name="tamil">தமிழ் (Tamil)</string>
+    <string name="telugu">తెలుగు (Telugu)</string>
+    <string name="kannada">ಕನ್ನಡ (Kannada)</string>
+    <string name="malayalam">മലയാളം (Malayalam)</string>
+    <string name="bengali">বাংলা (Bengali)</string>
+    <string name="punjabi">ਪੰਜਾਬੀ (Punjabi)</string>
+    <string name="odia">ଓଡ଼ିଆ (Odia)</string>
+    <string name="urdu">اردو (Urdu)</string>
+
+    <!-- Sidebar Menu -->
+    <string name="menu_rename_board">ബോർഡിന്റെ പേര് മാറ്റുക</string>
+    <string name="menu_open">തുറക്കുക</string>
+    <string name="menu_export_lesson">പാഠം എക്സ്പോർട്ട് ചെയ്യുക...</string>
+    <string name="menu_open_iwb">GYOASH പാഠം (.iwb) തുറക്കുക...</string>
+    <string name="menu_live_collab">തത്സമയ സഹകരണം...</string>
+    <string name="menu_command_palette">കമാൻഡ് പാലറ്റ്</string>
+    <string name="menu_find_on_canvas">ക്യാൻവാസിൽ തിരയുക</string>
+    <string name="menu_help">സഹായം</string>
+    <string name="menu_reset_canvas">ക്യാൻവാസ് റീസെറ്റ് ചെയ്യുക</string>
+
+    <!-- Canvas Bottom Dock Tools -->
+    <string name="tool_select">തിരഞ്ഞെടുക്കുക</string>
+    <string name="tool_pen">പേന</string>
+    <string name="tool_pencil">പെൻസിൽ</string>
+    <string name="tool_marker">മാർക്കർ</string>
+    <string name="tool_highlighter">ഹൈലൈറ്റർ</string>
+    <string name="tool_brush">ബ്രഷ്</string>
+    <string name="tool_flowchart">ഫ്ലോചാർട്ട്</string>
+    <string name="tool_stickers">സ്റ്റിക്കറുകൾ</string>
+    <string name="tool_shapes">രൂപങ്ങൾ</string>
+    <string name="tool_eraser">ഇറേസർ</string>
+    <string name="tool_laser">ലേസർ</string>
+    <string name="tool_geometry">ജ്യാമിതി</string>
+    <string name="tool_tools">ടൂളുകൾ</string>
+    <string name="tool_undo">പൂർവാവസ്ഥയിലാക്കുക</string>
+    <string name="tool_redo">വീണ്ടും ചെയ്യുക</string>
+    <string name="tool_save">സേവ് ചെയ്യുക</string>
+    <string name="tool_prev_page">മുമ്പത്തെ</string>
+    <string name="tool_next_page">അടുത്തത്</string>
+    <string name="tool_add_page">ചേർക്കുക</string>
+    <string name="tool_profile">പ്രൊഫൈൽ</string>
+    <string name="tool_main_menu">പ്രധാന മെനു</string>
+    <string name="tool_exit">പുറത്തുകടക്കുക</string>
+    <string name="tool_class">ക്ലാസ്</string>
+    <string name="clear_all">എല്ലാം മായ്ക്കുക</string>
+    <string name="tool_clean_all">മുഴുവൻ മായ്ക്കുക</string>
+
+    <!-- Popover Menu Items -->
+    <string name="magic_pen">രൂപ തിരിച്ചറിയൽ</string>
+    <string name="shape_recognition">രൂപ തിരിച്ചറിയൽ</string>
+    <string name="smart_write">സ്മാർട്ട് എഴുത്ത്</string>
+    <string name="smart_write_tip">രൂപ തിരിച്ചറിയലിനായി സ്മാർട്ട് എഴുത്ത് ഓഫ് ചെയ്യുക.</string>
+    <string name="popover_background">പശ്ചാത്തലം</string>
+    <string name="save_slides_pdf">സ്ലൈഡുകൾ സേവ് ചെയ്യുക (PDF)</string>
+    <string name="popover_zoom_in">സൂം ഇൻ</string>
+    <string name="popover_zoom_out">സൂം ഔട്ട്</string>
+    <string name="popover_fit">പൊരുത്തപ്പെടുത്തുക</string>
+
+    <!-- Utility Tabs & Tools -->
+    <string name="tab_board">ബോർഡ്</string>
+    <string name="tab_media">മീഡിയ</string>
+    <string name="tab_utilities">യൂട്ടിലിറ്റികൾ</string>
+    <string name="tab_lesson">പാഠം</string>
+    <string name="tab_view">കാഴ്ച</string>
+    <string name="util_hand">കൈ</string>
+    <string name="util_lasso">ലാസ്സോ</string>
+    <string name="util_bucket_fill">നിറം നിറയ്ക്കുക</string>
+    <string name="util_stroke_colour">വരയുടെ നിറം</string>
+    <string name="util_pdf">പി.ഡി.എഫ്</string>
+    <string name="util_image">ചിത്രം</string>
+    <string name="util_google">ഗൂഗിൾ</string>
+    <string name="util_video">വീഡിയോ</string>
+    <string name="util_youtube">യൂട്യൂബ്</string>
+    <string name="util_website">വെബ്സൈറ്റ്</string>
+    <string name="util_timer">കൗണ്ട്ഡൗൺ ടൈമർ</string>
+    <string name="util_stopwatch">സ്റ്റോപ്പ് വാച്ച്</string>
+    <string name="util_calculator">കാൽക്കുലേറ്റർ</string>
+    <string name="util_periodic">പീരിയോഡിക് ടേബിൾ</string>
+    <string name="util_spotlight">സ്പോട്ട്‌ലൈറ്റ്</string>
+    <string name="util_shade">നിഴൽ</string>
+    <string name="util_magnifier">ഭൂതക്കണ്ണാടി</string>
+</resources>

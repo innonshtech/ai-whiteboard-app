@@ -20,6 +20,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -85,6 +87,7 @@ import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.DarkMode
@@ -211,6 +214,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.graphics.graphicsLayer
@@ -1397,7 +1402,12 @@ fun CanvasScreen(
     var imageSearchTerm by remember { mutableStateOf("") }
     var youtubeQuery by remember { mutableStateOf("") }
     var youtubeSearchTerm by remember { mutableStateOf("") }
+    var showCanvasPasteMenu by remember { mutableStateOf(false) }
+    var canvasPasteMenuScreenPos by remember { mutableStateOf(Offset.Zero) }
+    var canvasPasteMenuWorldPos by remember { mutableStateOf(Offset.Zero) }
     val composeView = LocalView.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val touchContacts = remember(composeView) { TouchContacts(composeView) }
     val xdpi = remember {
         val metrics = context.resources.displayMetrics
@@ -1795,9 +1805,17 @@ fun CanvasScreen(
                         false
                     }
                 }
-                .pointerInput(Unit) {
+                .pointerInput(state.hasStrokeClipboard) {
                     detectTapGestures(
+                        onTap = {
+                            if (showCanvasPasteMenu) {
+                                showCanvasPasteMenu = false
+                            }
+                        },
                         onDoubleTap = { screenTap ->
+                            if (showCanvasPasteMenu) {
+                                showCanvasPasteMenu = false
+                            }
                             val worldTap = CanvasTransform.screenToWorld(
                                 screenTap,
                                 canvasScale,
@@ -1817,6 +1835,21 @@ fun CanvasScreen(
                                     canvasOffsetX = 0f
                                     canvasOffsetY = 0f
                                     viewModel.resetTransform()
+                                }
+                            }
+                        },
+                        onLongPress = { screenPress ->
+                            if (state.hasStrokeClipboard) {
+                                val worldPress = CanvasTransform.screenToWorld(
+                                    screenPress,
+                                    canvasScale,
+                                    Offset(canvasOffsetX, canvasOffsetY)
+                                )
+                                val hitNode = viewModel.strokeAt(worldPress)
+                                if (hitNode == null) {
+                                    canvasPasteMenuScreenPos = screenPress
+                                    canvasPasteMenuWorldPos = worldPress
+                                    showCanvasPasteMenu = true
                                 }
                             }
                         }
@@ -2925,7 +2958,7 @@ fun CanvasScreen(
                                                         replaceMathTool(tool.copy(span = newSpan))
                                                     }
                                                 }
-                                                MathToolZone.CLOSE, MathToolZone.DRAW_MODE_TOGGLE, MathToolZone.ANGLE_MODE_1, MathToolZone.ANGLE_MODE_ARC_LEFT, MathToolZone.ANGLE_MODE_ARC, MathToolZone.ANGLE_MODE_2, MathToolZone.SIDE_1_PENCIL, MathToolZone.SIDE_2_PENCIL, MathToolZone.SIDE_3_PENCIL, MathToolZone.NONE -> Unit
+                                                MathToolZone.CLOSE, MathToolZone.DRAW_MODE_TOGGLE, MathToolZone.FLIP_HORIZONTAL, MathToolZone.ANGLE_MODE_1, MathToolZone.ANGLE_MODE_ARC_LEFT, MathToolZone.ANGLE_MODE_ARC, MathToolZone.ANGLE_MODE_2, MathToolZone.SIDE_1_PENCIL, MathToolZone.SIDE_2_PENCIL, MathToolZone.SIDE_3_PENCIL, MathToolZone.NONE -> Unit
                                             }
                                         }
                                     } else if (mathGesture.rulerDrawing) {
@@ -3347,7 +3380,12 @@ fun CanvasScreen(
                                     removeMathTool(tool.id)
                                     val toolName = tool.kind.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
                                     Toast.makeText(context, "$toolName closed", Toast.LENGTH_SHORT).show()
-
+                            } else if (tool != null && mathGesture.zone == MathToolZone.FLIP_HORIZONTAL && mathGesture.movedPx <= MATH_TAP_SLOP) {
+                                viewModel.cancelCurrentStroke()
+                                val flipped = tool.copy(isFlippedHorizontal = !tool.isFlippedHorizontal)
+                                replaceMathTool(flipped)
+                                viewModel.setMathTools(mathTools)
+                                Toast.makeText(context, "Flipped horizontally", Toast.LENGTH_SHORT).show()
                             } else if (tool != null && tool.kind == MathToolKind.PROTRACTOR &&
                                 (mathGesture.zone == MathToolZone.ANGLE_MODE_1 ||
                                  mathGesture.zone == MathToolZone.ANGLE_MODE_ARC_LEFT ||
@@ -3360,43 +3398,50 @@ fun CanvasScreen(
                                 val dir = direction(tool.rotationDeg)
                                 val perp = perpendicular(tool.rotationDeg)
                                 val armDir = dir * cos(rad) - perp * sin(rad)
-                                val armScreen = tool.center + armDir * tool.span
-                                val rightBaseScreen = tool.center + dir * tool.span
-                                val leftBaseScreen = tool.center - dir * tool.span
                                 val offset = Offset(canvasOffsetX, canvasOffsetY)
                                 val centerWorld = CanvasTransform.screenToWorld(tool.center, canvasScale, offset)
-                                val armWorld = CanvasTransform.screenToWorld(armScreen, canvasScale, offset)
-                                val rightBaseWorld = CanvasTransform.screenToWorld(rightBaseScreen, canvasScale, offset)
-                                val leftBaseWorld = CanvasTransform.screenToWorld(leftBaseScreen, canvasScale, offset)
+
+                                val safeScale = canvasScale.coerceAtLeast(0.1f)
+                                val armLenWorld = tool.span / safeScale
+                                val arcRWorld = (armLenWorld * 0.40f).coerceAtLeast(20f)
+                                val arcOnlyRWorld = (armLenWorld * 0.70f).coerceAtLeast(30f)
+
+                                val armWorld = centerWorld + armDir * armLenWorld
+                                val rightBaseWorld = centerWorld + dir * armLenWorld
+                                val leftBaseWorld = centerWorld - dir * armLenWorld
+
+                                val protractorTag = "protractor_${tool.id}_${mathGesture.zone.name.lowercase()}"
+                                val newStrokes = mutableListOf<Stroke>()
+
                                 when (mathGesture.zone) {
                                     MathToolZone.ANGLE_MODE_1 -> {
                                         // Left Angle: from Left baseline (180°) to arm
                                         val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
-                                        viewModel.commitStroke(straightStroke(centerWorld, leftBaseWorld, state.selectedColor, state.strokeWidth))
-                                        viewModel.commitStroke(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
-                                        val arcScreenPoints = mutableListOf<Offset>()
-                                        val steps = (leftAngleDeg / 3f).roundToInt().coerceAtLeast(8)
-                                        val arcR = tool.span * 0.45f
+                                        newStrokes.add(straightStroke(centerWorld, leftBaseWorld, state.selectedColor, state.strokeWidth))
+                                        newStrokes.add(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
+                                        val arcWorldPoints = mutableListOf<Offset>()
+                                        val steps = (leftAngleDeg / 3f).roundToInt().coerceAtLeast(10)
                                         for (i in 0..steps) {
                                             val deg = 180f - (leftAngleDeg * i) / steps
                                             val r = Math.toRadians(deg.toDouble()).toFloat()
                                             val d = dir * cos(r) - perp * sin(r)
-                                            arcScreenPoints.add(tool.center + d * arcR)
+                                            arcWorldPoints.add(centerWorld + d * arcRWorld)
                                         }
-                                        viewModel.commitStroke(
+                                        newStrokes.add(
                                             arcStroke(
-                                                screenPointsToWorld(arcScreenPoints, canvasScale, offset),
+                                                arcWorldPoints,
                                                 state.selectedColor,
                                                 (state.strokeWidth * 0.85f).coerceAtLeast(2f)
                                             )
                                         )
                                         val midRad = Math.toRadians((180.0 - leftAngleDeg / 2.0)).toFloat()
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
-                                        val labelScreen = tool.center + midD * (arcR + 32f)
-                                        viewModel.commitStroke(
-                                            measurementLabel("${leftAngleDeg.roundToInt()}\u00B0", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                        val labelWorld = centerWorld + midD * (arcRWorld + 28f)
+                                        newStrokes.add(
+                                            measurementLabel("${leftAngleDeg.roundToInt()}\u00B0", labelWorld, state.selectedColor)
                                         )
-                                        Toast.makeText(context, "Left Angle ${leftAngleDeg.roundToInt()}\u00B0 drawn", Toast.LENGTH_SHORT).show()
+                                        viewModel.commitProtractorAngle(protractorTag, newStrokes)
+                                        Toast.makeText(context, "Angle ${leftAngleDeg.roundToInt()}\u00B0 drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     MathToolZone.ANGLE_MODE_ARC_LEFT -> {
                                         // Left Arc: circular arc only from Left baseline (180°) down to arm
@@ -3406,22 +3451,23 @@ fun CanvasScreen(
                                         rulerLivePreview = null
 
                                         val leftAngleDeg = (180f - pDeg).coerceIn(0f, 180f)
-                                        val arcScreenPoints = mutableListOf<Offset>()
-                                        val steps = (leftAngleDeg / 2.5f).roundToInt().coerceAtLeast(8)
+                                        val arcWorldPoints = mutableListOf<Offset>()
+                                        val steps = (leftAngleDeg / 2.5f).roundToInt().coerceAtLeast(10)
                                         for (i in 0..steps) {
                                             val deg = 180f - (leftAngleDeg * i) / steps
                                             val r = Math.toRadians(deg.toDouble()).toFloat()
                                             val d = dir * cos(r) - perp * sin(r)
-                                            arcScreenPoints.add(tool.center + d * tool.span)
+                                            arcWorldPoints.add(centerWorld + d * arcOnlyRWorld)
                                         }
-                                        viewModel.commitStroke(
+                                        newStrokes.add(
                                             arcStroke(
-                                                screenPointsToWorld(arcScreenPoints, canvasScale, offset),
+                                                arcWorldPoints,
                                                 state.selectedColor,
                                                 state.strokeWidth
                                             )
                                         )
-                                        Toast.makeText(context, "Left Arc (${leftAngleDeg.roundToInt()}\u00B0) drawn", Toast.LENGTH_SHORT).show()
+                                        viewModel.commitProtractorAngle(protractorTag, newStrokes)
+                                        Toast.makeText(context, "Arc (${leftAngleDeg.roundToInt()}\u00B0) drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     MathToolZone.ANGLE_MODE_ARC -> {
                                         // Right Arc: circular arc only from Right baseline (0°) up to arm
@@ -3430,50 +3476,51 @@ fun CanvasScreen(
                                         boardStage?.setLiveInk(null)
                                         rulerLivePreview = null
 
-                                        val arcScreenPoints = mutableListOf<Offset>()
-                                        val steps = (pDeg / 2.5f).roundToInt().coerceAtLeast(8)
+                                        val arcWorldPoints = mutableListOf<Offset>()
+                                        val steps = (pDeg / 2.5f).roundToInt().coerceAtLeast(10)
                                         for (i in 0..steps) {
                                             val deg = (pDeg * i) / steps
                                             val r = Math.toRadians(deg.toDouble()).toFloat()
                                             val d = dir * cos(r) - perp * sin(r)
-                                            arcScreenPoints.add(tool.center + d * tool.span)
+                                            arcWorldPoints.add(centerWorld + d * arcOnlyRWorld)
                                         }
-                                        viewModel.commitStroke(
+                                        newStrokes.add(
                                             arcStroke(
-                                                screenPointsToWorld(arcScreenPoints, canvasScale, offset),
+                                                arcWorldPoints,
                                                 state.selectedColor,
                                                 state.strokeWidth
                                             )
                                         )
-                                        Toast.makeText(context, "Right Arc (${pDeg.roundToInt()}\u00B0) drawn", Toast.LENGTH_SHORT).show()
+                                        viewModel.commitProtractorAngle(protractorTag, newStrokes)
+                                        Toast.makeText(context, "Arc (${pDeg.roundToInt()}\u00B0) drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     MathToolZone.ANGLE_MODE_2 -> {
                                         // Right Angle: from Right baseline (0°) to arm
-                                        viewModel.commitStroke(straightStroke(centerWorld, rightBaseWorld, state.selectedColor, state.strokeWidth))
-                                        viewModel.commitStroke(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
-                                        val arcScreenPoints = mutableListOf<Offset>()
-                                        val steps = (pDeg / 3f).roundToInt().coerceAtLeast(8)
-                                        val arcR = tool.span * 0.45f
+                                        newStrokes.add(straightStroke(centerWorld, rightBaseWorld, state.selectedColor, state.strokeWidth))
+                                        newStrokes.add(straightStroke(centerWorld, armWorld, state.selectedColor, state.strokeWidth))
+                                        val arcWorldPoints = mutableListOf<Offset>()
+                                        val steps = (pDeg / 3f).roundToInt().coerceAtLeast(10)
                                         for (i in 0..steps) {
                                             val deg = (pDeg * i) / steps
                                             val r = Math.toRadians(deg.toDouble()).toFloat()
                                             val d = dir * cos(r) - perp * sin(r)
-                                            arcScreenPoints.add(tool.center + d * arcR)
+                                            arcWorldPoints.add(centerWorld + d * arcRWorld)
                                         }
-                                        viewModel.commitStroke(
+                                        newStrokes.add(
                                             arcStroke(
-                                                screenPointsToWorld(arcScreenPoints, canvasScale, offset),
+                                                arcWorldPoints,
                                                 state.selectedColor,
                                                 (state.strokeWidth * 0.85f).coerceAtLeast(2f)
                                             )
                                         )
                                         val midRad = Math.toRadians((pDeg / 2f).toDouble()).toFloat()
                                         val midD = dir * cos(midRad) - perp * sin(midRad)
-                                        val labelScreen = tool.center + midD * (arcR + 32f)
-                                        viewModel.commitStroke(
-                                            measurementLabel("${pDeg.roundToInt()}\u00B0", CanvasTransform.screenToWorld(labelScreen, canvasScale, offset), state.selectedColor)
+                                        val labelWorld = centerWorld + midD * (arcRWorld + 28f)
+                                        newStrokes.add(
+                                            measurementLabel("${pDeg.roundToInt()}\u00B0", labelWorld, state.selectedColor)
                                         )
-                                        Toast.makeText(context, "Right Angle ${pDeg.roundToInt()}\u00B0 drawn", Toast.LENGTH_SHORT).show()
+                                        viewModel.commitProtractorAngle(protractorTag, newStrokes)
+                                        Toast.makeText(context, "Angle ${pDeg.roundToInt()}\u00B0 drawn", Toast.LENGTH_SHORT).show()
                                     }
                                     else -> Unit
                                 }
@@ -4081,11 +4128,9 @@ fun CanvasScreen(
             onCopySelection = { viewModel.copySelectedStrokes() },
             onPasteClipboard = { viewModel.pasteStrokeClipboard() },
             onToggleLocale = {
-                val nextLang = when (currentLanguage) {
-                    AppLanguage.ENGLISH -> AppLanguage.HINDI
-                    AppLanguage.HINDI -> AppLanguage.MARATHI
-                    AppLanguage.MARATHI -> AppLanguage.ENGLISH
-                }
+                val allLangs = AppLanguage.entries
+                val nextIdx = (allLangs.indexOf(currentLanguage) + 1).let { if (it >= allLangs.size) 0 else it }
+                val nextLang = allLangs[nextIdx]
                 onLanguageChange(nextLang)
                 panelSession?.setUiLocaleTag(nextLang.code)
                 viewModel.setUiLocaleTag(nextLang.code)
@@ -4163,6 +4208,64 @@ fun CanvasScreen(
                 editingNodeText = currentText
             }
         )
+
+        // Context paste popup at touched location on long press of empty canvas
+        if (showCanvasPasteMenu && state.hasStrokeClipboard) {
+            Box(
+                modifier = Modifier
+                    .offset {
+                        val x = (canvasPasteMenuScreenPos.x - 48.dp.toPx()).roundToInt().coerceIn(16, (canvasSize.width - 120.dp.toPx()).roundToInt().coerceAtLeast(16))
+                        val y = (canvasPasteMenuScreenPos.y - 48.dp.toPx()).roundToInt().coerceIn(16, (canvasSize.height - 70.dp.toPx()).roundToInt().coerceAtLeast(16))
+                        IntOffset(x, y)
+                    }
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xFF0F172A),
+                    border = BorderStroke(1.5.dp, BrandOrange),
+                    shadowElevation = 12.dp,
+                    modifier = Modifier.clickable {
+                        viewModel.pasteStrokeClipboard(targetCenter = canvasPasteMenuWorldPos)
+                        showCanvasPasteMenu = false
+                        val latest = viewModel.state.value
+                        boardStage?.syncPage(
+                            strokes = latest.strokes,
+                            background = latest.canvasBackground,
+                            showGrid = latest.showGrid,
+                            dark = latest.isDarkCanvas,
+                            scale = latest.scale,
+                            offsetX = latest.offsetX,
+                            offsetY = latest.offsetY,
+                            selected = latest.selectedStrokeIds,
+                            customBackgroundUri = latest.pageCustomBackgroundUris.getOrElse(latest.pageIndex) { "" },
+                            pageIndex = latest.pageIndex
+                        )
+                        boardStage?.invalidate()
+                        Toast.makeText(context, "Pasted at position", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentPaste,
+                            contentDescription = "Paste",
+                            tint = BrandOrange,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "Paste",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
 
         // Mind Map Node & Connector Floating Controls (Layout, Connect, Adders)
         if (lineConnectionSourceNodeId == null && state.selectedStrokeIds.size == 1) {
@@ -5054,43 +5157,64 @@ fun CanvasScreen(
             }
         }
 
-                val editing = state.strokes.firstOrNull { it.id == state.editingTextId }
+        val editing = state.strokes.firstOrNull { it.id == state.editingTextId }
         if (editing != null && editing.points.isNotEmpty()) {
             val origin = CanvasTransform.worldToScreen(
                 editing.points.first(),
                 canvasScale,
                 Offset(canvasOffsetX, canvasOffsetY)
             )
-            Column(
+            Box(
                 modifier = Modifier
-                    .offset { IntOffset(origin.x.roundToInt().coerceAtLeast(8), origin.y.roundToInt().coerceAtLeast(8)) }
-                    .width(240.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White)
-                    .padding(8.dp)
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            viewModel.endTextEdit()
+                        }
+                    }
             ) {
-                val warning = state.smartWriteWarning
-                if (warning != null) {
-                    Text(warning, color = Color(0xFFB45309), fontSize = 12.sp)
-                    Spacer(Modifier.height(4.dp))
-                }
-                var draft by remember(editing.id) { mutableStateOf(editing.text) }
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = {
-                        draft = it
-                        viewModel.editStrokeText(editing.id, it)
-                    },
-                    singleLine = false,
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = Color(editing.colorValue),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                TextButton(onClick = { viewModel.endTextEdit() }) {
-                    Text("Done")
+                Column(
+                    modifier = Modifier
+                        .offset { IntOffset(origin.x.roundToInt().coerceAtLeast(8), origin.y.roundToInt().coerceAtLeast(8)) }
+                        .width(240.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White)
+                        .padding(8.dp)
+                        .pointerInput(Unit) {
+                            detectTapGestures {
+                                // Consumes tap inside popup so backdrop is not triggered
+                            }
+                        }
+                ) {
+                    val warning = state.smartWriteWarning
+                    if (warning != null) {
+                        Text(warning, color = Color(0xFFB45309), fontSize = 12.sp)
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    var draft by remember(editing.id) { mutableStateOf(editing.text) }
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = {
+                            draft = it
+                            viewModel.editStrokeText(editing.id, it)
+                        },
+                        singleLine = false,
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = Color(editing.colorValue),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextButton(onClick = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        viewModel.endTextEdit()
+                    }) {
+                        Text("Done")
+                    }
                 }
             }
         }
@@ -6298,9 +6422,15 @@ fun CanvasScreen(
     if (editingNodeStrokeId != null) {
         BoardModal(
             title = "Edit Text",
-            onDismiss = { editingNodeStrokeId = null },
+            onDismiss = {
+                keyboardController?.hide()
+                focusManager.clearFocus()
+                editingNodeStrokeId = null
+            },
             confirmLabel = "Save",
             onConfirm = {
+                keyboardController?.hide()
+                focusManager.clearFocus()
                 editingNodeStrokeId?.let { id ->
                     viewModel.updateStrokeText(id, editingNodeText)
                     val latest = viewModel.state.value

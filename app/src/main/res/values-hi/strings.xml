@@ -25,6 +25,15 @@
     <string name="english">English</string>
     <string name="hindi">हिन्दी (Hindi)</string>
     <string name="marathi">मराठी (Marathi)</string>
+    <string name="gujarati">ગુજરાતી (Gujarati)</string>
+    <string name="tamil">தமிழ் (Tamil)</string>
+    <string name="telugu">తెలుగు (Telugu)</string>
+    <string name="kannada">ಕನ್ನಡ (Kannada)</string>
+    <string name="malayalam">മലയാളം (Malayalam)</string>
+    <string name="bengali">বাংলা (Bengali)</string>
+    <string name="punjabi">ਪੰਜਾਬੀ (Punjabi)</string>
+    <string name="odia">ଓଡ଼ିଆ (Odia)</string>
+    <string name="urdu">اردو (Urdu)</string>
 
     <!-- Sidebar Menu (From Screenshot) -->
     <string name="menu_rename_board">बोर्ड का नाम बदलें</string>

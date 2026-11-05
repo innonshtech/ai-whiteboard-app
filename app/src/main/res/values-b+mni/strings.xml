@@ -1,0 +1,97 @@
+<resources>
+    <string name="app_name">AvitriSphare</string>
+    <string name="app_subtitle">ৱাইটবোর্দ</string>
+    <string name="save">থম্বীয়ু</string>
+    <string name="cancel">তোকপীয়ু</string>
+    <string name="confirm">চেক তৌবীয়ু</string>
+    <string name="delete">মুত্থৎলু</string>
+    <string name="edit">শেমদোকউ</string>
+    <string name="close">থিংজিনলু</string>
+    <string name="back">হল্লকউ</string>
+    <string name="open">হাংদোকউ</string>
+    <string name="search">থিবা</string>
+    <string name="create">শেম্মু</string>
+    <string name="title">মিংথোল</string>
+    <string name="saved">থম্লে</string>
+    <string name="color_swapped">মচু হোংলে</string>
+    <string name="copied_to_clipboard">ক্লিপবোর্দতা কোপি তৌরে</string>
+    <string name="help_close">থিংজিনলু</string>
+    <string name="share">শিয়র তৌবীয়ু</string>
+
+    <string name="language">লোন</string>
+    <string name="change_language">লোন হোংদোকউ</string>
+    <string name="select_language">লোন খনবীয়ু</string>
+
+    <!-- Sidebar Menu -->
+    <string name="menu_rename_board">বোর্দকী মিং হোংদোকউ</string>
+    <string name="menu_open">হাংদোকউ</string>
+    <string name="menu_export_lesson">পারা থাদোকউ...</string>
+    <string name="menu_open_iwb">GYOASH পারা (.iwb) হাংদোকউ...</string>
+    <string name="menu_live_collab">লাইভ মতেং...</string>
+    <string name="menu_command_palette">কমান্দ পেলেট</string>
+    <string name="menu_find_on_canvas">কেনভাসতা থিয়ু</string>
+    <string name="menu_help">মতেং</string>
+    <string name="menu_reset_canvas">কেনভাস অমুক হন্না শেম্বা</string>
+
+    <!-- Canvas Bottom Dock Tools -->
+    <string name="tool_select">খনবীয়ু</string>
+    <string name="tool_pen">কলম</string>
+    <string name="tool_pencil">পেন্সিল</string>
+    <string name="tool_marker">মার্কার</string>
+    <string name="tool_highlighter">হাইলাইটার</string>
+    <string name="tool_brush">ব্রশ</string>
+    <string name="tool_flowchart">ফ্লোচার্ট</string>
+    <string name="tool_stickers">স্টিকার</string>
+    <string name="tool_shapes">শেকোলশিং</string>
+    <string name="tool_eraser">ইরেজার</string>
+    <string name="tool_laser">লেজর</string>
+    <string name="tool_geometry">জ্যামিতি</string>
+    <string name="tool_tools">খুৎলাইশিং</string>
+    <string name="tool_undo">হন্নবা</string>
+    <string name="tool_redo">অমুক তৌবা</string>
+    <string name="tool_save">থম্বীয়ু</string>
+    <string name="tool_prev_page">মমাংগী</string>
+    <string name="tool_next_page">মথংগী</string>
+    <string name="tool_add_page">হাপচিনলু</string>
+    <string name="tool_profile">প্রোফাইল</string>
+    <string name="tool_main_menu">মরুওইবা মেনু</string>
+    <string name="tool_exit">থোকপা</string>
+    <string name="tool_class">ক্লাস</string>
+    <string name="clear_all">পুম্নমক মুত্থৎলু</string>
+    <string name="tool_clean_all">ময়েক শেংনা মুত্থৎলু</string>
+
+    <!-- Popover Menu Items -->
+    <string name="magic_pen">মওং মশক খঙবা</string>
+    <string name="shape_recognition">মওং মশক খঙবা</string>
+    <string name="smart_write">স্মার্ট ইবা</string>
+    <string name="smart_write_tip">মওং খঙনবগীদমক স্মার্ট ইবা থিংজিনলু।</string>
+    <string name="popover_background">বেকগ্রাউন্দ</string>
+    <string name="save_slides_pdf">স্লাইদ থম্বীয়ু (PDF)</string>
+    <string name="popover_zoom_in">চাউথোকহনবা</string>
+    <string name="popover_zoom_out">অপিকপা তৌবা</string>
+    <string name="popover_fit">চান্নহনবা</string>
+
+    <!-- Utility Tabs & Tools -->
+    <string name="tab_board">বোর্দ</string>
+    <string name="tab_media">মিডিয়া</string>
+    <string name="tab_utilities">কান্নবা খুৎলাই</string>
+    <string name="tab_lesson">পারা</string>
+    <string name="tab_view">উবা</string>
+    <string name="util_hand">খুৎ</string>
+    <string name="util_lasso">লাসো</string>
+    <string name="util_bucket_fill">মচু থনবা</string>
+    <string name="util_stroke_colour">পরিংগী মচু</string>
+    <string name="util_pdf">পিডিএফ</string>
+    <string name="util_image">ফোতো</string>
+    <string name="util_google">গুগল</string>
+    <string name="util_video">ভিদিও</string>
+    <string name="util_youtube">য়ুতুব</string>
+    <string name="util_website">ৱেবসাইত</string>
+    <string name="util_timer">তাইমার</string>
+    <string name="util_stopwatch">স্টপৱাচ</string>
+    <string name="util_calculator">কেলকুলেটর</string>
+    <string name="util_periodic">পিরিয়োদিক তেবল</string>
+    <string name="util_spotlight">স্পোতলাইত</string>
+    <string name="util_shade">মমি</string>
+    <string name="util_magnifier">মীতিন</string>
+</resources>

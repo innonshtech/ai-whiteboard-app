@@ -81,6 +81,7 @@ import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -1169,6 +1170,32 @@ fun AvitriSphareWhiteboardChrome(
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium
                             )
+                        }
+
+                        // Paste button
+                        if (state.hasStrokeClipboard) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
+                                    .clickable { onPasteClipboard() }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentPaste,
+                                    contentDescription = "Paste",
+                                    tint = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF475569),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = "Paste",
+                                    color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
 
                         // Delete button

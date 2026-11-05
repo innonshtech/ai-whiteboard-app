@@ -375,6 +375,7 @@ class CanvasViewModel @Inject constructor(
     private val pageCustomBackgroundUris = mutableListOf("")
     private val pageMathTools = mutableListOf<List<PlacedMathTool>>(emptyList())
     private var strokeClipboard: List<Stroke> = emptyList()
+    private var strokeClipboardSourcePage: Int = -1
     private var pdfOcrCancelled = false
 
     init {
@@ -1635,8 +1636,27 @@ class CanvasViewModel @Inject constructor(
             )
         }
 
-        val scaleX = (newW / origW).coerceIn(0.1f, 15f)
-        val scaleY = (newH / origH).coerceIn(0.1f, 15f)
+        val rawScaleX = (newW / origW).coerceIn(0.1f, 15f)
+        val rawScaleY = (newH / origH).coerceIn(0.1f, 15f)
+
+        val selectedNodes = snapshot.filter { isMindMapNode(it) }
+        val (scaleX, scaleY) = if (selectedNodes.isNotEmpty()) {
+            val snapshotIds = snapshot.map { it.id }.toSet()
+            val obstacles = _state.value.strokes
+                .filter { it.id !in snapshotIds && isMindMapNode(it) }
+                .map { it.bounds }
+            val boundary = getScreenWorldBounds()
+            MindmapEngine.clampGroupScale(
+                nodeBounds = selectedNodes.map { it.bounds },
+                anchor = anchor,
+                desiredScaleX = rawScaleX,
+                desiredScaleY = rawScaleY,
+                obstacles = obstacles,
+                boundary = boundary
+            )
+        } else {
+            rawScaleX to rawScaleY
+        }
         val avgScale = (scaleX + scaleY) / 2f
 
         val scaledStrokes = snapshot.map { stroke ->
@@ -2165,6 +2185,20 @@ class CanvasViewModel @Inject constructor(
         scheduleSave()
     }
 
+    fun commitProtractorAngle(tag: String, newStrokes: List<Stroke>) {
+        saveToUndoStack()
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes + newStrokes.map { it.copy(linkToId = tag) },
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoActionStack.clear()
+        redoStack.clear()
+        scheduleSave()
+    }
+
     fun resizeStrokeWithInitialBounds(id: String, hit: ShapeHandleHit, point: Offset, initialBounds: Rect) {
         val orig = _state.value.strokes.find { it.id == id } ?: return
         val isParentNode = isMindMapNode(orig)
@@ -2176,98 +2210,52 @@ class CanvasViewModel @Inject constructor(
         val minW = 60f
         val minH = 36f
 
-        var left = initialBounds.left
-        var top = initialBounds.top
-        var right = initialBounds.right
-        var bottom = initialBounds.bottom
-
-        when (hit.kind) {
-            ShapeHandle.BOTTOM_RIGHT -> {
-                val desiredW = (point.x - initialBounds.left).coerceAtLeast(minW)
-                val desiredH = (point.y - initialBounds.top).coerceAtLeast(minH)
-                var candRight = minOf(initialBounds.left + desiredW, boundary.right)
-                var candBottom = minOf(initialBounds.top + desiredH, boundary.bottom)
-
-                for (o in otherBoxes) {
-                    val xOverlap = (left < o.right && candRight > o.left)
-                    if (xOverlap && initialBounds.bottom <= o.top) {
-                        candBottom = minOf(candBottom, (o.top - 8f).coerceAtLeast(top + minH))
-                    }
-                    val yOverlap = (top < o.bottom && candBottom > o.top)
-                    if (yOverlap && initialBounds.right <= o.left) {
-                        candRight = minOf(candRight, (o.left - 8f).coerceAtLeast(left + minW))
-                    }
-                }
-                right = candRight
-                bottom = candBottom
-            }
-            ShapeHandle.TOP_RIGHT -> {
-                val desiredW = (point.x - initialBounds.left).coerceAtLeast(minW)
-                val desiredH = (initialBounds.bottom - point.y).coerceAtLeast(minH)
-                var candRight = minOf(initialBounds.left + desiredW, boundary.right)
-                var candTop = maxOf(initialBounds.bottom - desiredH, boundary.top)
-
-                for (o in otherBoxes) {
-                    val xOverlap = (left < o.right && candRight > o.left)
-                    if (xOverlap && initialBounds.top >= o.bottom) {
-                        candTop = maxOf(candTop, (o.bottom + 8f).coerceAtMost(bottom - minH))
-                    }
-                    val yOverlap = (candTop < o.bottom && bottom > o.top)
-                    if (yOverlap && initialBounds.right <= o.left) {
-                        candRight = minOf(candRight, (o.left - 8f).coerceAtLeast(left + minW))
-                    }
-                }
-                right = candRight
-                top = candTop
-            }
-            ShapeHandle.BOTTOM_LEFT -> {
-                val desiredW = (initialBounds.right - point.x).coerceAtLeast(minW)
-                val desiredH = (point.y - initialBounds.top).coerceAtLeast(minH)
-                var candLeft = maxOf(initialBounds.right - desiredW, boundary.left)
-                var candBottom = minOf(initialBounds.top + desiredH, boundary.bottom)
-
-                for (o in otherBoxes) {
-                    val xOverlap = (candLeft < o.right && right > o.left)
-                    if (xOverlap && initialBounds.bottom <= o.top) {
-                        candBottom = minOf(candBottom, (o.top - 8f).coerceAtLeast(top + minH))
-                    }
-                    val yOverlap = (top < o.bottom && candBottom > o.top)
-                    if (yOverlap && initialBounds.left >= o.right) {
-                        candLeft = maxOf(candLeft, (o.right + 8f).coerceAtMost(right - minW))
-                    }
-                }
-                left = candLeft
-                bottom = candBottom
-            }
-            ShapeHandle.TOP_LEFT -> {
-                val desiredW = (initialBounds.right - point.x).coerceAtLeast(minW)
-                val desiredH = (initialBounds.bottom - point.y).coerceAtLeast(minH)
-                var candLeft = maxOf(initialBounds.right - desiredW, boundary.left)
-                var candTop = maxOf(initialBounds.bottom - desiredH, boundary.top)
-
-                for (o in otherBoxes) {
-                    val xOverlap = (candLeft < o.right && right > o.left)
-                    if (xOverlap && initialBounds.top >= o.bottom) {
-                        candTop = maxOf(candTop, (o.bottom + 8f).coerceAtMost(bottom - minH))
-                    }
-                    val yOverlap = (candTop < o.bottom && bottom > o.top)
-                    if (yOverlap && initialBounds.left >= o.right) {
-                        candLeft = maxOf(candLeft, (o.right + 8f).coerceAtMost(right - minW))
-                    }
-                }
-                left = candLeft
-                top = candTop
-            }
-            else -> {
-                resizeStroke(id, hit, point)
-                return
-            }
+        val proposed = when (hit.kind) {
+            ShapeHandle.BOTTOM_RIGHT -> Rect(
+                initialBounds.left,
+                initialBounds.top,
+                maxOf(initialBounds.left + minW, point.x),
+                maxOf(initialBounds.top + minH, point.y)
+            )
+            ShapeHandle.TOP_RIGHT -> Rect(
+                initialBounds.left,
+                minOf(initialBounds.bottom - minH, point.y),
+                maxOf(initialBounds.left + minW, point.x),
+                initialBounds.bottom
+            )
+            ShapeHandle.BOTTOM_LEFT -> Rect(
+                minOf(initialBounds.right - minW, point.x),
+                initialBounds.top,
+                initialBounds.right,
+                maxOf(initialBounds.top + minH, point.y)
+            )
+            ShapeHandle.TOP_LEFT -> Rect(
+                minOf(initialBounds.right - minW, point.x),
+                minOf(initialBounds.bottom - minH, point.y),
+                initialBounds.right,
+                initialBounds.bottom
+            )
+            else -> Rect(
+                initialBounds.left,
+                initialBounds.top,
+                maxOf(initialBounds.left + minW, point.x),
+                maxOf(initialBounds.top + minH, point.y)
+            )
         }
 
-        val candRect = Rect(left, top, right, bottom)
-        if (otherBoxes.any { it.overlaps(candRect) }) {
-            return
+        val candRect = if (isParentNode) {
+            MindmapEngine.clampResizedBox(
+                current = initialBounds,
+                proposed = proposed,
+                otherBounds = otherBoxes,
+                boundary = boundary,
+                gap = MindmapEngine.MIN_BOX_GAP
+            )
+        } else {
+            proposed
         }
+
+        if (candRect == orig.bounds) return
 
         val resizedTarget = orig.copy(points = listOf(candRect.topLeft, candRect.bottomRight))
         _state.update { s ->
@@ -2602,10 +2590,11 @@ class CanvasViewModel @Inject constructor(
         val selected = _state.value.selectedStrokeIds
         if (selected.isEmpty()) return
         strokeClipboard = _state.value.strokes.filter { it.id in selected }
+        strokeClipboardSourcePage = activePage
         _state.update { it.copy(hasStrokeClipboard = strokeClipboard.isNotEmpty()) }
     }
 
-    fun pasteStrokeClipboard() {
+    fun pasteStrokeClipboard(targetCenter: Offset? = null) {
         if (_state.value.document != null) {
             _state.update {
                 it.copy(
@@ -2616,7 +2605,22 @@ class CanvasViewModel @Inject constructor(
         }
         if (strokeClipboard.isEmpty()) return
         saveToUndoStack()
-        val offset = Offset(36f, 36f)
+
+        val isDifferentPage = (activePage != strokeClipboardSourcePage)
+        val offset = if (targetCenter != null) {
+            val allPoints = strokeClipboard.flatMap { it.points }
+            val minX = allPoints.minOfOrNull { it.x } ?: 0f
+            val maxX = allPoints.maxOfOrNull { it.x } ?: 0f
+            val minY = allPoints.minOfOrNull { it.y } ?: 0f
+            val maxY = allPoints.maxOfOrNull { it.y } ?: 0f
+            val currentCenter = Offset((minX + maxX) / 2f, (minY + maxY) / 2f)
+            targetCenter - currentCenter
+        } else if (isDifferentPage) {
+            Offset.Zero
+        } else {
+            Offset(36f, 36f)
+        }
+
         val idMap = mutableMapOf<String, String>()
         strokeClipboard.forEach { idMap[it.id] = UUID.randomUUID().toString() }
         val pasted = strokeClipboard.map { stroke ->
@@ -2638,10 +2642,15 @@ class CanvasViewModel @Inject constructor(
                 )
             }
         }
+        val newStrokes = _state.value.strokes + pasted
+        if (activePage in pages.indices) {
+            pages[activePage] = newStrokes
+        }
         _state.update { s ->
             s.copy(
-                strokes = s.strokes + pasted,
+                strokes = newStrokes,
                 selectedStrokeIds = pasted.map { it.id }.toSet(),
+                pagePreviews = pages.toList(),
                 canUndo = true,
                 canRedo = false
             )

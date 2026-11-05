@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -122,9 +125,13 @@ fun LanguageSelectionDialog(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                // Language options
+                // Language options (scrollable to support all national and regional languages)
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 440.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     AppLanguage.entries.forEach { lang ->
                         val isSelected = lang == currentLanguage
@@ -144,7 +151,7 @@ fun LanguageSelectionDialog(
                                 .clickable {
                                     onLanguageSelected(lang)
                                 }
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -161,8 +168,8 @@ fun LanguageSelectionDialog(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = lang.code.uppercase(),
-                                        fontSize = 12.sp,
+                                        text = lang.code.uppercase().take(3),
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (isSelected) Color.White else (if (isDark) Color(0xFF94A3B8) else Color(0xFF475569))
                                     )
@@ -171,13 +178,13 @@ fun LanguageSelectionDialog(
                                 Column {
                                     Text(
                                         text = lang.nativeName,
-                                        fontSize = 16.sp,
+                                        fontSize = 15.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = if (isSelected) (if (isDark) Color(0xFFA5B4FC) else Color(0xFF312E81)) else (if (isDark) Color(0xFFF1F5F9) else Color(0xFF1F2937))
                                     )
                                     if (lang != AppLanguage.ENGLISH) {
                                         Text(
-                                            text = lang.displayName,
+                                            text = "${lang.displayName} • ${lang.description}",
                                             fontSize = 12.sp,
                                             color = if (isDark) Color(0xFF94A3B8) else Color(0xFF6B7280)
                                         )

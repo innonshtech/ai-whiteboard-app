@@ -1,0 +1,110 @@
+<resources>
+    <string name="app_name">AvitriSphare</string>
+    <string name="app_subtitle">وائٹ بورڈ</string>
+    <string name="save">محفوظ کریں</string>
+    <string name="cancel">منسوخ کریں</string>
+    <string name="confirm">تصدیق کریں</string>
+    <string name="delete">حذف کریں</string>
+    <string name="edit">ترمیم کریں</string>
+    <string name="close">بند کریں</string>
+    <string name="back">پیچھے</string>
+    <string name="open">کھولیں</string>
+    <string name="search">تلاش کریں</string>
+    <string name="create">بنائیں</string>
+    <string name="title">عنوان</string>
+    <string name="saved">محفوظ ہو گیا</string>
+    <string name="color_swapped">رنگ تبدیل ہوا</string>
+    <string name="copied_to_clipboard">کلپ بورڈ پر کاپی ہو گیا</string>
+    <string name="help_close">بند کریں</string>
+    <string name="share">شیئر کریں</string>
+
+    <!-- Language & Localization -->
+    <string name="language">زبان</string>
+    <string name="change_language">زبان تبدیل کریں</string>
+    <string name="select_language">زبان منتخب کریں</string>
+    <string name="english">English</string>
+    <string name="hindi">हिन्दी (Hindi)</string>
+    <string name="marathi">मराठी (Marathi)</string>
+    <string name="gujarati">ગુજરાતી (Gujarati)</string>
+    <string name="tamil">தமிழ் (Tamil)</string>
+    <string name="telugu">తెలుగు (Telugu)</string>
+    <string name="kannada">ಕನ್ನಡ (Kannada)</string>
+    <string name="malayalam">മലയാളം (Malayalam)</string>
+    <string name="bengali">বাংলা (Bengali)</string>
+    <string name="punjabi">ਪੰਜਾਬੀ (Punjabi)</string>
+    <string name="odia">ଓଡ଼ିଆ (Odia)</string>
+    <string name="urdu">اردو (Urdu)</string>
+
+    <!-- Sidebar Menu -->
+    <string name="menu_rename_board">بورڈ کا نام تبدیل کریں</string>
+    <string name="menu_open">کھولیں</string>
+    <string name="menu_export_lesson">سبق ایکسپورٹ کریں...</string>
+    <string name="menu_open_iwb">GYOASH سبق (.iwb) کھولیں...</string>
+    <string name="menu_live_collab">براہ راست اشتراک...</string>
+    <string name="menu_command_palette">کمانڈ پیلیٹ</string>
+    <string name="menu_find_on_canvas">کینوس پر تلاش کریں</string>
+    <string name="menu_help">مدد</string>
+    <string name="menu_reset_canvas">کینوس ری سیٹ کریں</string>
+
+    <!-- Canvas Bottom Dock Tools -->
+    <string name="tool_select">منتخب کریں</string>
+    <string name="tool_pen">قلم</string>
+    <string name="tool_pencil">پنسل</string>
+    <string name="tool_marker">مارکر</string>
+    <string name="tool_highlighter">ہائی لائٹر</string>
+    <string name="tool_brush">برش</string>
+    <string name="tool_flowchart">فلو چارٹ</string>
+    <string name="tool_stickers">اسٹیکرز</string>
+    <string name="tool_shapes">اشکال</string>
+    <string name="tool_eraser">مٹانے والا</string>
+    <string name="tool_laser">لیزر</string>
+    <string name="tool_geometry">جیومیٹری</string>
+    <string name="tool_tools">اوزار</string>
+    <string name="tool_undo">پہلے جیسا</string>
+    <string name="tool_redo">دوبارہ کریں</string>
+    <string name="tool_save">محفوظ کریں</string>
+    <string name="tool_prev_page">پچھلا</string>
+    <string name="tool_next_page">اگلا</string>
+    <string name="tool_add_page">شامل کریں</string>
+    <string name="tool_profile">پروفائل</string>
+    <string name="tool_main_menu">مین مینو</string>
+    <string name="tool_exit">باہر نکلیں</string>
+    <string name="tool_class">کلاس</string>
+    <string name="clear_all">تمام صاف کریں</string>
+    <string name="tool_clean_all">مکمل صاف کریں</string>
+
+    <!-- Popover Menu Items -->
+    <string name="magic_pen">شکل کی شناخت</string>
+    <string name="shape_recognition">شکل کی شناخت</string>
+    <string name="smart_write">سمارٹ رائٹ</string>
+    <string name="smart_write_tip">شکل کی شناخت کے لیے سمارٹ رائٹ بند کریں۔</string>
+    <string name="popover_background">پس منظر</string>
+    <string name="save_slides_pdf">سلائیڈز محفوظ کریں (PDF)</string>
+    <string name="popover_zoom_in">بڑا کریں</string>
+    <string name="popover_zoom_out">چھوٹا کریں</string>
+    <string name="popover_fit">فٹ کریں</string>
+
+    <!-- Utility Tabs & Tools -->
+    <string name="tab_board">بورڈ</string>
+    <string name="tab_media">میڈیا</string>
+    <string name="tab_utilities">یوٹیلیٹیز</string>
+    <string name="tab_lesson">سبق</string>
+    <string name="tab_view">منظر</string>
+    <string name="util_hand">ہاتھ</string>
+    <string name="util_lasso">لاسو</string>
+    <string name="util_bucket_fill">رنگ بھریں</string>
+    <string name="util_stroke_colour">لکیر کا رنگ</string>
+    <string name="util_pdf">پی ڈی ایف</string>
+    <string name="util_image">تصویر</string>
+    <string name="util_google">گوگل</string>
+    <string name="util_video">ویڈیو</string>
+    <string name="util_youtube">یوٹیوب</string>
+    <string name="util_website">ویب سائٹ</string>
+    <string name="util_timer">کاؤنٹ ڈاؤن ٹائمر</string>
+    <string name="util_stopwatch">اسٹاپ واچ</string>
+    <string name="util_calculator">کیلکولیٹر</string>
+    <string name="util_periodic">دوری جدول</string>
+    <string name="util_spotlight">اسپاٹ لائٹ</string>
+    <string name="util_shade">سایہ</string>
+    <string name="util_magnifier">میکسی فائیر</string>
+</resources>

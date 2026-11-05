@@ -1,0 +1,110 @@
+<resources>
+    <string name="app_name">AvitriSphare</string>
+    <string name="app_subtitle">வெண்பலகை</string>
+    <string name="save">சேமி</string>
+    <string name="cancel">ரத்து செய்</string>
+    <string name="confirm">உறுதிப்படுத்து</string>
+    <string name="delete">நீக்கு</string>
+    <string name="edit">திருத்து</string>
+    <string name="close">மூடு</string>
+    <string name="back">பின்செல்</string>
+    <string name="open">திற</string>
+    <string name="search">தேடு</string>
+    <string name="create">உருவாக்கு</string>
+    <string name="title">தலைப்பு</string>
+    <string name="saved">சேமிக்கப்பட்டது</string>
+    <string name="color_swapped">வண்ணம் மாற்றப்பட்டது</string>
+    <string name="copied_to_clipboard">பலகைக்கு நகலெடுக்கப்பட்டது</string>
+    <string name="help_close">மூடு</string>
+    <string name="share">பகிர்</string>
+
+    <!-- Language & Localization -->
+    <string name="language">மொழி</string>
+    <string name="change_language">மொழியை மாற்று</string>
+    <string name="select_language">மொழியைத் தேர்ந்தெடு</string>
+    <string name="english">English</string>
+    <string name="hindi">हिन्दी (Hindi)</string>
+    <string name="marathi">मराठी (Marathi)</string>
+    <string name="gujarati">ગુજરાતી (Gujarati)</string>
+    <string name="tamil">தமிழ் (Tamil)</string>
+    <string name="telugu">తెలుగు (Telugu)</string>
+    <string name="kannada">ಕನ್ನಡ (Kannada)</string>
+    <string name="malayalam">മലയാളം (Malayalam)</string>
+    <string name="bengali">বাংলা (Bengali)</string>
+    <string name="punjabi">ਪੰਜਾਬੀ (Punjabi)</string>
+    <string name="odia">ଓଡ଼ିଆ (Odia)</string>
+    <string name="urdu">اردو (Urdu)</string>
+
+    <!-- Sidebar Menu -->
+    <string name="menu_rename_board">பலகையை மறுபெயரிடு</string>
+    <string name="menu_open">திற</string>
+    <string name="menu_export_lesson">பாடத்தை ஏற்றுமதி செய்...</string>
+    <string name="menu_open_iwb">GYOASH பாடம் (.iwb) திற...</string>
+    <string name="menu_live_collab">நேரலை ஒத்துழைப்பு...</string>
+    <string name="menu_command_palette">கட்டளை தட்டு</string>
+    <string name="menu_find_on_canvas">வரைபடத்தில் தேடு</string>
+    <string name="menu_help">உதவி</string>
+    <string name="menu_reset_canvas">வரைபடத்தை மீட்டமை</string>
+
+    <!-- Canvas Bottom Dock Tools -->
+    <string name="tool_select">தேர்ந்தெடு</string>
+    <string name="tool_pen">பேனா</string>
+    <string name="tool_pencil">பென்சில்</string>
+    <string name="tool_marker">மார்க்கர்</string>
+    <string name="tool_highlighter">ஹைலைட்டர்</string>
+    <string name="tool_brush">தூரிகை</string>
+    <string name="tool_flowchart">பாய்வு விளக்கப்படம்</string>
+    <string name="tool_stickers">ஓட்டுப்பொதிகள்</string>
+    <string name="tool_shapes">வடிவங்கள்</string>
+    <string name="tool_eraser">அழிப்பான்</string>
+    <string name="tool_laser">லேசர்</string>
+    <string name="tool_geometry">வடிவியல்</string>
+    <string name="tool_tools">கருவிகள்</string>
+    <string name="tool_undo">செயல்தவிர்</string>
+    <string name="tool_redo">மீண்டும் செய்</string>
+    <string name="tool_save">சேமி</string>
+    <string name="tool_prev_page">முந்தைய</string>
+    <string name="tool_next_page">அடுத்த</string>
+    <string name="tool_add_page">சேர்</string>
+    <string name="tool_profile">சுயவிவரம்</string>
+    <string name="tool_main_menu">முதன்மை மெனு</string>
+    <string name="tool_exit">வெளியேறு</string>
+    <string name="tool_class">வகுப்பு</string>
+    <string name="clear_all">அனைத்தையும் அழி</string>
+    <string name="tool_clean_all">அனைத்தையும் துடை</string>
+
+    <!-- Popover Menu Items -->
+    <string name="magic_pen">வடிவம் அறிதல்</string>
+    <string name="shape_recognition">வடிவம் அறிதல்</string>
+    <string name="smart_write">ஸ்மார்ட் எழுது</string>
+    <string name="smart_write_tip">வடிவம் அறிதலைப் பயன்படுத்த ஸ்மார்ட் எழுதுதலை அணைக்கவும்.</string>
+    <string name="popover_background">பின்னணி</string>
+    <string name="save_slides_pdf">ஸ்லைடுகளை சேமி (PDF)</string>
+    <string name="popover_zoom_in">பெரிதாக்கு</string>
+    <string name="popover_zoom_out">சிறிதாக்கு</string>
+    <string name="popover_fit">பொருத்து</string>
+
+    <!-- Utility Tabs & Tools -->
+    <string name="tab_board">பலகை</string>
+    <string name="tab_media">ஊடகம்</string>
+    <string name="tab_utilities">பயன்பாடுகள்</string>
+    <string name="tab_lesson">பாடம்</string>
+    <string name="tab_view">பார்வை</string>
+    <string name="util_hand">கை</string>
+    <string name="util_lasso">லாசோ</string>
+    <string name="util_bucket_fill">வண்ணம் நிரப்பு</string>
+    <string name="util_stroke_colour">கோட்டின் வண்ணம்</string>
+    <string name="util_pdf">பிடிஎஃப்</string>
+    <string name="util_image">படம்</string>
+    <string name="util_google">கூகிள்</string>
+    <string name="util_video">காணொளி</string>
+    <string name="util_youtube">யூடியூப்</string>
+    <string name="util_website">இணையதளம்</string>
+    <string name="util_timer">நேரங்காட்டி</string>
+    <string name="util_stopwatch">நிறுத்துக்கடிகாரம்</string>
+    <string name="util_calculator">கால்குலேட்டர்</string>
+    <string name="util_periodic">தனிம அட்டவணை</string>
+    <string name="util_spotlight">ஸ்பாட்லைட்</string>
+    <string name="util_shade">திரை</string>
+    <string name="util_magnifier">பூதக்கண்ணாடி</string>
+</resources>

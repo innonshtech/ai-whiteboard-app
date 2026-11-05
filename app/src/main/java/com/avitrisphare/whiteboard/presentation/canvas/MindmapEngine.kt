@@ -1183,4 +1183,104 @@ object MindmapEngine {
         }
         return result
     }
+
+    /**
+     * Clamps proposed group scale factors (scaleX, scaleY) so that NONE of the scaled nodes
+     * in the selected mind map overlap any other mind map's boxes (obstacles), and none exceed screen boundary.
+     * Uses binary search between 1.0f (no scale change) and candidate scale to find the maximum
+     * safe non-overlapping scale factor.
+     */
+    fun clampGroupScale(
+        nodeBounds: List<Rect>,
+        anchor: Offset,
+        desiredScaleX: Float,
+        desiredScaleY: Float,
+        obstacles: List<Rect>,
+        boundary: Rect,
+        gap: Float = MIN_BOX_GAP
+    ): Pair<Float, Float> {
+        if (nodeBounds.isEmpty()) return desiredScaleX to desiredScaleY
+
+        fun isValidScale(sx: Float, sy: Float): Boolean {
+            for (node in nodeBounds) {
+                val newLeft = anchor.x + (node.left - anchor.x) * sx
+                val newRight = anchor.x + (node.right - anchor.x) * sx
+                val newTop = anchor.y + (node.top - anchor.y) * sy
+                val newBottom = anchor.y + (node.bottom - anchor.y) * sy
+
+                val scaledRect = Rect(
+                    minOf(newLeft, newRight),
+                    minOf(newTop, newBottom),
+                    maxOf(newLeft, newRight),
+                    maxOf(newTop, newBottom)
+                )
+
+                if (scaledRect.left < boundary.left || scaledRect.right > boundary.right ||
+                    scaledRect.top < boundary.top || scaledRect.bottom > boundary.bottom
+                ) {
+                    return false
+                }
+
+                for (obs in obstacles) {
+                    if (rectsOverlapWithGap(scaledRect, obs, gap)) {
+                        return false
+                    }
+                }
+            }
+            return true
+        }
+
+        var safeScaleX = desiredScaleX
+        if (desiredScaleX > 1.0f) {
+            if (!isValidScale(desiredScaleX, 1.0f)) {
+                var low = 1.0f
+                var high = desiredScaleX
+                for (i in 0 until 12) {
+                    val mid = (low + high) / 2f
+                    if (isValidScale(mid, 1.0f)) {
+                        low = mid
+                    } else {
+                        high = mid
+                    }
+                }
+                safeScaleX = low
+            }
+        }
+
+        var safeScaleY = desiredScaleY
+        if (desiredScaleY > 1.0f) {
+            if (!isValidScale(safeScaleX, desiredScaleY)) {
+                var low = 1.0f
+                var high = desiredScaleY
+                for (i in 0 until 12) {
+                    val mid = (low + high) / 2f
+                    if (isValidScale(safeScaleX, mid)) {
+                        low = mid
+                    } else {
+                        high = mid
+                    }
+                }
+                safeScaleY = low
+            }
+        }
+
+        if (!isValidScale(safeScaleX, safeScaleY)) {
+            var low = 0.0f
+            var high = 1.0f
+            for (i in 0 until 12) {
+                val mid = (low + high) / 2f
+                val testX = 1.0f + (safeScaleX - 1.0f) * mid
+                val testY = 1.0f + (safeScaleY - 1.0f) * mid
+                if (isValidScale(testX, testY)) {
+                    low = mid
+                } else {
+                    high = mid
+                }
+            }
+            safeScaleX = 1.0f + (safeScaleX - 1.0f) * low
+            safeScaleY = 1.0f + (safeScaleY - 1.0f) * low
+        }
+
+        return safeScaleX to safeScaleY
+    }
 }

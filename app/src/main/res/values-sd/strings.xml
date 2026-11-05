@@ -1,0 +1,97 @@
+<resources>
+    <string name="app_name">AvitriSphare</string>
+    <string name="app_subtitle">وائيٽ بورڊ</string>
+    <string name="save">محفوظ ڪريو</string>
+    <string name="cancel">رد ڪريو</string>
+    <string name="confirm">پڪ ڪريو</string>
+    <string name="delete">ڊاهي ڇڏيو</string>
+    <string name="edit">ترميم ڪريو</string>
+    <string name="close">بند ڪريو</string>
+    <string name="back">واپس</string>
+    <string name="open">کوليو</string>
+    <string name="search">ڳوليو</string>
+    <string name="create">ٺاهيو</string>
+    <string name="title">عنوان</string>
+    <string name="saved">محفوظ ٿي ويو</string>
+    <string name="color_swapped">رنگ بدلجي ويو</string>
+    <string name="copied_to_clipboard">ڪلپ بورڊ تي ڪاپي ٿيو</string>
+    <string name="help_close">بند ڪريو</string>
+    <string name="share">ونڊيو</string>
+
+    <string name="language">ٻولي</string>
+    <string name="change_language">ٻولي تبديل ڪريو</string>
+    <string name="select_language">ٻولي چونڊيو</string>
+
+    <!-- Sidebar Menu -->
+    <string name="menu_rename_board">بورڊ جو نالو تبديل ڪريو</string>
+    <string name="menu_open">کوليو</string>
+    <string name="menu_export_lesson">سبق موڪليو...</string>
+    <string name="menu_open_iwb">GYOASH سبق (.iwb) کوليو...</string>
+    <string name="menu_live_collab">لائيو سهڪار...</string>
+    <string name="menu_command_palette">ڪمانڊ پيليٽ</string>
+    <string name="menu_find_on_canvas">ڪينواس تي ڳوليو</string>
+    <string name="menu_help">مدد</string>
+    <string name="menu_reset_canvas">ڪينواس ريسيٽ ڪريو</string>
+
+    <!-- Canvas Bottom Dock Tools -->
+    <string name="tool_select">چونڊيو</string>
+    <string name="tool_pen">قلم</string>
+    <string name="tool_pencil">پينسل</string>
+    <string name="tool_marker">مارڪر</string>
+    <string name="tool_highlighter">هاءِ لائٽر</string>
+    <string name="tool_brush">برش</string>
+    <string name="tool_flowchart">فلو چارٽ</string>
+    <string name="tool_stickers">اسٽيڪر</string>
+    <string name="tool_shapes">شڪليون</string>
+    <string name="tool_eraser">ڊاهيندڙ</string>
+    <string name="tool_laser">ليزر</string>
+    <string name="tool_geometry">جاميٽري</string>
+    <string name="tool_tools">اوزار</string>
+    <string name="tool_undo">پوئتي</string>
+    <string name="tool_redo">ٻيهر</string>
+    <string name="tool_save">محفوظ ڪريو</string>
+    <string name="tool_prev_page">پوئين</string>
+    <string name="tool_next_page">اڳين</string>
+    <string name="tool_add_page">شامل ڪريو</string>
+    <string name="tool_profile">پروفائل</string>
+    <string name="tool_main_menu">مکيه مينيو</string>
+    <string name="tool_exit">ٻاهر نڪرو</string>
+    <string name="tool_class">ڪلاس</string>
+    <string name="clear_all">سڀ صاف ڪريو</string>
+    <string name="tool_clean_all">مڪمل صاف ڪريو</string>
+
+    <!-- Popover Menu Items -->
+    <string name="magic_pen">شڪل سڃاڻپ</string>
+    <string name="shape_recognition">شڪل سڃاڻپ</string>
+    <string name="smart_write">سمارٽ لکڻ</string>
+    <string name="smart_write_tip">شڪل سڃاڻپ لاءِ سمارٽ لکڻ بند ڪريو.</string>
+    <string name="popover_background">پس منظر</string>
+    <string name="save_slides_pdf">سلائيڊ محفوظ ڪريو (PDF)</string>
+    <string name="popover_zoom_in">وڏو ڪريو</string>
+    <string name="popover_zoom_out">ننڍو ڪريو</string>
+    <string name="popover_fit">فٽ ڪريو</string>
+
+    <!-- Utility Tabs & Tools -->
+    <string name="tab_board">بورڊ</string>
+    <string name="tab_media">ميڊيا</string>
+    <string name="tab_utilities">اوزار</string>
+    <string name="tab_lesson">سبق</string>
+    <string name="tab_view">ڏيک</string>
+    <string name="util_hand">هٿ</string>
+    <string name="util_lasso">لاسو</string>
+    <string name="util_bucket_fill">رنگ ڀريو</string>
+    <string name="util_stroke_colour">ليڪ جو رنگ</string>
+    <string name="util_pdf">پي ڊي ايف</string>
+    <string name="util_image">تصوير</string>
+    <string name="util_google">گوگل</string>
+    <string name="util_video">ويڊيو</string>
+    <string name="util_youtube">يوٽيوب</string>
+    <string name="util_website">ويب سائيٽ</string>
+    <string name="util_timer">ٽائمر</string>
+    <string name="util_stopwatch">اسٽاپ واچ</string>
+    <string name="util_calculator">ڪئلڪيوليٽر</string>
+    <string name="util_periodic">ٽيبل</string>
+    <string name="util_spotlight">اسپاٽ لائٽ</string>
+    <string name="util_shade">ڇانوَ</string>
+    <string name="util_magnifier">وڏو ڪندڙ گلاس</string>
+</resources>
