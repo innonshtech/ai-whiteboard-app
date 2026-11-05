@@ -95,14 +95,31 @@ fun CanvasPreview(
                             style = DrawStroke(width = scaledWidth)
                         )
                     }
-                    StrokeType.LINE -> {
-                        drawLine(
-                            color = strokeColor,
-                            start = Offset(pointsList.first().x * scale + offsetX, pointsList.first().y * scale + offsetY),
-                            end = Offset(pointsList.last().x * scale + offsetX, pointsList.last().y * scale + offsetY),
-                            strokeWidth = scaledWidth,
-                            cap = StrokeCap.Round
-                        )
+                    StrokeType.LINE, StrokeType.LINE_DASHED -> {
+                        if (pointsList.size == 2) {
+                            drawLine(
+                                color = strokeColor,
+                                start = Offset(pointsList.first().x * scale + offsetX, pointsList.first().y * scale + offsetY),
+                                end = Offset(pointsList.last().x * scale + offsetX, pointsList.last().y * scale + offsetY),
+                                strokeWidth = scaledWidth,
+                                cap = StrokeCap.Round
+                            )
+                        } else {
+                            val path = Path()
+                            path.moveTo(pointsList.first().x * scale + offsetX, pointsList.first().y * scale + offsetY)
+                            for (i in 1 until pointsList.size) {
+                                path.lineTo(pointsList[i].x * scale + offsetX, pointsList[i].y * scale + offsetY)
+                            }
+                            drawPath(
+                                path = path,
+                                color = strokeColor,
+                                style = DrawStroke(
+                                    width = scaledWidth,
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
+                        }
                     }
                     else -> {
                         val path = Path()

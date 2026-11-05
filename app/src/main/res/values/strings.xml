@@ -72,6 +72,20 @@
     <string name="tool_class">Class</string>
     <string name="clear_all">Clear all</string>
     <string name="tool_clean_all">Clean all</string>
+    <string name="tool_snip">Snip</string>
+    <string name="snip_mode_rectangle">Rectangle</string>
+    <string name="snip_mode_square">Square</string>
+    <string name="snip_mode_freeform">Freeform</string>
+    <string name="snip_mode_full">Full Canvas</string>
+    <string name="snip_action_copy">Copy</string>
+    <string name="snip_action_cut">Cut</string>
+    <string name="snip_action_paste">Paste</string>
+    <string name="snip_action_cancel">Cancel</string>
+    <string name="snip_copied_toast">Snipped portion copied</string>
+    <string name="snip_cut_toast">Snipped portion ready to paste (original kept)</string>
+    <string name="snip_pasted_toast">Snipped portion pasted</string>
+    <string name="snip_captured_toast">Snippet captured &amp; placed</string>
+    <string name="snip_select_image_hint">Select an area on the canvas to snip</string>
 
     <!-- Popover Menu Items -->
     <string name="magic_pen">Shape Recognition</string>
@@ -105,6 +119,17 @@
     <string name="util_calculator">Calculator</string>
     <string name="util_periodic">Periodic Table</string>
     <string name="util_spotlight">Spotlight</string>
+        <string name="util_curtain">Curtain</string>
+    <string name="curtain_title">Curtain</string>
+    <string name="curtain_drag_to_move">Drag to move</string>
+    <string name="curtain_hide">Hide Canvas</string>
+    <string name="curtain_show">Show Canvas</string>
+    <string name="curtain_hidden_notice">Canvas is Hidden</string>
+    <string name="curtain_reveal_hint">Click Show Canvas or drag the edge to reveal</string>
+    <string name="curtain_direction_top">Pull from Top</string>
+    <string name="curtain_direction_bottom">Pull from Bottom</string>
+    <string name="curtain_direction_left">Pull from Left</string>
+    <string name="curtain_direction_right">Pull from Right</string>
     <string name="util_shade">Shade</string>
     <string name="util_magnifier">Magnifier</string>
     <string name="util_text">Text</string>
@@ -277,9 +302,9 @@
     <string name="shape_opacity">Opacity: %d%%</string>
     <string name="shape_radius">Radius: %d px</string>
     <string name="shape_dims">Dims</string>
-    <string name="shape_dims_active">✓ Dims</string>
-    <string name="shape_border">● Border</string>
-    <string name="shape_fill">⊘ Fill</string>
+    <string name="shape_dims_active">Dims</string>
+    <string name="shape_border">Border</string>
+    <string name="shape_fill">Fill</string>
     <string name="shape_border_color">Border Color</string>
     <string name="shape_fill_color">Fill Color</string>
     <string name="rgb_custom_color">RGB Custom Color</string>

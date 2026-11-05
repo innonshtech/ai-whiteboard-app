@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -255,13 +256,19 @@ fun InkToolPanel(
         )
     }
 
-    Column(
+    val scrollState = rememberScrollState()
+
+    Box(
         modifier = Modifier
             .width(340.dp)
             .heightIn(max = 210.dp)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 2.dp, vertical = 2.dp)
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(scrollState)
+                .padding(end = if (scrollState.maxValue > 0) 8.dp else 2.dp, start = 2.dp, top = 2.dp, bottom = 2.dp)
+        ) {
         // 1. Header: Color Dot, Utensil · Size, Status Badge (DRAWING MODE), Close [X]
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -791,7 +798,7 @@ fun InkToolPanel(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // SLOT A
+                    // TIP 1
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -818,7 +825,7 @@ fun InkToolPanel(
                             Spacer(Modifier.width(6.dp))
                             Column {
                                 Text(
-                                    text = if (!editingSecondary) "SLOT A (Active)" else "SLOT A",
+                                    text = if (!editingSecondary) "Tip 1 (Active)" else "Tip 1",
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (!editingSecondary) BrandOrange else Color(0xFF475569)
@@ -860,7 +867,7 @@ fun InkToolPanel(
                         }
                     }
 
-                    // SLOT B
+                    // TIP 2
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -887,7 +894,7 @@ fun InkToolPanel(
                             Spacer(Modifier.width(6.dp))
                             Column {
                                 Text(
-                                    text = if (editingSecondary) "SLOT B (Active)" else "SLOT B",
+                                    text = if (editingSecondary) "Tip 2 (Active)" else "Tip 2",
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (editingSecondary) BrandOrange else Color(0xFF475569)
@@ -1141,6 +1148,15 @@ fun InkToolPanel(
                 Spacer(Modifier.height(6.dp))
             }
         }
+        }
+
+        VerticalScrollbar(
+            scrollState = scrollState,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .padding(vertical = 4.dp)
+        )
     }
 }
 

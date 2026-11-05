@@ -72,6 +72,20 @@
     <string name="tool_class">वर्ग</string>
     <string name="clear_all">सर्व साफ करा</string>
     <string name="tool_clean_all">ऑब्जेक्ट्स साफ करा</string>
+    <string name="tool_snip">स्निप</string>
+    <string name="snip_mode_rectangle">आयत</string>
+    <string name="snip_mode_square">चौरस</string>
+    <string name="snip_mode_freeform">मुक्त आकार</string>
+    <string name="snip_mode_full">संपूर्ण कॅनव्हास</string>
+    <string name="snip_action_copy">कॉपी</string>
+    <string name="snip_action_cut">कट</string>
+    <string name="snip_action_paste">पेस्ट</string>
+    <string name="snip_action_cancel">रद्द करा</string>
+    <string name="snip_copied_toast">स्निप केलेला भाग कॉपी केला</string>
+    <string name="snip_cut_toast">स्निप केलेला भाग पेस्टसाठी तयार (मूळ सुरक्षित)</string>
+    <string name="snip_pasted_toast">स्निप केलेला भाग पेस्ट केला</string>
+    <string name="snip_captured_toast">स्निपेट कॅप्चर केले आणि जोडले</string>
+    <string name="snip_select_image_hint">स्निप करण्यासाठी कॅनव्हासवर क्षेत्र निवडा</string>
 
     <!-- Popover Menu Items -->
     <string name="magic_pen">आकार ओळख</string>
@@ -105,6 +119,17 @@
     <string name="util_calculator">कॅल्क्युलेटर</string>
     <string name="util_periodic">आवर्त सारणी</string>
     <string name="util_spotlight">स्पॉटलाइट</string>
+        <string name="util_curtain">पडदा</string>
+    <string name="curtain_title">पडदा</string>
+    <string name="curtain_drag_to_move">हलवण्यासाठी ड्रॅग करा</string>
+    <string name="curtain_hide">कॅनव्हास लपवा</string>
+    <string name="curtain_show">कॅनव्हास दाखवा</string>
+    <string name="curtain_hidden_notice">कॅनव्हास लपवला आहे</string>
+    <string name="curtain_reveal_hint">कॅनव्हास पाहण्यासाठी क्लिक करा किंवा कडा ओढा</string>
+    <string name="curtain_direction_top">वरून ओढा</string>
+    <string name="curtain_direction_bottom">खालून ओढा</string>
+    <string name="curtain_direction_left">डावीकडून ओढा</string>
+    <string name="curtain_direction_right">उजवीकडून ओढा</string>
     <string name="util_shade">पडदा</string>
     <string name="util_magnifier">भिंग</string>
     <string name="util_text">मजकूर</string>
@@ -277,9 +302,9 @@
     <string name="shape_opacity">अपारदर्शकता: %d%%</string>
     <string name="shape_radius">त्रिज्या: %d px</string>
     <string name="shape_dims">परिमाणे</string>
-    <string name="shape_dims_active">✓ परिमाणे</string>
-    <string name="shape_border">● बॉर्डर</string>
-    <string name="shape_fill">⊘ रंग भरा</string>
+    <string name="shape_dims_active">परिमाणे</string>
+    <string name="shape_border">बॉर्डर</string>
+    <string name="shape_fill">रंग भरा</string>
     <string name="shape_border_color">बॉर्डरचा रंग</string>
     <string name="shape_fill_color">भरण्याचा रंग</string>
     <string name="rgb_custom_color">RGB कस्टम रंग</string>

@@ -72,6 +72,20 @@
     <string name="tool_class">कक्षा</string>
     <string name="clear_all">सब साफ़ करें</string>
     <string name="tool_clean_all">ऑब्जेक्ट्स साफ़ करें</string>
+    <string name="tool_snip">स्निप</string>
+    <string name="snip_mode_rectangle">आयत</string>
+    <string name="snip_mode_square">वर्ग</string>
+    <string name="snip_mode_freeform">फ्रीफ़ॉर्म</string>
+    <string name="snip_mode_full">पूर्ण कैनवास</string>
+    <string name="snip_action_copy">कॉपी</string>
+    <string name="snip_action_cut">कट</string>
+    <string name="snip_action_paste">पेस्ट</string>
+    <string name="snip_action_cancel">रद्द करें</string>
+    <string name="snip_copied_toast">स्निप किया गया भाग कॉपी किया गया</string>
+    <string name="snip_cut_toast">स्निप किया गया भाग पेस्ट के लिए तैयार (मूल सुरक्षित)</string>
+    <string name="snip_pasted_toast">स्निप किया गया भाग पेस्ट किया गया</string>
+    <string name="snip_captured_toast">स्निपेट कैप्चर किया गया और जोड़ा गया</string>
+    <string name="snip_select_image_hint">स्निप करने के लिए कैनवास पर क्षेत्र चुनें</string>
 
     <!-- Popover Menu Items -->
     <string name="magic_pen">आकृति पहचान</string>
@@ -105,6 +119,17 @@
     <string name="util_calculator">कैलकुलेटर</string>
     <string name="util_periodic">आवर्त सारणी</string>
     <string name="util_spotlight">स्पॉटलाइट</string>
+        <string name="util_curtain">पर्दा</string>
+    <string name="curtain_title">पर्दा</string>
+    <string name="curtain_drag_to_move">स्थानांतरित करने के लिए खींचें</string>
+    <string name="curtain_hide">कैनवास छिपाएं</string>
+    <string name="curtain_show">कैनवास दिखाएं</string>
+    <string name="curtain_hidden_notice">कैनवास छिपा हुआ है</string>
+    <string name="curtain_reveal_hint">कैनवास देखने के लिए क्लिक करें या किनारे को खींचें</string>
+    <string name="curtain_direction_top">ऊपर से खींचें</string>
+    <string name="curtain_direction_bottom">नीचे से खींचें</string>
+    <string name="curtain_direction_left">बाएं से खींचें</string>
+    <string name="curtain_direction_right">दाएं से खींचें</string>
     <string name="util_shade">पर्दा</string>
     <string name="util_magnifier">आवर्धक लेंस</string>
     <string name="util_text">टेक्स्ट</string>
@@ -277,9 +302,9 @@
     <string name="shape_opacity">अपारदर्शिता: %d%%</string>
     <string name="shape_radius">त्रिज्या: %d px</string>
     <string name="shape_dims">माप</string>
-    <string name="shape_dims_active">✓ माप</string>
-    <string name="shape_border">● बॉर्डर</string>
-    <string name="shape_fill">⊘ भराव</string>
+    <string name="shape_dims_active">माप</string>
+    <string name="shape_border">बॉर्डर</string>
+    <string name="shape_fill">भराव</string>
     <string name="shape_border_color">बॉर्डर का रंग</string>
     <string name="shape_fill_color">भराव का रंग</string>
     <string name="rgb_custom_color">RGB कस्टम रंग</string>

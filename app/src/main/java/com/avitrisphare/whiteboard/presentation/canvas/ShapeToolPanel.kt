@@ -2,7 +2,15 @@ package com.avitrisphare.whiteboard.presentation.canvas
 
 import com.avitrisphare.whiteboard.core.theme.BrandOrange
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +27,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -120,6 +134,73 @@ private val SHAPE_PRESET_COLORS = listOf(
     0xFFFFFFFF.toInt()  // White
 )
 
+
+@Composable
+internal fun VerticalScrollbar(
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier,
+    trackColor: Color = Color(0xFFE2E8F0),
+    thumbColor: Color = BrandOrange,
+    thumbWidth: androidx.compose.ui.unit.Dp = 4.dp
+) {
+    if (scrollState.maxValue <= 0) return
+    val coroutineScope = rememberCoroutineScope()
+
+    Canvas(
+        modifier = modifier
+            .width(thumbWidth)
+            .pointerInput(scrollState.maxValue) {
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                    val totalHeight = size.height.toFloat()
+                    if (totalHeight > 0f) {
+                        val totalContentHeight = totalHeight + scrollState.maxValue.toFloat()
+                        val visibleRatio = (totalHeight / totalContentHeight).coerceIn(0.15f, 1f)
+                        val thumbHeight = (totalHeight * visibleRatio).coerceAtLeast(16.dp.toPx())
+                        val maxOffset = totalHeight - thumbHeight
+                        if (maxOffset > 0f) {
+                            val deltaFraction = dragAmount.y / maxOffset
+                            val targetScroll = (scrollState.value + deltaFraction * scrollState.maxValue)
+                                .roundToInt()
+                                .coerceIn(0, scrollState.maxValue)
+                            coroutineScope.launch {
+                                scrollState.scrollTo(targetScroll)
+                            }
+                        }
+                    }
+                }
+            }
+    ) {
+        val totalHeight = size.height
+        if (totalHeight <= 0f) return@Canvas
+
+        // Draw track
+        drawRoundRect(
+            color = trackColor,
+            topLeft = Offset(0f, 0f),
+            size = Size(size.width, totalHeight),
+            cornerRadius = CornerRadius(size.width / 2f, size.width / 2f)
+        )
+
+        // Calculate thumb height and position
+        val totalContentHeight = totalHeight + scrollState.maxValue
+        val visibleRatio = (totalHeight / totalContentHeight).coerceIn(0.15f, 1f)
+        val thumbHeight = (totalHeight * visibleRatio).coerceAtLeast(16.dp.toPx())
+
+        val scrollFraction = (scrollState.value.toFloat() / scrollState.maxValue.toFloat()).coerceIn(0f, 1f)
+        val maxOffset = totalHeight - thumbHeight
+        val thumbTop = scrollFraction * maxOffset
+
+        // Draw thumb
+        drawRoundRect(
+            color = thumbColor,
+            topLeft = Offset(0f, thumbTop),
+            size = Size(size.width, thumbHeight),
+            cornerRadius = CornerRadius(size.width / 2f, size.width / 2f)
+        )
+    }
+}
+
 @Composable
 fun ShapeToolPanel(
     state: CanvasState,
@@ -140,13 +221,33 @@ fun ShapeToolPanel(
 
     val isDark = state.isDarkTheme
 
-    Column(
-        modifier = modifier
-            .width(340.dp)
-            .heightIn(max = 240.dp)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+    val outerScrollState = rememberScrollState()
+    val trackColor = if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Bottom
     ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = if (isDark) Color(0xFF1E293B) else Color.White,
+            shadowElevation = 14.dp,
+            border = BorderStroke(1.dp, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)),
+            modifier = Modifier.width(340.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+            ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(outerScrollState)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .padding(end = if (outerScrollState.maxValue > 0) 6.dp else 0.dp)
+        ) {
         // --- Header (Drag Handle & Close Button) ---
         Row(
             modifier = Modifier
@@ -252,52 +353,91 @@ fun ShapeToolPanel(
 
         Spacer(Modifier.height(10.dp))
 
-        // --- Horizontal Shape Cards Grid ---
+        // --- Vertical Shape Cards Grid with Scrollbar ---
         val shapesInCat = remember(selectedCategory) {
             ALL_SHAPES.filter { it.category == selectedCategory }
         }
 
-        Row(
+        val shapeScrollState = rememberScrollState()
+
+        LaunchedEffect(selectedCategory) {
+            shapeScrollState.scrollTo(0)
+        }
+
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .height(126.dp)
         ) {
-            shapesInCat.forEach { spec ->
-                val isSelected = spec.strokeType == state.activeShapeType
-                Column(
-                    modifier = Modifier
-                        .size(width = 54.dp, height = 58.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (isSelected) (if (isDark) Color(0xFF431407) else Color(0xFFFFF7ED)) else (if (isDark) Color(0xFF0F172A) else Color(0xFFF9FAFB)))
-                        .border(
-                            width = if (isSelected) 2.dp else 1.dp,
-                            color = if (isSelected) BrandOrange else (if (isDark) Color(0xFF334155) else Color(0xFFE5E7EB)),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        .clickable {
-                            viewModel.setShapeType(spec.strokeType)
-                        }
-                        .padding(horizontal = 2.dp, vertical = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    ShapeIconPreview(
-                        spec = spec,
-                        tint = if (isSelected) (if (isDark) Color(0xFFFDBA74) else BrandOrange) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF374151))
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = localizedShapeName(spec.strokeType),
-                        fontSize = 9.sp,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (isSelected) (if (isDark) Color(0xFFFDBA74) else BrandOrange) else (if (isDark) Color(0xFF94A3B8) else Color(0xFF4B5563)),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center
-                    )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(end = if (shapeScrollState.maxValue > 0) 8.dp else 0.dp)
+                    .verticalScroll(shapeScrollState),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val chunkedShapes = remember(shapesInCat) {
+                    shapesInCat.chunked(5)
                 }
+                chunkedShapes.forEach { rowShapes ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        rowShapes.forEach { spec ->
+                            val isSelected = spec.strokeType == state.activeShapeType
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(58.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSelected) (if (isDark) Color(0xFF431407) else Color(0xFFFFF7ED)) else (if (isDark) Color(0xFF0F172A) else Color(0xFFF9FAFB)))
+                                    .border(
+                                        width = if (isSelected) 2.dp else 1.dp,
+                                        color = if (isSelected) BrandOrange else (if (isDark) Color(0xFF334155) else Color(0xFFE5E7EB)),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable {
+                                        viewModel.setShapeType(spec.strokeType)
+                                    }
+                                    .padding(horizontal = 2.dp, vertical = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                ShapeIconPreview(
+                                    spec = spec,
+                                    tint = if (isSelected) (if (isDark) Color(0xFFFDBA74) else BrandOrange) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF374151))
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = localizedShapeName(spec.strokeType),
+                                    fontSize = 9.sp,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (isSelected) (if (isDark) Color(0xFFFDBA74) else BrandOrange) else (if (isDark) Color(0xFF94A3B8) else Color(0xFF4B5563)),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                        repeat(5 - rowShapes.size) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+
+            if (shapeScrollState.maxValue > 0) {
+                VerticalScrollbar(
+                    scrollState = shapeScrollState,
+                    trackColor = trackColor,
+                    thumbColor = BrandOrange,
+                    thumbWidth = 4.dp,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .padding(vertical = 2.dp)
+                )
             }
         }
 
@@ -519,7 +659,13 @@ fun ShapeToolPanel(
                 }
             }
 
-            SHAPE_PRESET_COLORS.forEach { colorInt ->
+            val displayColors = if (currentModeColor != 0 && currentModeColor !in SHAPE_PRESET_COLORS) {
+                listOf(currentModeColor) + SHAPE_PRESET_COLORS
+            } else {
+                SHAPE_PRESET_COLORS
+            }
+
+            displayColors.forEach { colorInt ->
                 val isSelected = currentModeColor == colorInt
                 Box(
                     modifier = Modifier
@@ -555,26 +701,51 @@ fun ShapeToolPanel(
                 modifier = Modifier
                     .size(26.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFF3F4F6))
-                    .border(1.dp, Color(0xFFD1D5DB), CircleShape)
+                    .background(if (showColorPicker) (if (isDark) Color(0xFF431407) else Color(0xFFFFF7ED)) else (if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6)))
+                    .border(
+                        1.5.dp,
+                        if (showColorPicker) BrandOrange else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB)),
+                        CircleShape
+                    )
                     .clickable { showColorPicker = !showColorPicker },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.ColorLens,
                     contentDescription = stringResource(R.string.custom_color),
-                    tint = Color(0xFF4B5563),
+                    tint = if (showColorPicker) BrandOrange else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563)),
                     modifier = Modifier.size(16.dp)
                 )
             }
         }
+        }
 
-        // --- Custom Color Picker (expandable RGB sliders) ---
+        if (outerScrollState.maxValue > 0) {
+            VerticalScrollbar(
+                scrollState = outerScrollState,
+                trackColor = trackColor,
+                thumbColor = BrandOrange.copy(alpha = 0.6f),
+                thumbWidth = 3.dp,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .padding(vertical = 12.dp, horizontal = 2.dp)
+            )
+        }
+        }
+        }
+
         if (showColorPicker) {
-            Spacer(Modifier.height(10.dp))
-            CustomColorPicker(
-                currentColor = if (currentModeColor == 0) 0xFF1B1F2A.toInt() else currentModeColor,
-                onColorChange = { viewModel.setShapeColor(it) }
+            ColorWheelPanel(
+                initialColor = if (currentModeColor == 0) 0xFF1B1F2A.toInt() else currentModeColor,
+                isDark = isDark,
+                title = if (state.shapeStyleMode == ShapeStyleMode.BORDER) {
+                    stringResource(R.string.shape_border_color)
+                } else {
+                    stringResource(R.string.shape_fill_color)
+                },
+                onColorSelected = { viewModel.setShapeColor(it) },
+                onClose = { showColorPicker = false }
             )
         }
     }
@@ -735,83 +906,5 @@ private fun ShapeIconPreview(spec: ShapeSpec, tint: Color) {
     }
 }
 
-@Composable
-private fun CustomColorPicker(
-    currentColor: Int,
-    onColorChange: (Int) -> Unit
-) {
-    var red by remember(currentColor) { mutableIntStateOf((currentColor shr 16) and 0xFF) }
-    var green by remember(currentColor) { mutableIntStateOf((currentColor shr 8) and 0xFF) }
-    var blue by remember(currentColor) { mutableIntStateOf(currentColor and 0xFF) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFF9FAFB))
-            .padding(8.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(stringResource(R.string.rgb_custom_color), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4B5563))
-            Box(
-                modifier = Modifier
-                    .size(20.dp)
-                    .clip(CircleShape)
-                    .background(Color(red, green, blue))
-                    .border(1.dp, Color(0xFFD1D5DB), CircleShape)
-            )
-        }
-
-        Spacer(Modifier.height(6.dp))
-
-        // Red slider
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("R: $red", fontSize = 10.sp, color = Color(0xFFEF4444), modifier = Modifier.width(36.dp))
-            Slider(
-                value = red.toFloat(),
-                onValueChange = {
-                    red = it.roundToInt()
-                    val newCol = (0xFF shl 24) or (red shl 16) or (green shl 8) or blue
-                    onColorChange(newCol)
-                },
-                valueRange = 0f..255f,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        // Green slider
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("G: $green", fontSize = 10.sp, color = Color(0xFF22C55E), modifier = Modifier.width(36.dp))
-            Slider(
-                value = green.toFloat(),
-                onValueChange = {
-                    green = it.roundToInt()
-                    val newCol = (0xFF shl 24) or (red shl 16) or (green shl 8) or blue
-                    onColorChange(newCol)
-                },
-                valueRange = 0f..255f,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        // Blue slider
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("B: $blue", fontSize = 10.sp, color = Color(0xFF3B82F6), modifier = Modifier.width(36.dp))
-            Slider(
-                value = blue.toFloat(),
-                onValueChange = {
-                    blue = it.roundToInt()
-                    val newCol = (0xFF shl 24) or (red shl 16) or (green shl 8) or blue
-                    onColorChange(newCol)
-                },
-                valueRange = 0f..255f,
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
 

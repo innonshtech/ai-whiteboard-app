@@ -2,8 +2,16 @@ package com.avitrisphare.whiteboard.presentation.canvas
 
 import com.avitrisphare.whiteboard.core.theme.BrandOrange
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +36,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -220,18 +229,31 @@ fun GeometryToolPanel(
     }
 
     val isDark = state.isDarkTheme
+    var showColorPicker by remember { mutableStateOf(false) }
     val titleColor = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1F2937)
     val inkColor = if (isDark) Color(0xFFE2E8F0) else Ink
     val mutedColor = if (isDark) Color(0xFF94A3B8) else Muted
     val chipBg = if (isDark) Color(0xFF334155) else Chip
     val orangeSoft = if (isDark) Color(0xFF431407) else OrangeSoft
 
-    Column(
-        modifier = modifier
-            .width(330.dp)
-            .heightIn(max = 240.dp)
-            .verticalScroll(rememberScrollState())
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Bottom
     ) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = if (isDark) Color(0xFF1E293B) else Color.White,
+            shadowElevation = 14.dp,
+            border = BorderStroke(1.dp, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)),
+            modifier = Modifier.width(340.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .heightIn(max = 280.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -349,7 +371,25 @@ fun GeometryToolPanel(
         Spacer(Modifier.height(4.dp))
         Text(stringResource(R.string.ink_colour), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = inkColor)
         Spacer(Modifier.height(6.dp))
-        InkSwatches(selected = state.selectedColor, onPick = { viewModel.setColor(it) })
+        InkSwatches(
+            selected = state.selectedColor,
+            isDark = isDark,
+            isPaletteOpen = showColorPicker,
+            onTogglePalette = { showColorPicker = !showColorPicker },
+            onPick = { viewModel.setColor(it) }
+        )
+            }
+        }
+
+        if (showColorPicker) {
+            ColorWheelPanel(
+                initialColor = if (state.selectedColor == 0) 0xFF1B1F2A.toInt() else state.selectedColor,
+                isDark = isDark,
+                title = stringResource(R.string.ink_colour),
+                onColorSelected = { viewModel.setColor(it) },
+                onClose = { showColorPicker = false }
+            )
+        }
     }
 }
 
@@ -514,7 +554,13 @@ private fun ChipRow(
 }
 
 @Composable
-private fun InkSwatches(selected: Int, onPick: (Int) -> Unit) {
+private fun InkSwatches(
+    selected: Int,
+    isDark: Boolean = false,
+    isPaletteOpen: Boolean = false,
+    onTogglePalette: () -> Unit,
+    onPick: (Int) -> Unit
+) {
     val colors = if (selected != 0 && selected !in INK_COLORS) listOf(selected) + INK_COLORS else INK_COLORS
     Row(
         modifier = Modifier
@@ -543,6 +589,28 @@ private fun InkSwatches(selected: Int, onPick: (Int) -> Unit) {
                     Icon(Icons.Default.Check, contentDescription = "Selected", tint = tick, modifier = Modifier.size(14.dp))
                 }
             }
+        }
+
+        // Custom color palette button
+        Box(
+            modifier = Modifier
+                .size(26.dp)
+                .clip(CircleShape)
+                .background(if (isPaletteOpen) (if (isDark) Color(0xFF431407) else Color(0xFFFFF7ED)) else (if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6)))
+                .border(
+                    1.5.dp,
+                    if (isPaletteOpen) Orange else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB)),
+                    CircleShape
+                )
+                .clickable(onClick = onTogglePalette),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.ColorLens,
+                contentDescription = stringResource(R.string.custom_color),
+                tint = if (isPaletteOpen) Orange else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563)),
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }

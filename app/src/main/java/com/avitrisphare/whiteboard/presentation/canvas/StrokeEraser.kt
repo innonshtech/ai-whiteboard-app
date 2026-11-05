@@ -149,7 +149,7 @@ object StrokeEraser {
                 id = UUID.randomUUID().toString(),
                 points = points,
                 pointPressures = piecePressure,
-                strokeType = if (keepType) stroke.strokeType else StrokeType.PEN,
+                strokeType = if (keepType) stroke.strokeType else StrokeType.LINE,
                 text = if (keepType) stroke.text else "",
                 fillColor = if (keepType) stroke.fillColor else 0,
                 imageUri = if (keepType) stroke.imageUri else ""

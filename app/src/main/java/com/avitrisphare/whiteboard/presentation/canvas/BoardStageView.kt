@@ -79,6 +79,8 @@ class BoardStageView(context: Context) : FrameLayout(context) {
     private var hasLassoSelection: Boolean = false
     private var activeLive: LiveInk? = null
     var onMoveMedia: ((strokeId: String, deltaX: Float, deltaY: Float) -> Unit)? = null
+    var onCloseMedia: ((strokeId: String) -> Unit)? = null
+    private var customBackgroundColor: Int? = null
 
     private val activeLiveStrokes = ArrayList<Stroke>()
     private var documentBitmap: Bitmap? = null
@@ -175,13 +177,15 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         selected: Set<String>,
         customBackgroundUri: String = "",
         pageIndex: Int = 0,
-        hasLassoSelection: Boolean = false
+        hasLassoSelection: Boolean = false,
+        customBackgroundColor: Int? = null
     ) {
         if (previewing) return
         val customBgChanged = customBackgroundUri != this.customBackgroundUri
+        val colorChanged = customBackgroundColor != this.customBackgroundColor
         val pageIndexChanged = this.currentPageIndex != pageIndex
         this.currentPageIndex = pageIndex
-        val pageChanged = pageIndexChanged || background != this.pageBackground || showGrid != this.showGrid || dark != this.dark || customBgChanged
+        val pageChanged = pageIndexChanged || background != this.pageBackground || showGrid != this.showGrid || dark != this.dark || customBgChanged || colorChanged
         val moved = scale != this.scale || offsetX != this.offsetX || offsetY != this.offsetY
 
         // Prevents redrawing the entire board when modals open/close, pens change, or colors swap!
@@ -194,6 +198,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
 
         this.pageBackground = background
         this.customBackgroundUri = customBackgroundUri
+        this.customBackgroundColor = customBackgroundColor
         this.showGrid = showGrid
         this.dark = dark
         this.scale = scale
@@ -226,6 +231,13 @@ class BoardStageView(context: Context) : FrameLayout(context) {
             layoutMedia()
         }
         if (pageChanged || moved) {
+            if (customBackgroundColor != null) {
+                setBackgroundColor(customBackgroundColor)
+            } else if (dark || background == CanvasBackground.DARK) {
+                setBackgroundColor(android.graphics.Color.parseColor("#171717"))
+            } else {
+                setBackgroundColor(android.graphics.Color.WHITE)
+            }
             grid.invalidate()
         }
         if (pageChanged || moved || inkChanged) {
@@ -476,7 +488,15 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         val ids = wanted.map { it.id }.toSet()
         val gone = mediaViews.keys.filter { it !in ids }
         for (id in gone) {
-            media.removeView(mediaViews.remove(id))
+            val v = mediaViews.remove(id)
+            if (v != null) {
+                findWebView(v)?.apply {
+                    loadUrl("about:blank")
+                    stopLoading()
+                    destroy()
+                }
+                media.removeView(v)
+            }
             players.remove(id)?.release()
         }
         for (stroke in wanted) {
@@ -825,6 +845,21 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         }
         header.addView(reloadBtn)
 
+        val closeBtn = ImageView(context).apply {
+            setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+            setColorFilter(android.graphics.Color.parseColor("#EF4444"))
+            val pad = (3f * d).toInt()
+            setPadding(pad, pad, pad, pad)
+            layoutParams = LinearLayout.LayoutParams((24f * d).toInt(), (24f * d).toInt()).apply {
+                marginStart = (4f * d).toInt()
+            }
+            contentDescription = "Close video player"
+            setOnClickListener {
+                onCloseMedia?.invoke(stroke.id)
+            }
+        }
+        header.addView(closeBtn)
+
         container.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, headerHeight))
         container.addView(web, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
@@ -901,7 +936,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
                         dstSize = IntSize(size.width.toInt(), size.height.toInt())
                     )
                 } else {
-                    drawPageGrid(pageBackground, showGrid, dark, scale, offsetX, offsetY)
+                    drawPageGrid(pageBackground, showGrid, dark, scale, offsetX, offsetY, customBackgroundColor)
                 }
                 val page = documentBitmap
                 if (page != null && !page.isRecycled && documentWidth > 0 && documentHeight > 0) {

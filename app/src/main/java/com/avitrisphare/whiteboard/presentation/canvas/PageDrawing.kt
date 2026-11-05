@@ -22,40 +22,59 @@ fun DrawScope.drawPageGrid(
     dark: Boolean,
     scale: Float,
     offsetX: Float,
-    offsetY: Float
+    offsetY: Float,
+    customBackgroundColor: Int? = null
 ) {
-    when (background) {
-        CanvasBackground.FOOTBALL -> drawFootballPitch()
-        CanvasBackground.DARK -> drawRect(Color(0xFF171717), size = size)
-        CanvasBackground.GRAPH -> drawRect(Color(0xFFF7FBFF), size = size)
-        else -> drawRect(Color.White, size = size)
+    if (customBackgroundColor != null) {
+        drawRect(Color(customBackgroundColor), size = size)
+        if (background == CanvasBackground.FOOTBALL) {
+            drawFootballPitch()
+        }
+    } else {
+        when (background) {
+            CanvasBackground.FOOTBALL -> drawFootballPitch()
+            CanvasBackground.DARK -> drawRect(Color(0xFF171717), size = size)
+            CanvasBackground.GRAPH -> drawRect(Color(0xFFF7FBFF), size = size)
+            else -> drawRect(Color.White, size = size)
+        }
     }
     val viewport = CanvasTransform.calculateViewportWorldBounds(
         viewportSize = size,
         scale = scale,
         offset = Offset(offsetX, offsetY)
     )
+    val isDark = if (customBackgroundColor != null) {
+        val r = (customBackgroundColor shr 16) and 0xFF
+        val g = (customBackgroundColor shr 8) and 0xFF
+        val b = customBackgroundColor and 0xFF
+        (0.299 * r + 0.587 * g + 0.114 * b) < 128
+    } else {
+        dark || background == CanvasBackground.DARK
+    }
+
     inPageSpace(offsetX, offsetY, scale) {
-        val gridColor = if (background == CanvasBackground.DARK) Color(0xFF2E2E2E) else Color(0xFFD5D8DE)
+        val gridColor = if (isDark) Color(0x33FFFFFF) else Color(0xFFD5D8DE)
         val spacing = CanvasTransform.getAdaptiveGridSpacing(80f, scale)
         when (background) {
             CanvasBackground.LINED -> horizontalLines(viewport, spacing, gridColor, scale)
-            CanvasBackground.DOTTED -> dots(viewport, spacing, gridColor, scale)
+            CanvasBackground.DOTTED -> dots(viewport, spacing, if (isDark) Color(0x55FFFFFF) else Color(0xFF9E9E9E), scale)
             CanvasBackground.GRID -> {
                 verticalLines(viewport, spacing, gridColor, scale)
                 horizontalLines(viewport, spacing, gridColor, scale)
             }
             CanvasBackground.GRAPH -> {
                 val minor = spacing / 5f
-                verticalLines(viewport, minor, Color(0xFFD3E3F4), scale)
-                horizontalLines(viewport, minor, Color(0xFFD3E3F4), scale)
-                verticalLines(viewport, spacing, Color(0xFF6B93C0), scale, thicknessScale = 1.8f)
-                horizontalLines(viewport, spacing, Color(0xFF6B93C0), scale, thicknessScale = 1.8f)
+                val minorColor = if (isDark) Color(0x22FFFFFF) else Color(0xFFD3E3F4)
+                val majorColor = if (isDark) Color(0x55FFFFFF) else Color(0xFF6B93C0)
+                verticalLines(viewport, minor, minorColor, scale)
+                horizontalLines(viewport, minor, minorColor, scale)
+                verticalLines(viewport, spacing, majorColor, scale, thicknessScale = 1.8f)
+                horizontalLines(viewport, spacing, majorColor, scale, thicknessScale = 1.8f)
             }
             else -> Unit
         }
         if (showGrid && background != CanvasBackground.GRID && background != CanvasBackground.GRAPH) {
-            val overlay = if (dark) Color(0xFF3A3A3A) else Color(0xFFC5C8D0)
+            val overlay = if (isDark) Color(0x44FFFFFF) else Color(0xFFC5C8D0)
             verticalLines(viewport, spacing, overlay, scale)
             horizontalLines(viewport, spacing, overlay, scale)
         }
