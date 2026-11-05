@@ -37,7 +37,11 @@ data class Stroke(
         get() {
             var p = _cachedSmoothedPath
             if (p == null) {
-                p = createSmoothedPath(points)
+                p = if (strokeType == StrokeType.LINE || strokeType == StrokeType.LINE_DASHED) {
+                    createStraightPath(points)
+                } else {
+                    createSmoothedPath(points)
+                }
                 _cachedSmoothedPath = p
             }
             return p
@@ -95,6 +99,21 @@ data class Stroke(
     }
 
     companion object {
+        fun createStraightPath(points: List<Offset>): Path {
+            val path = Path()
+            if (points.size < 2) {
+                if (points.isNotEmpty()) {
+                    path.moveTo(points[0].x, points[0].y)
+                }
+                return path
+            }
+            path.moveTo(points[0].x, points[0].y)
+            for (i in 1 until points.size) {
+                path.lineTo(points[i].x, points[i].y)
+            }
+            return path
+        }
+
         fun createSmoothedPath(points: List<Offset>): Path {
             val path = Path()
             if (points.size < 2) {

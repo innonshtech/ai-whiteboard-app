@@ -79,6 +79,7 @@ enum class WhiteboardTool(val label: String, val shortcut: String) {
     PROTRACTOR("Protractor", ""),
     SET_SQUARE("Set Square", ""),
     LASER("Laser pointer", "K"),
+    SNIP("Snip", "X"),
     BUCKET_FILL("Bucket fill", "B"),
     LASSO("Lasso selection", ""),
     SPOTLIGHT("Spotlight", ""),
@@ -118,11 +119,13 @@ val DEFAULT_TOOLBAR_TOOLS: List<String> = listOf(
     "shapes",
     "eraser",
     "laser",
+    "snip",
     "geometry",
     "tools",
     "undo",
     "redo",
-    "save"
+    "save",
+    "curtain"
 )
 
 val ALL_CUSTOMIZABLE_TOOLS: List<String> = listOf(
@@ -133,6 +136,7 @@ val ALL_CUSTOMIZABLE_TOOLS: List<String> = listOf(
     "shapes",
     "eraser",
     "laser",
+    "snip",
     "geometry",
     "tools",
     "undo",
@@ -141,7 +145,13 @@ val ALL_CUSTOMIZABLE_TOOLS: List<String> = listOf(
     "text",
     "image",
     "clear",
-    "background"
+    "background",
+    "curtain"
+)
+
+data class LaserPoint(
+    val point: Offset,
+    val timestampMs: Long = android.os.SystemClock.uptimeMillis()
 )
 
 data class CanvasState(
@@ -216,6 +226,8 @@ data class CanvasState(
     val pageTitles: List<String> = listOf("Page 1"),
     val pageBackgroundKeys: List<String> = listOf(CanvasBackground.DOTTED.key),
     val pageCustomBackgroundUris: List<String> = listOf(""),
+    val customBackgroundColor: Int? = null,
+    val pageCustomBackgroundColors: List<Int?> = listOf(null),
     val documentFrameX: Float = 0f,
     val documentFrameY: Float = 0f,
     val documentFrameScale: Float = 1f,
@@ -324,6 +336,21 @@ class CanvasViewModel @Inject constructor(
     private val _pageBitmap = MutableStateFlow<Bitmap?>(null)
     val pageBitmap: StateFlow<Bitmap?> = _pageBitmap.asStateFlow()
 
+    private val _laserTrail = MutableStateFlow<List<LaserPoint>>(emptyList())
+    val laserTrail: StateFlow<List<LaserPoint>> = _laserTrail.asStateFlow()
+
+    private val _isLaserDown = MutableStateFlow(false)
+    val isLaserDown: StateFlow<Boolean> = _isLaserDown.asStateFlow()
+
+    private val _laserHead = MutableStateFlow<Offset?>(null)
+    val laserHead: StateFlow<Offset?> = _laserHead.asStateFlow()
+
+    private val _snipMode = MutableStateFlow(SnipMode.RECTANGLE)
+    val snipMode: StateFlow<SnipMode> = _snipMode.asStateFlow()
+
+    private val _snipClipboard = MutableStateFlow<SnipResult?>(null)
+    val snipClipboard: StateFlow<SnipResult?> = _snipClipboard.asStateFlow()
+
     sealed interface CanvasUndoEntry {
         data class StrokeState(val strokes: List<Stroke>, val mathTools: List<PlacedMathTool> = emptyList()) : CanvasUndoEntry
         data class DeletedPage(
@@ -373,6 +400,7 @@ class CanvasViewModel @Inject constructor(
     private val pageTitles = mutableListOf("Page 1")
     private val pageBackgroundKeys = mutableListOf(CanvasBackground.DOTTED.key)
     private val pageCustomBackgroundUris = mutableListOf("")
+    private val pageCustomBackgroundColors = mutableListOf<Int?>()
     private val pageMathTools = mutableListOf<List<PlacedMathTool>>(emptyList())
     private var strokeClipboard: List<Stroke> = emptyList()
     private var strokeClipboardSourcePage: Int = -1
@@ -412,6 +440,9 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun setTool(tool: WhiteboardTool) {
+        if (tool != WhiteboardTool.LASER) {
+            clearLaser()
+        }
         if (tool == WhiteboardTool.LOCK) {
             _state.update { it.copy(isToolLocked = !it.isToolLocked) }
             return
@@ -1406,32 +1437,266 @@ class CanvasViewModel @Inject constructor(
 
     fun startLaser(point: Offset) {
         laserJob?.cancel()
-        _state.update { it.copy(laserPoints = listOf(point)) }
+        _isLaserDown.value = true
+        _laserHead.value = point
+        _laserTrail.value = listOf(LaserPoint(point))
     }
 
     fun addLaserPoint(point: Offset) {
-        laserJob?.cancel()
-        _state.update { s ->
-            val last = s.laserPoints.lastOrNull()
-            if (last != null && (last - point).getDistanceSquared() < 9f) {
-                s
-            } else {
-                val list = if (s.laserPoints.size > 500) s.laserPoints.drop(1) else s.laserPoints
-                s.copy(laserPoints = list + point)
+        addLaserPoints(listOf(point))
+    }
+
+    fun addLaserPoints(points: List<Offset>) {
+        if (points.isEmpty()) return
+        val now = android.os.SystemClock.uptimeMillis()
+        _laserHead.value = points.last()
+        val lifespan = 750L
+        val current = _laserTrail.value.filter { now - it.timestampMs <= lifespan }.toMutableList()
+        var lastPoint = current.lastOrNull()?.point
+        for (p in points) {
+            if (lastPoint == null || (lastPoint - p).getDistanceSquared() >= 1f) {
+                current.add(LaserPoint(p, now))
+                lastPoint = p
             }
         }
-        laserJob = viewModelScope.launch {
-            delay(2000L)
-            _state.update { it.copy(laserPoints = emptyList()) }
-        }
+        val trimmed = if (current.size > 200) current.subList(current.size - 200, current.size) else current
+        _laserTrail.value = trimmed.toList()
     }
 
     fun finishLaser() {
+        _isLaserDown.value = false
         laserJob?.cancel()
         laserJob = viewModelScope.launch {
-            delay(2000L)
-            _state.update { it.copy(laserPoints = emptyList()) }
+            delay(750L)
+            _laserTrail.value = emptyList()
+            _laserHead.value = null
         }
+    }
+
+    fun clearLaser() {
+        _isLaserDown.value = false
+        laserJob?.cancel()
+        _laserTrail.value = emptyList()
+        _laserHead.value = null
+    }
+
+    fun setSnipMode(mode: SnipMode) {
+        _snipMode.value = mode
+    }
+
+    fun executeUniversalSnip(
+        cropRect: Rect,
+        freeformPoints: List<Offset>?,
+        mode: SnipMode,
+        viewport: Rect? = null
+    ): Stroke? {
+        val s = _state.value
+        val density = androidx.compose.ui.unit.Density(context.resources.displayMetrics.density)
+        val docFrame = if (s.document != null) {
+            Triple(s.documentFrameX, s.documentFrameY, s.documentFrameScale)
+        } else null
+        val result = ImageSnipEngine.captureUniversalCanvas(
+            context = context,
+            cropRect = cropRect,
+            freeformPoints = freeformPoints,
+            mode = mode,
+            strokes = s.strokes,
+            background = s.canvasBackground,
+            customBackgroundColor = s.customBackgroundColor,
+            customBackgroundBitmap = null,
+            documentBitmap = _pageBitmap.value,
+            documentFrame = docFrame,
+            showGrid = s.showGrid,
+            dark = s.isDarkCanvas,
+            density = density
+        ) ?: return null
+
+        _snipClipboard.value = result
+
+        // Position new image cleanly outside the source content
+        val (p1, p2) = if (mode == SnipMode.FULL_CANVAS) {
+            val targetW = result.worldWidth * 0.65f
+            val targetH = result.worldHeight * 0.65f
+            val pt1 = Offset(cropRect.left + 60f, cropRect.top + 60f)
+            val pt2 = Offset(pt1.x + targetW, pt1.y + targetH)
+            Pair(pt1, pt2)
+        } else {
+            // Find any source images intersecting cropRect
+            val overlappingImages = s.strokes.filter {
+                it.strokeType == StrokeType.IMAGE && it.bounds.overlaps(cropRect)
+            }
+            val sourceBounds = if (overlappingImages.isNotEmpty()) {
+                overlappingImages.map { it.bounds }.reduce { acc, r ->
+                    Rect(
+                        minOf(acc.left, r.left),
+                        minOf(acc.top, r.top),
+                        maxOf(acc.right, r.right),
+                        maxOf(acc.bottom, r.bottom)
+                    )
+                }
+            } else {
+                cropRect
+            }
+
+            val margin = 48f
+            val (targetX, targetY) = if (viewport != null) {
+                val rightCandidate = sourceBounds.right + margin
+                val leftCandidate = sourceBounds.left - result.worldWidth - margin
+                val bottomCandidate = sourceBounds.bottom + margin
+
+                val fitsRight = (rightCandidate + result.worldWidth) <= (viewport.right - 24f)
+                val fitsBottom = (bottomCandidate + result.worldHeight) <= (viewport.bottom - 24f)
+                val fitsLeft = leftCandidate >= (viewport.left + 24f)
+
+                when {
+                    fitsRight -> {
+                        val clampedY = cropRect.top.coerceIn(
+                            viewport.top + 24f,
+                            (viewport.bottom - result.worldHeight - 24f).coerceAtLeast(viewport.top + 24f)
+                        )
+                        Pair(rightCandidate, clampedY)
+                    }
+                    fitsBottom -> {
+                        val clampedX = cropRect.left.coerceIn(
+                            viewport.left + 24f,
+                            (viewport.right - result.worldWidth - 24f).coerceAtLeast(viewport.left + 24f)
+                        )
+                        Pair(clampedX, bottomCandidate)
+                    }
+                    fitsLeft -> {
+                        val clampedY = cropRect.top.coerceIn(
+                            viewport.top + 24f,
+                            (viewport.bottom - result.worldHeight - 24f).coerceAtLeast(viewport.top + 24f)
+                        )
+                        Pair(leftCandidate, clampedY)
+                    }
+                    else -> {
+                        Pair(sourceBounds.right + margin, cropRect.top)
+                    }
+                }
+            } else {
+                Pair(sourceBounds.right + margin, cropRect.top)
+            }
+
+            val pt1 = Offset(targetX, targetY)
+            val pt2 = Offset(pt1.x + result.worldWidth, pt1.y + result.worldHeight)
+            Pair(pt1, pt2)
+        }
+
+        saveToUndoStack()
+        val newStroke = Stroke(
+            points = listOf(p1, p2),
+            strokeType = StrokeType.IMAGE,
+            imageUri = result.filePath,
+            colorValue = 0xFF6366F1.toInt()
+        )
+
+        strokeClipboard = listOf(
+            Stroke(
+                points = listOf(Offset.Zero, Offset(result.worldWidth, result.worldHeight)),
+                strokeType = StrokeType.IMAGE,
+                imageUri = result.filePath,
+                colorValue = 0xFF6366F1.toInt()
+            )
+        )
+
+        setTool(WhiteboardTool.SELECT)
+        _state.update { state ->
+            state.copy(
+                strokes = state.strokes + newStroke,
+                selectedStrokeIds = setOf(newStroke.id),
+                currentTool = WhiteboardTool.SELECT,
+                hasStrokeClipboard = true,
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+        return newStroke
+    }
+
+    fun executeCopySnip(targetStroke: Stroke, points: List<Offset>, mode: SnipMode): SnipResult? {
+        val r = if (points.size >= 2) {
+            Rect(
+                minOf(points.first().x, points.last().x),
+                minOf(points.first().y, points.last().y),
+                maxOf(points.first().x, points.last().x),
+                maxOf(points.first().y, points.last().y)
+            )
+        } else targetStroke.bounds
+        val density = androidx.compose.ui.unit.Density(context.resources.displayMetrics.density)
+        val s = _state.value
+        val docFrame = if (s.document != null) {
+            Triple(s.documentFrameX, s.documentFrameY, s.documentFrameScale)
+        } else null
+        val result = ImageSnipEngine.captureUniversalCanvas(
+            context = context,
+            cropRect = r,
+            freeformPoints = if (mode == SnipMode.FREEFORM) points else null,
+            mode = mode,
+            strokes = s.strokes,
+            background = s.canvasBackground,
+            customBackgroundColor = s.customBackgroundColor,
+            customBackgroundBitmap = null,
+            documentBitmap = _pageBitmap.value,
+            documentFrame = docFrame,
+            showGrid = s.showGrid,
+            dark = s.isDarkCanvas,
+            density = density
+        ) ?: return null
+        _snipClipboard.value = result
+        val origin = Offset(0f, 0f)
+        strokeClipboard = listOf(
+            Stroke(
+                points = listOf(origin, Offset(result.worldWidth, result.worldHeight)),
+                strokeType = StrokeType.IMAGE,
+                imageUri = result.filePath,
+                colorValue = 0xFF6366F1.toInt()
+            )
+        )
+        _state.update { it.copy(hasStrokeClipboard = true) }
+        return result
+    }
+
+    fun executeCutSnip(targetStroke: Stroke, points: List<Offset>, mode: SnipMode): SnipResult? {
+        // Non-destructive: captures snipped region without deleting or altering original image
+        return executeCopySnip(targetStroke, points, mode)
+    }
+
+    fun pasteSnip(placementCenter: Offset? = null): Stroke? {
+        val clip = _snipClipboard.value ?: return null
+        val center = placementCenter ?: run {
+            val scale = _state.value.scale.coerceAtLeast(0.01f)
+            CanvasTransform.screenToWorld(
+                screenPoint = Offset(960f, 540f),
+                scale = scale,
+                offset = Offset(_state.value.offsetX, _state.value.offsetY)
+            )
+        }
+        val p1 = Offset(center.x - clip.worldWidth / 2f, center.y - clip.worldHeight / 2f)
+        val p2 = Offset(center.x + clip.worldWidth / 2f, center.y + clip.worldHeight / 2f)
+
+        saveToUndoStack()
+        val newStroke = Stroke(
+            points = listOf(p1, p2),
+            strokeType = StrokeType.IMAGE,
+            imageUri = clip.filePath,
+            colorValue = 0xFF6366F1.toInt()
+        )
+        setTool(WhiteboardTool.SELECT)
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes + newStroke,
+                selectedStrokeIds = setOf(newStroke.id),
+                currentTool = WhiteboardTool.SELECT,
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+        return newStroke
     }
 
     fun strokeAt(worldPoint: Offset): Stroke? {
@@ -1829,6 +2094,23 @@ class CanvasViewModel @Inject constructor(
                 canRedo = false
             )
         }
+        scheduleSave()
+    }
+
+    fun deleteStroke(strokeId: String) {
+        if (strokeId.isBlank()) return
+        saveToUndoStack()
+        redoActionStack.clear()
+        redoStack.clear()
+        _state.update { s ->
+            s.copy(
+                strokes = s.strokes.filterNot { it.id == strokeId },
+                selectedStrokeIds = s.selectedStrokeIds - strokeId,
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        commitActivePage()
         scheduleSave()
     }
 
@@ -2484,6 +2766,8 @@ class CanvasViewModel @Inject constructor(
         pageTitles.add("Page ${pages.size + 1}")
         val newBgKey = if (_state.value.isDarkCanvas) CanvasBackground.DARK.key else CanvasBackground.DOTTED.key
         pageBackgroundKeys.add(newBgKey)
+        pageCustomBackgroundUris.add("")
+        pageCustomBackgroundColors.add(null)
         pageMathTools.add(emptyList())
         renumberDefaultPageTitles()
         syncPageMetadataLists()
@@ -2537,6 +2821,7 @@ class CanvasViewModel @Inject constructor(
         pageTitles.removeAt(index)
         pageBackgroundKeys.removeAt(index)
         pageCustomBackgroundUris.removeAt(index)
+        if (index in pageCustomBackgroundColors.indices) pageCustomBackgroundColors.removeAt(index)
         if (index in pageMathTools.indices) pageMathTools.removeAt(index)
         renumberDefaultPageTitles()
         activePage = activePage.coerceIn(0, pages.lastIndex)
@@ -2571,6 +2856,7 @@ class CanvasViewModel @Inject constructor(
         pageTitles.add(index + 1, "${pageTitles.getOrElse(index) { "Page" }} copy")
         pageBackgroundKeys.add(index + 1, pageBackgroundKeys.getOrElse(index) { CanvasBackground.DOTTED.key })
         pageCustomBackgroundUris.add(index + 1, pageCustomBackgroundUris.getOrElse(index) { "" })
+        pageCustomBackgroundColors.add(index + 1, pageCustomBackgroundColors.getOrNull(index))
         while (pageMathTools.size <= index) pageMathTools.add(emptyList())
         val copyTools = pageMathTools.getOrElse(index) { emptyList() }.map { it.copy(id = UUID.randomUUID().toString()) }
         pageMathTools.add(index + 1, copyTools)
@@ -2775,6 +3061,29 @@ class CanvasViewModel @Inject constructor(
                 pagePreviews = pages.toList(),
                 pageBackgroundKeys = pageBackgroundKeys.toList(),
                 pageCustomBackgroundUris = pageCustomBackgroundUris.toList()
+            )
+        }
+        scheduleSave()
+    }
+
+    fun setPageBackgroundColor(color: Int?) {
+        syncPageMetadataLists()
+        if (activePage in pageCustomBackgroundColors.indices) {
+            pageCustomBackgroundColors[activePage] = color
+        }
+        val isDark = if (color != null) {
+            val r = (color shr 16) and 0xFF
+            val g = (color shr 8) and 0xFF
+            val b = color and 0xFF
+            (0.299 * r + 0.587 * g + 0.114 * b) < 128
+        } else {
+            _state.value.canvasBackground == CanvasBackground.DARK
+        }
+        _state.update {
+            it.copy(
+                customBackgroundColor = color,
+                pageCustomBackgroundColors = pageCustomBackgroundColors.toList(),
+                isDarkCanvas = isDark
             )
         }
         scheduleSave()
@@ -3771,7 +4080,13 @@ class CanvasViewModel @Inject constructor(
             if (_state.value.isDarkCanvas) CanvasBackground.DARK.key else CanvasBackground.DOTTED.key
         }
         val bg = CanvasBackground.fromKey(bgKey)
-        val isDark = (bg == CanvasBackground.DARK)
+        val curBgColor = pageCustomBackgroundColors.getOrNull(index)
+        val isDark = if (curBgColor != null) {
+            val r = (curBgColor shr 16) and 0xFF
+            val g = (curBgColor shr 8) and 0xFF
+            val b = curBgColor and 0xFF
+            (0.299 * r + 0.587 * g + 0.114 * b) < 128
+        } else (bg == CanvasBackground.DARK)
         while (pageMathTools.size < pages.size) pageMathTools.add(emptyList())
         val currentTools = pageMathTools.getOrElse(index) { emptyList() }
         val curTool = _state.value.currentTool
@@ -3794,6 +4109,7 @@ class CanvasViewModel @Inject constructor(
             if (currentTools.any { it.kind == matchingKind }) curTool else _state.value.inkTool
         } else curTool
         val shouldReset = resetTransform || pages.getOrNull(index)?.isEmpty() == true
+        clearLaser()
         _state.update {
             it.copy(
                 strokes = pages[index],
@@ -3808,6 +4124,8 @@ class CanvasViewModel @Inject constructor(
                 pageTitles = pageTitles.toList(),
                 pageBackgroundKeys = pageBackgroundKeys.toList(),
                 pageCustomBackgroundUris = pageCustomBackgroundUris.toList(),
+                pageCustomBackgroundColors = pageCustomBackgroundColors.toList(),
+                customBackgroundColor = curBgColor,
                 canvasBackground = bg,
                 isDarkCanvas = isDark,
                 pageEpoch = it.pageEpoch + 1,
@@ -3831,12 +4149,16 @@ class CanvasViewModel @Inject constructor(
         while (pageCustomBackgroundUris.size < pages.size) {
             pageCustomBackgroundUris.add("")
         }
+        while (pageCustomBackgroundColors.size < pages.size) {
+            pageCustomBackgroundColors.add(null)
+        }
         while (pageMathTools.size < pages.size) {
             pageMathTools.add(emptyList())
         }
         while (pageTitles.size > pages.size) pageTitles.removeAt(pageTitles.lastIndex)
         while (pageBackgroundKeys.size > pages.size) pageBackgroundKeys.removeAt(pageBackgroundKeys.lastIndex)
         while (pageCustomBackgroundUris.size > pages.size) pageCustomBackgroundUris.removeAt(pageCustomBackgroundUris.lastIndex)
+        while (pageCustomBackgroundColors.size > pages.size) pageCustomBackgroundColors.removeAt(pageCustomBackgroundColors.lastIndex)
         while (pageMathTools.size > pages.size) pageMathTools.removeAt(pageMathTools.lastIndex)
         renumberDefaultPageTitles()
     }
@@ -3868,6 +4190,7 @@ class CanvasViewModel @Inject constructor(
             pageTitles.clear()
             pageBackgroundKeys.clear()
             pageCustomBackgroundUris.clear()
+            pageCustomBackgroundColors.clear()
             pageMathTools.clear()
             val restored = loaded.pages.map { page -> page.strokes.map { it.toDomain() } }
             if (restored.isEmpty()) pages.add(emptyList()) else pages.addAll(restored)
@@ -3879,6 +4202,7 @@ class CanvasViewModel @Inject constructor(
                 val defaultLegacyKey = if (index == 0 && note?.canvasBackground != null) note.canvasBackground.key else CanvasBackground.DOTTED.key
                 pageBackgroundKeys.add(page.backgroundKey ?: defaultLegacyKey)
                 pageCustomBackgroundUris.add(page.customBackgroundUri.orEmpty())
+                pageCustomBackgroundColors.add(page.customBackgroundColor)
             }
             syncPageMetadataLists()
             activePage = loaded.activePage.coerceIn(0, pages.lastIndex)
@@ -3895,12 +4219,21 @@ class CanvasViewModel @Inject constructor(
             } else {
                 CanvasBackground.DOTTED
             }
-            val dark = background == CanvasBackground.DARK
+            val activeBgColor = pageCustomBackgroundColors.getOrNull(activePage)
+            val dark = if (activeBgColor != null) {
+                val r = (activeBgColor shr 16) and 0xFF
+                val g = (activeBgColor shr 8) and 0xFF
+                val b = activeBgColor and 0xFF
+                (0.299 * r + 0.587 * g + 0.114 * b) < 128
+            } else {
+                background == CanvasBackground.DARK
+            }
             _state.update {
                 it.copy(
                     noteTitle = note?.title ?: "Untitled",
                     noteSubtitle = note?.subtitle ?: "",
                     canvasBackground = background,
+                    customBackgroundColor = activeBgColor,
                     isDarkCanvas = dark,
                     showGrid = loaded.showGrid,
                     contentJson = note?.contentJson ?: "",
@@ -3920,6 +4253,7 @@ class CanvasViewModel @Inject constructor(
                     pageTitles = pageTitles.toList(),
                     pageBackgroundKeys = pageBackgroundKeys.toList(),
                     pageCustomBackgroundUris = pageCustomBackgroundUris.toList(),
+                    pageCustomBackgroundColors = pageCustomBackgroundColors.toList(),
                     inkSampleGapMm = loaded.inkSampleGapMm ?: DEFAULT_INK_SAMPLE_GAP_MM,
                     secondaryColor = loaded.secondaryColor ?: 0xFF3B82F6.toInt(),
                     secondaryStrokeWidth = loaded.secondaryStrokeWidth ?: 12f,
@@ -4362,6 +4696,7 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun clearCanvas() {
+        clearLaser()
         if (_state.value.splitCount > 1) {
             val index = _state.value.splitActive.coerceIn(0, 5)
             val pane = _state.value.splitPanes.getOrNull(index) ?: return
@@ -4522,7 +4857,8 @@ class CanvasViewModel @Inject constructor(
                     strokes = strokes.map { it.toDto() },
                     title = pageTitles.getOrNull(index),
                     backgroundKey = pageBackgroundKeys.getOrNull(index),
-                    customBackgroundUri = pageCustomBackgroundUris.getOrNull(index)
+                    customBackgroundUri = pageCustomBackgroundUris.getOrNull(index),
+                    customBackgroundColor = pageCustomBackgroundColors.getOrNull(index)
                 )
             },
             documentPath = _state.value.document?.path,
@@ -5113,7 +5449,8 @@ private data class PageSnapshot(
     val strokes: List<StrokeDto> = emptyList(),
     val title: String? = null,
     val backgroundKey: String? = null,
-    val customBackgroundUri: String? = null
+    val customBackgroundUri: String? = null,
+    val customBackgroundColor: Int? = null
 )
 
 private data class BoardSnapshot(

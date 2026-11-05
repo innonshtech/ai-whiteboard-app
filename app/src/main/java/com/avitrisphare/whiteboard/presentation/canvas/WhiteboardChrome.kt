@@ -61,6 +61,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.Curtains
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -132,6 +134,7 @@ import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Refresh
@@ -191,8 +194,8 @@ import com.avitrisphare.whiteboard.domain.model.StrokeType
 
 private val KNOWN_TOOLBAR_TOOLS = setOf(
     "select", "pen", "smart_write", "shape_rec", "flowchart", "stickers", "shapes", "eraser",
-    "laser", "geometry", "tools", "text", "image", "clear", "background",
-    "undo", "redo", "save"
+    "laser", "snip", "geometry", "tools", "text", "image", "clear", "background",
+    "undo", "redo", "save", "curtain"
 )
 
 val LocalDarkTheme = androidx.compose.runtime.compositionLocalOf { false }
@@ -207,6 +210,7 @@ fun localizedToolLabel(tool: WhiteboardTool): String = when (tool) {
     WhiteboardTool.BRUSH -> stringResource(R.string.tool_brush)
     WhiteboardTool.ERASER -> stringResource(R.string.tool_eraser)
     WhiteboardTool.LASER -> stringResource(R.string.tool_laser)
+    WhiteboardTool.SNIP -> stringResource(R.string.tool_snip)
     WhiteboardTool.SHAPE -> stringResource(R.string.tool_shapes)
     WhiteboardTool.LASSO -> stringResource(R.string.util_lasso)
     else -> tool.label
@@ -304,6 +308,7 @@ private enum class ActiveDockTool {
     STICKERS,
     ERASER,
     LASER,
+    SNIP,
     GEOMETRY,
     TOOLS
 }
@@ -362,6 +367,8 @@ fun AvitriSphareWhiteboardChrome(
     onOpenQuickTranslate: (String, String) -> Unit = { _, _ -> },
     isPeriodicTableVisible: Boolean = false,
     onTogglePeriodicTable: () -> Unit = {},
+    isCurtainVisible: Boolean = false,
+    onToggleCurtain: () -> Unit = {},
     onPickCustomBackground: () -> Unit = {},
     onOpenStickerEmoji: () -> Unit = {},
     onSelectSticker: (String, String) -> Unit = { _, _ -> },
@@ -375,6 +382,7 @@ fun AvitriSphareWhiteboardChrome(
     var pageMenuIndex by remember { mutableStateOf<Int?>(null) }
     var pageToDeleteIndex by remember { mutableStateOf<Int?>(null) }
     var selectionColorTarget by remember { mutableStateOf("border") }
+    var showBgColorWheel by remember { mutableStateOf(false) }
 
     val toolIconBounds = remember { mutableStateMapOf<String, Rect>() }
     var chromeRootBounds by remember { mutableStateOf<Rect?>(null) }
@@ -509,7 +517,7 @@ fun AvitriSphareWhiteboardChrome(
 
         // Floating Selection Toolbar Layer (Anchored above dock, never pushes dock down!)
         AnimatedVisibility(
-            visible = state.selectedStrokeIds.isNotEmpty() && !selectionToolbarDismissed,
+            visible = state.selectedStrokeIds.isNotEmpty() && !selectionToolbarDismissed && state.currentTool != WhiteboardTool.SNIP,
             enter = fadeIn(tween(200)) + slideInVertically(tween(220)) { it / 2 },
             exit = fadeOut(tween(160)) + slideOutVertically(tween(180)) { it / 2 },
             modifier = Modifier
@@ -1517,6 +1525,7 @@ fun AvitriSphareWhiteboardChrome(
                             state.currentTool in shapeTools -> ActiveDockTool.SHAPES
                             state.currentTool == WhiteboardTool.ERASER -> ActiveDockTool.ERASER
                             state.currentTool == WhiteboardTool.LASER -> ActiveDockTool.LASER
+                            state.currentTool == WhiteboardTool.SNIP -> ActiveDockTool.SNIP
                             state.currentTool == WhiteboardTool.TEXT ||
                                 state.currentTool == WhiteboardTool.SPOTLIGHT ||
                                 state.currentTool == WhiteboardTool.SHADE ||
@@ -1716,7 +1725,7 @@ fun AvitriSphareWhiteboardChrome(
                                                 if (activeDockTool == ActiveDockTool.PEN) {
                                                     val nextSlot = if (state.useSecondaryPenColor) 1 else 2
                                                     viewModel.setActivePenSlot(nextSlot)
-                                                    val label = if (nextSlot == 1) "Slot A" else "Slot B"
+                                                    val label = if (nextSlot == 1) "Tip 1" else "Tip 2"
                                                     Toast.makeText(context, "$label active", Toast.LENGTH_SHORT).show()
                                                 } else {
                                                     if (state.useSecondaryPenColor) {
@@ -1823,6 +1832,22 @@ fun AvitriSphareWhiteboardChrome(
                                             viewModel.setTool(WhiteboardTool.LASER)
                                         }
                                     }
+                                    "snip" -> {
+                                        DockItem(
+                                            icon = Icons.Default.Crop,
+                                            label = stringResource(R.string.tool_snip),
+                                            active = activeDockTool == ActiveDockTool.SNIP,
+                                            tint = Color(0xFF06B6D4),
+                                            modifier = Modifier.onGloballyPositioned { toolIconBounds["snip"] = it.boundsInRoot() }
+                                        ) {
+                                            panel = null
+                                            if (state.currentTool == WhiteboardTool.SNIP) {
+                                                viewModel.setTool(WhiteboardTool.PEN)
+                                            } else {
+                                                viewModel.setTool(WhiteboardTool.SNIP)
+                                            }
+                                        }
+                                    }
                                     "geometry" -> {
                                         DockItem(
                                             icon = Icons.Default.ChangeHistory,
@@ -1916,6 +1941,18 @@ fun AvitriSphareWhiteboardChrome(
                                             panel = null
                                             onSave()
                                             Toast.makeText(context, context.getString(R.string.toast_saved), Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    "curtain" -> {
+                                        DockItem(
+                                            icon = Icons.Default.Curtains,
+                                            label = stringResource(R.string.curtain_title),
+                                            active = isCurtainVisible,
+                                            tint = Color(0xFF8B5CF6),
+                                            modifier = Modifier.onGloballyPositioned { toolIconBounds["curtain"] = it.boundsInRoot() }
+                                        ) {
+                                            panel = null
+                                            onToggleCurtain()
                                         }
                                     }
                                 }
@@ -2210,13 +2247,7 @@ fun AvitriSphareWhiteboardChrome(
                             onClose = { panel = null }
                         )
                     }
-                    "shapes" -> Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
-                        shadowElevation = 14.dp,
-                        border = BorderStroke(1.dp, if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFE2E8F0)),
-                        modifier = Modifier.widthIn(min = 200.dp, max = 340.dp)
-                    ) {
+                    "shapes" -> {
                         ShapeToolPanel(
                             state = state,
                             viewModel = viewModel,
@@ -2229,8 +2260,7 @@ fun AvitriSphareWhiteboardChrome(
                             }
                         )
                     }
-                    "geometry" -> DockPopover(maxWidth = 380.dp, maxHeight = 240.dp, scrollable = false) {
-
+                    "geometry" -> {
                         GeometryToolPanel(
                             state = state,
                             viewModel = viewModel,
@@ -2252,14 +2282,9 @@ fun AvitriSphareWhiteboardChrome(
                         PopoverRow(Icons.Default.CenterFocusStrong, "Spotlight", state.currentTool == WhiteboardTool.SPOTLIGHT) {
                             viewModel.setTool(WhiteboardTool.SPOTLIGHT); panel = null
                         }
-                        PopoverRow(Icons.Default.VisibilityOff, "Screen shade", state.currentTool == WhiteboardTool.SHADE) {
-                            viewModel.setTool(WhiteboardTool.SHADE)
-                        }
-                        if (state.currentTool == WhiteboardTool.SHADE) {
-                            PopoverRow(
-                                Icons.Default.SwapVert,
-                                if (shadeFromTop) "Shade from top" else "Shade from bottom"
-                            ) { onToggleShadeSide() }
+                        PopoverRow(Icons.Default.Curtains, stringResource(R.string.curtain_title), isCurtainVisible) {
+                            onToggleCurtain()
+                            panel = null
                         }
                         if (state.currentTool == WhiteboardTool.SPOTLIGHT) {
                             Text(stringResource(R.string.label_spotlight_size), fontSize = 12.sp, color = Color(0xFF6B7280))
@@ -2504,7 +2529,7 @@ fun AvitriSphareWhiteboardChrome(
                             WhiteboardTool.TEXT
                         )
                         var toolTab by remember {
-                            mutableStateOf(if (state.currentTool in utilityTools) 2 else 0)
+                            mutableStateOf(if (state.currentTool in utilityTools || isCurtainVisible) 2 else 0)
                         }
                         val tabs = listOf(
                             stringResource(R.string.tab_board),
@@ -2566,6 +2591,9 @@ fun AvitriSphareWhiteboardChrome(
                                 },
                                 ToolTile(Icons.Default.Science, stringResource(R.string.util_periodic), Color(0xFF10B981), isPeriodicTableVisible) {
                                     panel = null; onTogglePeriodicTable()
+                                },
+                                ToolTile(Icons.Default.Curtains, stringResource(R.string.curtain_title), Color(0xFF8B5CF6), isCurtainVisible) {
+                                    panel = null; onToggleCurtain()
                                 },
                                 ToolTile(Icons.Default.ZoomIn, stringResource(R.string.util_magnifier), Color(0xFF6366F1), state.currentTool == WhiteboardTool.MAGNIFIER) {
                                     viewModel.setTool(WhiteboardTool.MAGNIFIER); panel = null
@@ -2678,7 +2706,11 @@ fun AvitriSphareWhiteboardChrome(
                             )
                         )
                     }
-                    "background" -> DockPopover(title = "Background", onClose = { panel = null }) {
+                    "background" -> Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        DockPopover(title = "Background", onClose = { panel = null; showBgColorWheel = false }) {
                         Text(stringResource(R.string.bg_board_styles), fontSize = 11.sp, color = Color(0xFF6B7280), fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(6.dp))
 
@@ -2740,6 +2772,137 @@ fun AvitriSphareWhiteboardChrome(
                                         fontWeight = if (state.canvasBackground == type) FontWeight.Bold else FontWeight.Normal
                                     )
                                 }
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFE5E7EB)))
+                        Spacer(Modifier.height(8.dp))
+
+                        Text("Canvas Background Color", fontSize = 11.sp, color = Color(0xFF6B7280), fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(6.dp))
+
+                        val bgPresets = listOf(
+                            0xFFFFFFFF.toInt() to "White",
+                            0xFFFFFBEB.toInt() to "Cream",
+                            0xFF1B4332.toInt() to "Green",
+                            0xFF1E293B.toInt() to "Navy",
+                            0xFF18181B.toInt() to "Black"
+                        )
+                        val isCustomActive = state.customBackgroundColor != null && state.customBackgroundColor !in bgPresets.map { it.first }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            bgPresets.forEach { (color, label) ->
+                                val isSelected = if (state.customBackgroundColor != null) {
+                                    state.customBackgroundColor == color
+                                } else {
+                                    (color == 0xFFFFFFFF.toInt() && state.canvasBackground != CanvasBackground.DARK) ||
+                                    (color == 0xFF18181B.toInt() && state.canvasBackground == CanvasBackground.DARK)
+                                }
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.clickable {
+                                        viewModel.setPageBackgroundColor(color)
+                                    }
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(color))
+                                            .border(
+                                                width = if (isSelected) 3.dp else 1.dp,
+                                                color = if (isSelected) BrandOrange else Color(0xFFD1D5DB),
+                                                shape = CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isSelected) {
+                                            val isLight = color == 0xFFFFFFFF.toInt() || color == 0xFFFFFBEB.toInt()
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = if (isLight) Color(0xFF1E293B) else Color.White,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = label,
+                                        fontSize = 10.sp,
+                                        color = if (isSelected) BrandOrange else Color(0xFF6B7280),
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            }
+
+                            // Custom Color Picker Button
+                            val pickerBrush = if (isCustomActive && state.customBackgroundColor != null) {
+                                androidx.compose.ui.graphics.SolidColor(Color(state.customBackgroundColor))
+                            } else {
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Color.Red, Color.Yellow, Color.Green, Color.Cyan,
+                                        Color.Blue, Color.Magenta, Color.Red
+                                    )
+                                )
+                            }
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.clickable {
+                                    showBgColorWheel = !showBgColorWheel
+                                }
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(pickerBrush)
+                                        .border(
+                                            width = if (isCustomActive) 3.dp else 1.5.dp,
+                                            color = if (isCustomActive) BrandOrange else Color(0xFFE2E8F0),
+                                            shape = CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isCustomActive) {
+                                        val isLight = state.customBackgroundColor?.let { col ->
+                                            val r = (col shr 16) and 0xFF
+                                            val g = (col shr 8) and 0xFF
+                                            val b = col and 0xFF
+                                            (0.299 * r + 0.587 * g + 0.114 * b) >= 128
+                                        } ?: true
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = if (isLight) Color(0xFF1E293B) else Color.White,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Default.Palette,
+                                            contentDescription = "Custom Color",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = if (isCustomActive && state.customBackgroundColor != null) {
+                                        String.format("#%06X", state.customBackgroundColor and 0xFFFFFF)
+                                    } else "Picker",
+                                    fontSize = 10.sp,
+                                    color = if (isCustomActive) BrandOrange else Color(0xFF6B7280),
+                                    fontWeight = if (isCustomActive) FontWeight.Bold else FontWeight.Normal
+                                )
                             }
                         }
 
@@ -2833,6 +2996,19 @@ fun AvitriSphareWhiteboardChrome(
                             }
                         }
                     }
+
+                    if (showBgColorWheel) {
+                        ColorWheelPanel(
+                            initialColor = state.customBackgroundColor ?: 0xFFFFFFFF.toInt(),
+                            isDark = state.isDarkTheme,
+                            title = "Background Color",
+                            onColorSelected = { color: Int ->
+                                viewModel.setPageBackgroundColor(color)
+                            },
+                            onClose = { showBgColorWheel = false }
+                        )
+                    }
+                }
                 }
             }
         }
@@ -2860,6 +3036,7 @@ fun getToolDisplayInfo(id: String): ToolDisplayInfo {
         "shapes" -> ToolDisplayInfo(id, stringResource(R.string.tool_shapes), Icons.Default.Category, Color(0xFF8B5CF6))
         "eraser" -> ToolDisplayInfo(id, stringResource(R.string.tool_eraser), Icons.Default.AutoFixNormal, Color(0xFFEC4899))
         "laser" -> ToolDisplayInfo(id, stringResource(R.string.tool_laser), Icons.Default.Highlight, Color(0xFFEAB308))
+        "snip" -> ToolDisplayInfo(id, stringResource(R.string.tool_snip), Icons.Default.Crop, Color(0xFF06B6D4))
         "geometry" -> ToolDisplayInfo(id, stringResource(R.string.tool_geometry), Icons.Default.ChangeHistory, Color(0xFF10B981))
         "tools" -> ToolDisplayInfo(id, stringResource(R.string.tool_tools), Icons.Default.Widgets, Color(0xFF8B5CF6))
         "undo" -> ToolDisplayInfo(id, stringResource(R.string.tool_undo), Icons.Default.Undo, Color(0xFFF59E0B))

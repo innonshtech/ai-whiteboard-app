@@ -356,13 +356,26 @@ fun DrawScope.renderExtendedShape(
 
         // --- Lines & Rays ---
         StrokeType.LINE_DASHED -> {
-            drawLine(
-                color = effectiveStrokeColor,
-                start = points.first(),
-                end = points.last(),
-                strokeWidth = strokeWidth,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f / safeScale, 8f / safeScale))
-            )
+            if (points.size > 2) {
+                drawPath(
+                    path = stroke.cachedPath,
+                    color = effectiveStrokeColor,
+                    style = DrawStroke(
+                        width = strokeWidth,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f / safeScale, 8f / safeScale))
+                    )
+                )
+            } else {
+                drawLine(
+                    color = effectiveStrokeColor,
+                    start = points.first(),
+                    end = points.last(),
+                    strokeWidth = strokeWidth,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f / safeScale, 8f / safeScale))
+                )
+            }
         }
         StrokeType.DOUBLE_ARROW -> {
             val start = points.first()

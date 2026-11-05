@@ -851,7 +851,7 @@ Spacer(Modifier.height(12.dp))
                         }
                     ) {
                         Text(
-                            text = "Log out",
+                            text = stringResource(R.string.action_yes),
                             color = Color(0xFFEF4444),
                             fontWeight = FontWeight.Bold
                         )

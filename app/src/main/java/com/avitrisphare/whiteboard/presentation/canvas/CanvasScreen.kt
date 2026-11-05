@@ -129,6 +129,8 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.ZoomOutMap
+import androidx.activity.compose.BackHandler
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -148,10 +150,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -263,6 +268,10 @@ fun List<Offset>.toSmoothedPath(): Path {
     val path = Stroke.createSmoothedPath(this)
     if (size >= 2) path.close()
     return path
+}
+
+fun List<Offset>.toOpenSmoothedPath(): Path {
+    return Stroke.createSmoothedPath(this)
 }
 
 private class PointerInkTrack(
@@ -735,13 +744,25 @@ fun DrawScope.renderStroke(
         }
         StrokeType.LINE -> {
             if (pointsList.size >= 2) {
-                drawLine(
-                    color = strokeColor,
-                    start = pointsList.first(),
-                    end = pointsList.last(),
-                    strokeWidth = strokeWidth,
-                    cap = StrokeCap.Round
-                )
+                if (pointsList.size == 2) {
+                    drawLine(
+                        color = strokeColor,
+                        start = pointsList.first(),
+                        end = pointsList.last(),
+                        strokeWidth = strokeWidth,
+                        cap = StrokeCap.Round
+                    )
+                } else {
+                    drawPath(
+                        path = stroke.cachedPath,
+                        color = strokeColor,
+                        style = DrawStroke(
+                            width = strokeWidth,
+                            cap = StrokeCap.Round,
+                            join = StrokeJoin.Round
+                        )
+                    )
+                }
             }
         }
         StrokeType.ARROW -> {
@@ -1326,6 +1347,11 @@ fun CanvasScreen(
     val pageBitmap by viewModel.pageBitmap.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
 
+    var showExitConfirmDialog by remember { mutableStateOf(false) }
+    BackHandler(enabled = true) {
+        showExitConfirmDialog = true
+    }
+
     var showSidebar by remember { mutableStateOf(false) }
     var showProfileDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
@@ -1394,6 +1420,26 @@ fun CanvasScreen(
     var boardStage by remember { mutableStateOf<BoardStageView?>(null) }
     var shadeFromTop by remember { mutableStateOf(true) }
     var shadeEdge by remember { mutableFloatStateOf(0.4f) }
+    var curtainState by remember { mutableStateOf(CurtainUiState()) }
+    LaunchedEffect(state.currentTool) {
+        if (state.currentTool == WhiteboardTool.SHADE && !curtainState.isVisible) {
+            curtainState = curtainState.copy(isVisible = true)
+        }
+    }
+
+    val snipMode by viewModel.snipMode.collectAsStateWithLifecycle()
+    val snipClipboard by viewModel.snipClipboard.collectAsStateWithLifecycle()
+    var snipSelectionRect by remember { mutableStateOf<Rect?>(null) }
+    val snipFreeformPoints = remember { mutableStateListOf<Offset>() }
+    var snipStartPoint by remember { mutableStateOf<Offset?>(null) }
+
+    LaunchedEffect(state.currentTool) {
+        if (state.currentTool != WhiteboardTool.SNIP) {
+            snipSelectionRect = null
+            snipFreeformPoints.clear()
+            snipStartPoint = null
+        }
+    }
     var spotlightCenter by remember { mutableStateOf<Offset?>(null) }
     var spotlightRadius by remember { mutableFloatStateOf(150f) }
     var showImageSearch by remember { mutableStateOf(false) }
@@ -2460,6 +2506,37 @@ fun CanvasScreen(
                             WhiteboardTool.LASER -> {
                                 viewModel.startLaser(downWorld)
                             }
+                            WhiteboardTool.SNIP -> {
+                                when (snipMode) {
+                                    SnipMode.RECTANGLE, SnipMode.SQUARE -> {
+                                        snipStartPoint = downWorld
+                                        snipSelectionRect = Rect(downWorld.x, downWorld.y, downWorld.x, downWorld.y)
+                                        snipFreeformPoints.clear()
+                                    }
+                                    SnipMode.FREEFORM -> {
+                                        snipStartPoint = downWorld
+                                        snipFreeformPoints.clear()
+                                        snipFreeformPoints.add(downWorld)
+                                        snipSelectionRect = null
+                                    }
+                                    SnipMode.FULL_CANVAS -> {
+                                        val viewport = CanvasTransform.calculateViewportWorldBounds(
+                                            viewportSize = canvasSize,
+                                            scale = canvasScale,
+                                            offset = Offset(canvasOffsetX, canvasOffsetY)
+                                        )
+                                        val inserted = viewModel.executeUniversalSnip(viewport, null, SnipMode.FULL_CANVAS, viewport)
+                                        if (inserted != null) {
+                                            lassoSelectionPath = null
+                                            selectionToolbarDismissed = false
+                                            Toast.makeText(context, context.getString(R.string.snip_captured_toast), Toast.LENGTH_SHORT).show()
+                                        }
+                                        snipStartPoint = null
+                                        snipSelectionRect = null
+                                        snipFreeformPoints.clear()
+                                    }
+                                }
+                            }
                             WhiteboardTool.TEXT -> {
                                 pendingWorldPoint = downWorld
                                 textInputValue = ""
@@ -2468,8 +2545,9 @@ fun CanvasScreen(
                             WhiteboardTool.ERASER -> eraseSample(downWorld, down.position)
                             WhiteboardTool.SPOTLIGHT -> spotlightCenter = down.position
                             WhiteboardTool.SHADE -> {
-                                val height = canvasSize.height.coerceAtLeast(1f)
-                                shadeEdge = (down.position.y / height).coerceIn(0.05f, 0.95f)
+                                if (!curtainState.isVisible) {
+                                    curtainState = curtainState.copy(isVisible = true)
+                                }
                             }
                             WhiteboardTool.MAGNIFIER -> boardStage?.showMagnifier(down.position.x, down.position.y)
                             WhiteboardTool.PEN,
@@ -3038,7 +3116,8 @@ fun CanvasScreen(
                                             offsetY = cur.offsetY,
                                             selected = cur.selectedStrokeIds,
                                             customBackgroundUri = cur.pageCustomBackgroundUris.getOrElse(cur.pageIndex) { "" },
-                                            pageIndex = cur.pageIndex
+                                            pageIndex = cur.pageIndex,
+                                            customBackgroundColor = cur.customBackgroundColor
                                         )
                                     } else if (resizeStrokeId != null && resizeHandle != null && resizeInitialBounds != null) {
                                         viewModel.beginSelectionMove()
@@ -3054,7 +3133,8 @@ fun CanvasScreen(
                                             offsetY = cur.offsetY,
                                             selected = cur.selectedStrokeIds,
                                             customBackgroundUri = cur.pageCustomBackgroundUris.getOrElse(cur.pageIndex) { "" },
-                                            pageIndex = cur.pageIndex
+                                            pageIndex = cur.pageIndex,
+                                            customBackgroundColor = cur.customBackgroundColor
                                         )
                                     } else if (resizeStrokeId != null && resizeHandle != null) {
                                         viewModel.beginSelectionMove()
@@ -3070,7 +3150,8 @@ fun CanvasScreen(
                                             offsetY = cur.offsetY,
                                             selected = cur.selectedStrokeIds,
                                             customBackgroundUri = cur.pageCustomBackgroundUris.getOrElse(cur.pageIndex) { "" },
-                                            pageIndex = cur.pageIndex
+                                            pageIndex = cur.pageIndex,
+                                            customBackgroundColor = cur.customBackgroundColor
                                         )
                                     } else if (activeTool == WhiteboardTool.SELECT && selectingBox) {
                                         boardStage?.setMarquee(downWorld, curWorld)
@@ -3098,10 +3179,65 @@ fun CanvasScreen(
                                             selected = cur.selectedStrokeIds,
                                             customBackgroundUri = cur.pageCustomBackgroundUris.getOrElse(cur.pageIndex) { "" },
                                             pageIndex = cur.pageIndex,
-                                            hasLassoSelection = lassoSelectionPath != null
+                                            hasLassoSelection = lassoSelectionPath != null,
+                                            customBackgroundColor = cur.customBackgroundColor
                                         )
                                     } else if (activeTool == WhiteboardTool.LASER) {
-                                        viewModel.addLaserPoint(curWorld)
+                                        if (change.historical.isNotEmpty()) {
+                                            val historicalWorld = change.historical.map { sample ->
+                                                CanvasTransform.screenToWorld(
+                                                    screenPoint = sample.position,
+                                                    scale = canvasScale,
+                                                    offset = Offset(canvasOffsetX, canvasOffsetY)
+                                                )
+                                            }
+                                            viewModel.addLaserPoints(historicalWorld + curWorld)
+                                        } else {
+                                            viewModel.addLaserPoint(curWorld)
+                                        }
+                                    } else if (activeTool == WhiteboardTool.SNIP) {
+                                        if (snipStartPoint != null) {
+                                            val start = snipStartPoint!!
+                                            when (snipMode) {
+                                                SnipMode.RECTANGLE -> {
+                                                    val left = minOf(start.x, curWorld.x)
+                                                    val top = minOf(start.y, curWorld.y)
+                                                    val right = maxOf(start.x, curWorld.x)
+                                                    val bottom = maxOf(start.y, curWorld.y)
+                                                    snipSelectionRect = Rect(left, top, right, bottom)
+                                                }
+                                                SnipMode.SQUARE -> {
+                                                    val dx = curWorld.x - start.x
+                                                    val dy = curWorld.y - start.y
+                                                    val side = maxOf(kotlin.math.abs(dx), kotlin.math.abs(dy))
+                                                    val x2 = start.x + (if (dx >= 0) side else -side)
+                                                    val y2 = start.y + (if (dy >= 0) side else -side)
+                                                    snipSelectionRect = Rect(
+                                                        minOf(start.x, x2),
+                                                        minOf(start.y, y2),
+                                                        maxOf(start.x, x2),
+                                                        maxOf(start.y, y2)
+                                                    )
+                                                }
+                                                SnipMode.FREEFORM -> {
+                                                    val samples = change.historical.map { it.position } + change.position
+                                                    val minGapSq = (5f / canvasScale.coerceAtLeast(0.2f)).let { it * it }
+                                                    var last = snipFreeformPoints.lastOrNull()
+                                                    val newPoints = ArrayList<Offset>()
+                                                    for (sample in samples) {
+                                                        val w = CanvasTransform.screenToWorld(sample, canvasScale, Offset(canvasOffsetX, canvasOffsetY))
+                                                        if (last == null || (w - last).getDistanceSquared() >= minGapSq) {
+                                                            newPoints.add(w)
+                                                            last = w
+                                                        }
+                                                    }
+                                                    if (newPoints.isNotEmpty()) {
+                                                        snipFreeformPoints.addAll(newPoints)
+                                                    }
+                                                }
+                                                SnipMode.FULL_CANVAS -> Unit
+                                            }
+                                        }
                                     } else if (activeTool == WhiteboardTool.LASSO && !isDraggingSelection && resizeStrokeId == null) {
                                         lassoPoints = lassoPoints + curWorld
                                     } else if (erasing) {
@@ -3128,8 +3264,7 @@ fun CanvasScreen(
                                     } else if (activeTool == WhiteboardTool.SPOTLIGHT) {
                                         spotlightCenter = change.position
                                     } else if (activeTool == WhiteboardTool.SHADE) {
-                                        val height = canvasSize.height.coerceAtLeast(1f)
-                                        shadeEdge = (change.position.y / height).coerceIn(0.05f, 0.95f)
+                                        // Handled directly by CurtainOverlay gestures
                                     } else if (activeTool == WhiteboardTool.MAGNIFIER) {
                                         boardStage?.showMagnifier(change.position.x, change.position.y)
                                     } else if (isShapeActive || activeTool in listOf(
@@ -3565,6 +3700,50 @@ fun CanvasScreen(
                             if (activeTool == WhiteboardTool.LASER) {
                                 viewModel.finishLaser()
                             }
+                            if (activeTool == WhiteboardTool.SNIP) {
+                                snipStartPoint = null
+                                val snipViewport = CanvasTransform.calculateViewportWorldBounds(
+                                    viewportSize = canvasSize,
+                                    scale = canvasScale,
+                                    offset = Offset(canvasOffsetX, canvasOffsetY)
+                                )
+                                when (snipMode) {
+                                    SnipMode.RECTANGLE, SnipMode.SQUARE -> {
+                                        val r = snipSelectionRect
+                                        if (r != null && r.width >= 8f && r.height >= 8f) {
+                                            val inserted = viewModel.executeUniversalSnip(r, null, snipMode, snipViewport)
+                                            if (inserted != null) {
+                                                lassoSelectionPath = null
+                                                selectionToolbarDismissed = false
+                                                Toast.makeText(context, context.getString(R.string.snip_captured_toast), Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                        snipSelectionRect = null
+                                        snipStartPoint = null
+                                    }
+                                    SnipMode.FREEFORM -> {
+                                        if (snipFreeformPoints.size >= 5) {
+                                            val minX = snipFreeformPoints.minOf { it.x }
+                                            val maxX = snipFreeformPoints.maxOf { it.x }
+                                            val minY = snipFreeformPoints.minOf { it.y }
+                                            val maxY = snipFreeformPoints.maxOf { it.y }
+                                            if (maxX - minX >= 16f && maxY - minY >= 16f) {
+                                                val r = Rect(minX, minY, maxX, maxY)
+                                                val pointsList = snipFreeformPoints.toList()
+                                                val inserted = viewModel.executeUniversalSnip(r, pointsList, snipMode, snipViewport)
+                                                if (inserted != null) {
+                                                    lassoSelectionPath = null
+                                                    selectionToolbarDismissed = false
+                                                    Toast.makeText(context, context.getString(R.string.snip_captured_toast), Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }
+                                        snipFreeformPoints.clear()
+                                        snipStartPoint = null
+                                    }
+                                    SnipMode.FULL_CANVAS -> Unit
+                                }
+                            }
                             if (activeTool == WhiteboardTool.LASSO) {
                                 if (isDraggingSelection) {
                                     viewModel.endSelectionMove()
@@ -3650,6 +3829,12 @@ fun CanvasScreen(
                         if (wasMultiTouch && lassoPoints.isNotEmpty()) {
                             lassoPoints = emptyList()
                         }
+                        if (wasMultiTouch && activeTool == WhiteboardTool.LASER) {
+                            viewModel.clearLaser()
+                        }
+                        if (wasMultiTouch && activeTool == WhiteboardTool.SNIP) {
+                            snipStartPoint = null
+                        }
 
                         if (wasMultiTouch) {
                             viewModel.setMathTools(mathTools)
@@ -3663,12 +3848,18 @@ fun CanvasScreen(
                         it.onMoveMedia = { id, dx, dy ->
                             viewModel.moveStroke(id, Offset(dx, dy))
                         }
+                        it.onCloseMedia = { id ->
+                            viewModel.deleteStroke(id)
+                        }
                         boardStage = it
                     }
                 },
                 update = { stage ->
                     stage.onMoveMedia = { id, dx, dy ->
                         viewModel.moveStroke(id, Offset(dx, dy))
+                    }
+                    stage.onCloseMedia = { id ->
+                        viewModel.deleteStroke(id)
                     }
                     val page = viewModel.state.value
                     stage.syncPage(
@@ -3682,7 +3873,8 @@ fun CanvasScreen(
                         selected = page.selectedStrokeIds,
                         customBackgroundUri = page.pageCustomBackgroundUris.getOrElse(page.pageIndex) { "" },
                         pageIndex = page.pageIndex,
-                        hasLassoSelection = lassoSelectionPath != null
+                        hasLassoSelection = lassoSelectionPath != null,
+                        customBackgroundColor = page.customBackgroundColor
                     )
                     stage.currentStroke = page.currentStroke
                     val document = page.document
@@ -3723,66 +3915,10 @@ fun CanvasScreen(
                         style = DrawStroke(width = 2f)
                     )
                 }
-                if (state.currentTool == WhiteboardTool.SHADE) {
-                    val edge = (shadeEdge * size.height).coerceIn(0f, size.height)
-                    val shade = Color(0xF21B1F2A)
-                    if (shadeFromTop) {
-                        drawRect(shade, size = Size(size.width, edge))
-                    } else {
-                        drawRect(shade, topLeft = Offset(0f, edge), size = Size(size.width, size.height - edge))
-                    }
-                    drawLine(
-                        color = Color(0xFF8B5CF6),
-                        start = Offset(0f, edge),
-                        end = Offset(size.width, edge),
-                        strokeWidth = 6f
-                    )
-                }
                 withTransform({
                     translate(canvasOffsetX, canvasOffsetY)
                     scale(canvasScale, canvasScale, pivot = Offset.Zero)
                 }) {
-                    if (state.laserPoints.isNotEmpty()) {
-                        val scale = canvasScale.coerceAtLeast(0.5f)
-                        if (state.laserPoints.size >= 2) {
-                            val laserPath = state.laserPoints.toSmoothedPath()
-                            // Outer laser glow
-                            drawPath(
-                                path = laserPath,
-                                color = Color(0x55FF2A2A),
-                                style = DrawStroke(
-                                    width = 14f / scale,
-                                    cap = StrokeCap.Round,
-                                    join = StrokeJoin.Round
-                                )
-                            )
-                            // Intense laser core beam
-                            drawPath(
-                                path = laserPath,
-                                color = Color(0xFFFF2A2A),
-                                style = DrawStroke(
-                                    width = 6f / scale,
-                                    cap = StrokeCap.Round,
-                                    join = StrokeJoin.Round
-                                )
-                            )
-                            // Bright white center line
-                            drawPath(
-                                path = laserPath,
-                                color = Color(0xFFFFF0F0),
-                                style = DrawStroke(
-                                    width = 2.5f / scale,
-                                    cap = StrokeCap.Round,
-                                    join = StrokeJoin.Round
-                                )
-                            )
-                        }
-                        val center = state.laserPoints.last()
-                        val radius = 9f / scale
-                        drawCircle(Color(0x55FF2A2A), radius * 2.4f, center)
-                        drawCircle(Color(0xFFFF2A2A), radius, center)
-                        drawCircle(Color.White, radius * 0.45f, center)
-                    }
                     val activeLasso = if (lassoPoints.size >= 2) lassoPoints else if (state.selectedStrokeIds.isNotEmpty()) lassoSelectionPath else null
                     if (activeLasso != null && activeLasso.size >= 2) {
                         val lassoPath = activeLasso.toSmoothedPath()
@@ -3867,6 +4003,13 @@ fun CanvasScreen(
                     drawMathReadout(readout.first, readout.second)
                 }
             }
+
+            LaserOverlay(
+                viewModel = viewModel,
+                canvasScale = canvasScale,
+                canvasOffsetX = canvasOffsetX,
+                canvasOffsetY = canvasOffsetY
+            )
 
             val currentDoc = state.document
             if (currentDoc != null && state.splitCount <= 1) {
@@ -3994,11 +4137,62 @@ fun CanvasScreen(
 
         }
 
+        // Interactive Screen Curtain Overlay
+        CurtainOverlay(
+            state = curtainState,
+            onStateChange = { curtainState = it },
+            onClose = {
+                curtainState = curtainState.copy(isVisible = false)
+                if (state.currentTool == WhiteboardTool.SHADE) {
+                    viewModel.setTool(WhiteboardTool.PEN)
+                }
+            }
+        )
+
+        // Universal Snip Tool Overlay
+        SnipOverlay(
+            isActive = state.currentTool == WhiteboardTool.SNIP,
+            isDarkTheme = state.isDarkTheme,
+            snipMode = snipMode,
+            selectionRect = snipSelectionRect,
+            freeformPoints = snipFreeformPoints,
+            canvasScale = canvasScale,
+            canvasOffsetX = canvasOffsetX,
+            canvasOffsetY = canvasOffsetY,
+            onClose = {
+                viewModel.setTool(WhiteboardTool.PEN)
+                snipSelectionRect = null
+                snipFreeformPoints.clear()
+                snipStartPoint = null
+            },
+            onSetMode = { mode ->
+                viewModel.setSnipMode(mode)
+                snipSelectionRect = null
+                snipFreeformPoints.clear()
+                snipStartPoint = null
+                if (mode == SnipMode.FULL_CANVAS) {
+                    val viewport = CanvasTransform.calculateViewportWorldBounds(
+                        viewportSize = canvasSize,
+                        scale = canvasScale,
+                        offset = Offset(canvasOffsetX, canvasOffsetY)
+                    )
+                    val inserted = viewModel.executeUniversalSnip(viewport, null, SnipMode.FULL_CANVAS, viewport)
+                    if (inserted != null) {
+                        lassoSelectionPath = null
+                        selectionToolbarDismissed = false
+                        Toast.makeText(context, context.getString(R.string.snip_captured_toast), Toast.LENGTH_SHORT).show()
+                    }
+                    snipStartPoint = null
+                    snipSelectionRect = null
+                    snipFreeformPoints.clear()
+                }
+            }
+        )
 
         AvitriSphareWhiteboardChrome(
             state = state,
             viewModel = viewModel,
-            onExit = onNavigateBack,
+            onExit = { showExitConfirmDialog = true },
             onOpenMenu = { showSidebar = true },
             onInsertImage = { imagePickerLauncher.launch("image/*") },
             onPickCustomBackground = { customBgPickerLauncher.launch("image/*") },
@@ -4168,6 +4362,14 @@ fun CanvasScreen(
                         isMinimized = if (next) false else periodicTableState.isMinimized
                     )
                     if (next) bringToolToFront(UtilityToolKind.PERIODIC_TABLE)
+                }
+            },
+            isCurtainVisible = curtainState.isVisible,
+            onToggleCurtain = {
+                val next = !curtainState.isVisible
+                curtainState = curtainState.copy(isVisible = next)
+                if (!next && state.currentTool == WhiteboardTool.SHADE) {
+                    viewModel.setTool(WhiteboardTool.PEN)
                 }
             },
             isTranslatorVisible = translatorState.isVisible,
@@ -5628,7 +5830,7 @@ fun CanvasScreen(
                                 isDark = isDark,
                                 onClick = {
                                     showSidebar = false
-                                    onNavigateBack()
+                                    showExitConfirmDialog = true
                                 }
                             )
                     }
@@ -6543,6 +6745,50 @@ fun CanvasScreen(
         }
     }
 
+    if (showExitConfirmDialog) {
+        val isDark = state.isDarkTheme
+        AlertDialog(
+            onDismissRequest = { showExitConfirmDialog = false },
+            title = {
+                Text(
+                    text = stringResource(R.string.tool_exit),
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF0F172A)
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.logout_confirm_msg),
+                    color = if (isDark) Color(0xFFCBD5E1) else Color(0xFF475569)
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showExitConfirmDialog = false
+                        onNavigateBack()
+                    }
+                ) {
+                    Text(
+                        text = stringResource(R.string.action_yes),
+                        color = Color(0xFFEF4444),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitConfirmDialog = false }) {
+                    Text(
+                        text = stringResource(R.string.cancel),
+                        color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
+                    )
+                }
+            },
+            containerColor = if (isDark) Color(0xFF1E293B) else Color.White,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
     if (showDeleteDialog) {
         BoardModal(
             title = stringResource(R.string.dialog_delete_title),
@@ -6825,3 +7071,100 @@ private fun frostUnchanged(current: List<Rect>, next: List<Rect>): Boolean {
     }
     return true
 }
+
+@Composable
+private fun LaserOverlay(
+    viewModel: CanvasViewModel,
+    canvasScale: Float,
+    canvasOffsetX: Float,
+    canvasOffsetY: Float,
+    modifier: Modifier = Modifier
+) {
+    val trail by viewModel.laserTrail.collectAsStateWithLifecycle()
+    val head by viewModel.laserHead.collectAsStateWithLifecycle()
+    val isDown by viewModel.isLaserDown.collectAsStateWithLifecycle()
+
+    var animTick by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(isDown, trail.isNotEmpty()) {
+        while (isDown || trail.isNotEmpty()) {
+            animTick = withFrameMillis { it }
+        }
+    }
+
+    if (trail.isEmpty() && head == null) return
+
+    Canvas(modifier = modifier.fillMaxSize()) {
+        @Suppress("UNUSED_VARIABLE")
+        val tick = animTick
+        val now = android.os.SystemClock.uptimeMillis()
+        val lifespanMs = 700f
+
+        withTransform({
+            translate(canvasOffsetX, canvasOffsetY)
+            scale(canvasScale, canvasScale, pivot = Offset.Zero)
+        }) {
+            val scale = canvasScale.coerceAtLeast(0.0001f)
+
+            // 1. Draw smooth open trail segments with fading taper
+            if (trail.size >= 2) {
+                for (i in 0 until trail.size - 1) {
+                    val p1 = trail[i]
+                    val p2 = trail[i + 1]
+                    val age1 = (now - p1.timestampMs).coerceAtLeast(0L).toFloat()
+                    val age2 = (now - p2.timestampMs).coerceAtLeast(0L).toFloat()
+                    val life1 = (1f - (age1 / lifespanMs)).coerceIn(0f, 1f)
+                    val life2 = (1f - (age2 / lifespanMs)).coerceIn(0f, 1f)
+                    val avgLife = (life1 + life2) / 2f
+                    if (avgLife <= 0.01f) continue
+
+                    // Outer laser glow
+                    drawLine(
+                        color = Color(0xFFFF2A2A).copy(alpha = 0.35f * avgLife),
+                        start = p1.point,
+                        end = p2.point,
+                        strokeWidth = (14f * avgLife) / scale,
+                        cap = StrokeCap.Round
+                    )
+                    // Intense laser core beam
+                    drawLine(
+                        color = Color(0xFFFF2A2A).copy(alpha = 0.85f * avgLife),
+                        start = p1.point,
+                        end = p2.point,
+                        strokeWidth = (6f * avgLife) / scale,
+                        cap = StrokeCap.Round
+                    )
+                    // Bright white center line
+                    drawLine(
+                        color = Color(0xFFFFF0F0).copy(alpha = 0.95f * avgLife),
+                        start = p1.point,
+                        end = p2.point,
+                        strokeWidth = (2.5f * avgLife) / scale,
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
+
+            // 2. Draw glowing laser pointer head (dot) at current pointer position
+            val headPoint = head ?: trail.lastOrNull()?.point
+            if (headPoint != null) {
+                val headLife = if (isDown) 1f else {
+                    val lastPoint = trail.lastOrNull()
+                    if (lastPoint != null) {
+                        val age = (now - lastPoint.timestampMs).coerceAtLeast(0L).toFloat()
+                        (1f - (age / lifespanMs)).coerceIn(0f, 1f)
+                    } else 0f
+                }
+                if (headLife > 0.01f) {
+                    val radius = (9f * headLife) / scale
+                    // Outer wide glow
+                    drawCircle(Color(0xFFFF2A2A).copy(alpha = 0.35f * headLife), radius * 2.2f, headPoint)
+                    // Core glow
+                    drawCircle(Color(0xFFFF2A2A).copy(alpha = 0.9f * headLife), radius, headPoint)
+                    // Intense white center
+                    drawCircle(Color.White.copy(alpha = headLife), radius * 0.45f, headPoint)
+                }
+            }
+        }
+    }
+}
+

@@ -17,6 +17,11 @@ data class LassoCutResult(
     val didCut: Boolean
 )
 
+data class ShapeComponent(
+    val points: List<Offset>,
+    val isDashed: Boolean = false
+)
+
 object LassoCutEngine {
 
     private val inkTypes = setOf(
@@ -222,6 +227,185 @@ object LassoCutEngine {
         return PolylineSplit(insidePieces, outsidePieces)
     }
 
+    fun buildCylinderComponents(box: Rect): List<ShapeComponent> {
+        val ry = (box.height * 0.15f).coerceAtLeast(8f)
+        val cx = box.center.x
+        val rx = box.width / 2f
+        val topY = box.top + ry
+        val bottomY = box.bottom - ry
+
+        val topEllipse = List(33) { idx ->
+            val a = idx / 32f * (2.0 * PI).toFloat()
+            Offset(cx + rx * cos(a), topY + ry * sin(a))
+        }
+
+        val leftSide = listOf(Offset(box.left, topY), Offset(box.left, bottomY))
+        val rightSide = listOf(Offset(box.right, topY), Offset(box.right, bottomY))
+
+        val bottomFrontArc = List(17) { idx ->
+            val a = idx / 16f * PI.toFloat()
+            Offset(cx + rx * cos(a), bottomY + ry * sin(a))
+        }
+
+        val bottomBackArc = List(17) { idx ->
+            val a = PI.toFloat() + idx / 16f * PI.toFloat()
+            Offset(cx + rx * cos(a), bottomY + ry * sin(a))
+        }
+
+        return listOf(
+            ShapeComponent(topEllipse, isDashed = false),
+            ShapeComponent(leftSide, isDashed = false),
+            ShapeComponent(rightSide, isDashed = false),
+            ShapeComponent(bottomFrontArc, isDashed = false),
+            ShapeComponent(bottomBackArc, isDashed = true)
+        )
+    }
+
+    fun buildConeComponents(box: Rect): List<ShapeComponent> {
+        val apex = Offset(box.center.x, box.top)
+        val ry = (box.height * 0.15f).coerceAtLeast(8f)
+        val cx = box.center.x
+        val cy = box.bottom - ry
+        val rx = box.width / 2f
+
+        val leftSide = listOf(apex, Offset(box.left, cy))
+        val rightSide = listOf(apex, Offset(box.right, cy))
+
+        val bottomFrontArc = List(17) { idx ->
+            val a = idx / 16f * PI.toFloat()
+            Offset(cx + rx * cos(a), cy + ry * sin(a))
+        }
+
+        val bottomBackArc = List(17) { idx ->
+            val a = PI.toFloat() + idx / 16f * PI.toFloat()
+            Offset(cx + rx * cos(a), cy + ry * sin(a))
+        }
+
+        return listOf(
+            ShapeComponent(leftSide, isDashed = false),
+            ShapeComponent(rightSide, isDashed = false),
+            ShapeComponent(bottomFrontArc, isDashed = false),
+            ShapeComponent(bottomBackArc, isDashed = true)
+        )
+    }
+
+    fun buildSphereComponents(box: Rect): List<ShapeComponent> {
+        val cx = box.center.x
+        val cy = box.center.y
+        val rx = box.width / 2f
+        val ryOuter = box.height / 2f
+        val ryEquator = box.height * 0.22f
+
+        val outerCircle = List(33) { idx ->
+            val a = idx / 32f * (2.0 * PI).toFloat()
+            Offset(cx + rx * cos(a), cy + ryOuter * sin(a))
+        }
+
+        val frontEquator = List(17) { idx ->
+            val a = idx / 16f * PI.toFloat()
+            Offset(cx + rx * cos(a), cy + ryEquator * sin(a))
+        }
+
+        val backEquator = List(17) { idx ->
+            val a = PI.toFloat() + idx / 16f * PI.toFloat()
+            Offset(cx + rx * cos(a), cy + ryEquator * sin(a))
+        }
+
+        return listOf(
+            ShapeComponent(outerCircle, isDashed = false),
+            ShapeComponent(frontEquator, isDashed = false),
+            ShapeComponent(backEquator, isDashed = true)
+        )
+    }
+
+    fun buildCuboidComponents(box: Rect): List<ShapeComponent> {
+        val depthX = box.width * 0.25f
+        val depthY = box.height * 0.22f
+
+        val frontLeft = box.left
+        val frontRight = box.right - depthX
+        val frontTop = box.top + depthY
+        val frontBottom = box.bottom
+
+        val backLeft = box.left + depthX
+        val backRight = box.right
+        val backTop = box.top
+        val backBottom = box.bottom - depthY
+
+        val frontFace = listOf(
+            Offset(frontLeft, frontTop),
+            Offset(frontRight, frontTop),
+            Offset(frontRight, frontBottom),
+            Offset(frontLeft, frontBottom),
+            Offset(frontLeft, frontTop)
+        )
+
+        return listOf(
+            // Hidden back edges (dashed)
+            ShapeComponent(listOf(Offset(frontLeft, frontBottom), Offset(backLeft, backBottom)), isDashed = true),
+            ShapeComponent(listOf(Offset(backLeft, backBottom), Offset(backRight, backBottom)), isDashed = true),
+            ShapeComponent(listOf(Offset(backLeft, backTop), Offset(backLeft, backBottom)), isDashed = true),
+            // Visible front face
+            ShapeComponent(frontFace, isDashed = false),
+            // Visible connecting edges
+            ShapeComponent(listOf(Offset(frontLeft, frontTop), Offset(backLeft, backTop)), isDashed = false),
+            ShapeComponent(listOf(Offset(frontRight, frontTop), Offset(backRight, backTop)), isDashed = false),
+            ShapeComponent(listOf(Offset(frontRight, frontBottom), Offset(backRight, backBottom)), isDashed = false),
+            // Visible top & right back edges
+            ShapeComponent(listOf(Offset(backLeft, backTop), Offset(backRight, backTop)), isDashed = false),
+            ShapeComponent(listOf(Offset(backRight, backTop), Offset(backRight, backBottom)), isDashed = false)
+        )
+    }
+
+    fun buildPyramidComponents(box: Rect): List<ShapeComponent> {
+        val apex = Offset(box.center.x, box.top)
+        val bLeft = Offset(box.left, box.bottom - box.height * 0.15f)
+        val bCenter = Offset(box.center.x, box.bottom)
+        val bRight = Offset(box.right, box.bottom - box.height * 0.15f)
+        val bBack = Offset(box.center.x, box.bottom - box.height * 0.30f)
+
+        return listOf(
+            // Hidden base & edges (dashed)
+            ShapeComponent(listOf(bLeft, bBack), isDashed = true),
+            ShapeComponent(listOf(bBack, bRight), isDashed = true),
+            ShapeComponent(listOf(apex, bBack), isDashed = true),
+            // Visible base & front edges
+            ShapeComponent(listOf(bLeft, bCenter), isDashed = false),
+            ShapeComponent(listOf(bCenter, bRight), isDashed = false),
+            ShapeComponent(listOf(apex, bLeft), isDashed = false),
+            ShapeComponent(listOf(apex, bCenter), isDashed = false),
+            ShapeComponent(listOf(apex, bRight), isDashed = false)
+        )
+    }
+
+    fun buildPrismComponents(box: Rect): List<ShapeComponent> {
+        val depthX = box.width * 0.28f
+        val depthY = box.height * 0.18f
+
+        val fApex = Offset(box.left + (box.width - depthX) / 2f, box.top + depthY)
+        val fLeft = Offset(box.left, box.bottom)
+        val fRight = Offset(box.right - depthX, box.bottom)
+
+        val bApex = Offset(fApex.x + depthX, fApex.y - depthY)
+        val bLeft = Offset(fLeft.x + depthX, fLeft.y - depthY)
+        val bRight = Offset(fRight.x + depthX, fRight.y - depthY)
+
+        val frontTriangle = listOf(fApex, fLeft, fRight, fApex)
+
+        return listOf(
+            // Hidden back edges (dashed)
+            ShapeComponent(listOf(fLeft, bLeft), isDashed = true),
+            ShapeComponent(listOf(bLeft, bRight), isDashed = true),
+            ShapeComponent(listOf(bApex, bLeft), isDashed = true),
+            // Front triangle
+            ShapeComponent(frontTriangle, isDashed = false),
+            // Connecting top & right
+            ShapeComponent(listOf(fApex, bApex), isDashed = false),
+            ShapeComponent(listOf(fRight, bRight), isDashed = false),
+            ShapeComponent(listOf(bApex, bRight), isDashed = false)
+        )
+    }
+
     fun outlineOf(stroke: Stroke): List<Offset>? {
         if (stroke.points.size < 2) return null
         val a = stroke.points.first()
@@ -235,13 +419,35 @@ object LassoCutEngine {
         if (width <= 0f && height <= 0f) return null
 
         return when (stroke.strokeType) {
-            StrokeType.RECTANGLE, StrokeType.SQUARE, StrokeType.FRAME -> listOf(
-                Offset(left, top),
-                Offset(right, top),
-                Offset(right, bottom),
-                Offset(left, bottom),
-                Offset(left, top)
-            )
+            StrokeType.RECTANGLE, StrokeType.FRAME -> {
+                if (stroke.cornerRadius > 0f) {
+                    val r = stroke.cornerRadius.coerceAtMost(minOf(width, height) / 2f)
+                    buildRoundRectOutline(left, top, right, bottom, r)
+                } else {
+                    listOf(
+                        Offset(left, top),
+                        Offset(right, top),
+                        Offset(right, bottom),
+                        Offset(left, bottom),
+                        Offset(left, top)
+                    )
+                }
+            }
+            StrokeType.SQUARE -> {
+                val side = minOf(width, height)
+                if (stroke.cornerRadius > 0f) {
+                    val r = stroke.cornerRadius.coerceAtMost(side / 2f)
+                    buildRoundRectOutline(left, top, left + side, top + side, r)
+                } else {
+                    listOf(
+                        Offset(left, top),
+                        Offset(left + side, top),
+                        Offset(left + side, top + side),
+                        Offset(left, top + side),
+                        Offset(left, top)
+                    )
+                }
+            }
             StrokeType.TRIANGLE -> listOf(
                 Offset((left + right) / 2f, top),
                 Offset(right, bottom),
@@ -254,6 +460,27 @@ object LassoCutEngine {
                 Offset(right, bottom),
                 Offset(left, top)
             )
+            StrokeType.SCALENE_TRIANGLE -> listOf(
+                Offset(left, bottom),
+                Offset(left + width * 0.35f, top),
+                Offset(right, bottom),
+                Offset(left, bottom)
+            )
+            StrokeType.SEMICIRCLE -> {
+                val minHeight = (width * 0.5f).coerceAtLeast(8f)
+                val effectiveHeight = if (height < 4f) minHeight else height
+                val cx = (left + right) / 2f
+                val cy = bottom
+                val rx = width / 2f
+                val ry = effectiveHeight
+                val pts = ArrayList<Offset>(34)
+                for (i in 0..32) {
+                    val angle = PI - (i / 32.0) * PI
+                    pts.add(Offset((cx + rx * cos(angle)).toFloat(), (cy - ry * sin(angle)).toFloat()))
+                }
+                pts.add(Offset(left, bottom))
+                pts
+            }
             StrokeType.DIAMOND, StrokeType.RHOMBUS -> {
                 val cx = (left + right) / 2f
                 val cy = (top + bottom) / 2f
@@ -378,6 +605,115 @@ object LassoCutEngine {
         return pts
     }
 
+    fun componentsOf(stroke: Stroke): List<ShapeComponent> {
+        if (stroke.points.size < 2) {
+            return if (stroke.points.isNotEmpty()) {
+                listOf(ShapeComponent(stroke.points, isDashed = false))
+            } else {
+                emptyList()
+            }
+        }
+
+        val p1 = stroke.points.first()
+        val p2 = stroke.points.last()
+        val box = Rect(minOf(p1.x, p2.x), minOf(p1.y, p2.y), maxOf(p1.x, p2.x), maxOf(p1.y, p2.y))
+
+        return when (stroke.strokeType) {
+            StrokeType.CYLINDER -> buildCylinderComponents(box)
+            StrokeType.CONE -> buildConeComponents(box)
+            StrokeType.SPHERE -> buildSphereComponents(box)
+            StrokeType.CUBE, StrokeType.CUBOID -> buildCuboidComponents(box)
+            StrokeType.PYRAMID -> buildPyramidComponents(box)
+            StrokeType.PRISM -> buildPrismComponents(box)
+            StrokeType.ANGLE_RAY -> {
+                val corner = Offset(p1.x, p2.y)
+                listOf(
+                    ShapeComponent(listOf(p1, corner), isDashed = false),
+                    ShapeComponent(listOf(corner, p2), isDashed = false)
+                )
+            }
+            else -> {
+                val outline = outlineOf(stroke)
+                if (outline != null) {
+                    listOf(ShapeComponent(outline, isDashed = false))
+                } else {
+                    val isDashed = stroke.strokeType == StrokeType.LINE_DASHED || stroke.strokeType == StrokeType.DASHED_ARROW
+                    listOf(ShapeComponent(stroke.points, isDashed = isDashed))
+                }
+            }
+        }
+    }
+
+    data class ResolvedPiece(
+        val points: List<Offset>,
+        val pressures: List<Float>,
+        val strokeType: StrokeType
+    )
+
+    fun resolvePiece(
+        original: Stroke,
+        piece: PolylinePiece,
+        isDashed: Boolean
+    ): ResolvedPiece {
+        val pts = piece.points
+        val prs = piece.pressures
+
+        if (isDashed) {
+            if (original.strokeType == StrokeType.DASHED_ARROW) {
+                val origEnd = original.points.lastOrNull()
+                if (origEnd != null && pts.isNotEmpty() &&
+                    hypot(pts.last().x - origEnd.x, pts.last().y - origEnd.y) < 4f
+                ) {
+                    return ResolvedPiece(pts, prs, StrokeType.DASHED_ARROW)
+                }
+            }
+            return ResolvedPiece(pts, prs, StrokeType.LINE_DASHED)
+        }
+
+        if (original.strokeType == StrokeType.ARROW) {
+            val origEnd = original.points.lastOrNull()
+            if (origEnd != null && pts.isNotEmpty() &&
+                hypot(pts.last().x - origEnd.x, pts.last().y - origEnd.y) < 4f
+            ) {
+                return ResolvedPiece(pts, prs, StrokeType.ARROW)
+            }
+            return ResolvedPiece(pts, prs, StrokeType.LINE)
+        }
+
+        if (original.strokeType == StrokeType.DOUBLE_ARROW) {
+            val origStart = original.points.firstOrNull()
+            val origEnd = original.points.lastOrNull()
+            if (origEnd != null && pts.isNotEmpty() &&
+                hypot(pts.last().x - origEnd.x, pts.last().y - origEnd.y) < 4f
+            ) {
+                return ResolvedPiece(pts, prs, StrokeType.ARROW)
+            }
+            if (origStart != null && pts.isNotEmpty() &&
+                hypot(pts.first().x - origStart.x, pts.first().y - origStart.y) < 4f
+            ) {
+                return ResolvedPiece(pts.reversed(), prs.reversed(), StrokeType.ARROW)
+            }
+            return ResolvedPiece(pts, prs, StrokeType.LINE)
+        }
+
+        if (original.strokeType == StrokeType.LINE) {
+            return ResolvedPiece(pts, prs, StrokeType.LINE)
+        }
+
+        if (original.strokeType in setOf(
+                StrokeType.PEN,
+                StrokeType.PENCIL,
+                StrokeType.MARKER,
+                StrokeType.HIGHLIGHTER,
+                StrokeType.BRUSH
+            )
+        ) {
+            return ResolvedPiece(pts, prs, original.strokeType)
+        }
+
+        return ResolvedPiece(pts, prs, StrokeType.LINE)
+    }
+
     fun cutAndSelect(
         strokes: List<Stroke>,
         lassoPoints: List<Offset>
@@ -424,26 +760,41 @@ object LassoCutEngine {
                 continue
             }
 
-            // Polyline source: ink strokes use raw points, shapes use their outline
-            val isInk = stroke.strokeType in inkTypes
-            val sourcePoints = if (isInk) stroke.points else (outlineOf(stroke) ?: stroke.points)
-            if (sourcePoints.isEmpty()) {
+            val components = componentsOf(stroke)
+            if (components.isEmpty()) {
                 outStrokes.add(stroke)
                 continue
             }
 
-            val pressures = if (isInk && sourcePoints === stroke.points) stroke.pointPressures else emptyList()
-            val split = splitPolyline(sourcePoints, pressures, lassoPoints)
+            val isInk = stroke.strokeType in inkTypes
+
+            data class CompSplit(
+                val comp: ShapeComponent,
+                val insidePieces: List<PolylinePiece>,
+                val outsidePieces: List<PolylinePiece>
+            )
+
+            var hasInside = false
+            var hasOutside = false
+            val splitResults = ArrayList<CompSplit>(components.size)
+
+            for (comp in components) {
+                val pressures = if (isInk && comp.points === stroke.points) stroke.pointPressures else emptyList()
+                val split = splitPolyline(comp.points, pressures, lassoPoints)
+                if (split.insidePieces.isNotEmpty()) hasInside = true
+                if (split.outsidePieces.isNotEmpty()) hasOutside = true
+                splitResults.add(CompSplit(comp, split.insidePieces, split.outsidePieces))
+            }
 
             when {
                 // Completely inside the lasso: keep stroke intact and select it
-                split.outsidePieces.isEmpty() && split.insidePieces.isNotEmpty() -> {
+                hasInside && !hasOutside -> {
                     selectedIds.add(stroke.id)
                     outStrokes.add(stroke)
                 }
 
                 // Completely outside the lasso: keep stroke intact, unselected
-                split.insidePieces.isEmpty() -> {
+                !hasInside -> {
                     outStrokes.add(stroke)
                 }
 
@@ -452,33 +803,41 @@ object LassoCutEngine {
                     didCut = true
 
                     // Add outside pieces (kept as unselected remainder)
-                    for (piece in split.outsidePieces) {
-                        outStrokes.add(
-                            stroke.copy(
-                                id = UUID.randomUUID().toString(),
-                                points = piece.points,
-                                pointPressures = piece.pressures,
-                                strokeType = if (isInk) stroke.strokeType else StrokeType.PEN,
-                                text = if (isInk) stroke.text else "",
-                                fillColor = if (isInk) stroke.fillColor else 0
+                    for (result in splitResults) {
+                        for (piece in result.outsidePieces) {
+                            if (piece.points.size < 2 && stroke.points.size > 1) continue
+                            val resolved = resolvePiece(stroke, piece, result.comp.isDashed)
+                            outStrokes.add(
+                                stroke.copy(
+                                    id = UUID.randomUUID().toString(),
+                                    points = resolved.points,
+                                    pointPressures = resolved.pressures,
+                                    strokeType = resolved.strokeType,
+                                    text = if (isInk) stroke.text else "",
+                                    fillColor = if (isInk) stroke.fillColor else 0
+                                )
                             )
-                        )
+                        }
                     }
 
                     // Add inside pieces (the cut-out portion, selected)
-                    for (piece in split.insidePieces) {
-                        val pieceId = UUID.randomUUID().toString()
-                        selectedIds.add(pieceId)
-                        outStrokes.add(
-                            stroke.copy(
-                                id = pieceId,
-                                points = piece.points,
-                                pointPressures = piece.pressures,
-                                strokeType = if (isInk) stroke.strokeType else StrokeType.PEN,
-                                text = if (isInk) stroke.text else "",
-                                fillColor = if (isInk) stroke.fillColor else 0
+                    for (result in splitResults) {
+                        for (piece in result.insidePieces) {
+                            if (piece.points.size < 2 && stroke.points.size > 1) continue
+                            val pieceId = UUID.randomUUID().toString()
+                            selectedIds.add(pieceId)
+                            val resolved = resolvePiece(stroke, piece, result.comp.isDashed)
+                            outStrokes.add(
+                                stroke.copy(
+                                    id = pieceId,
+                                    points = resolved.points,
+                                    pointPressures = resolved.pressures,
+                                    strokeType = resolved.strokeType,
+                                    text = if (isInk) stroke.text else "",
+                                    fillColor = if (isInk) stroke.fillColor else 0
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }
@@ -491,4 +850,3 @@ object LassoCutEngine {
         )
     }
 }
-
