@@ -81,7 +81,7 @@ class MathGesture {
     var toolId: String? = null
     var zone: MathToolZone = MathToolZone.NONE
     var movedPx: Float = 0f
-    var pivot: Offset = Offset.Zero
+    var pivot: Offset? = null
     var draggingPositiveEnd: Boolean = true
     var startSpan: Float = 0f
     var startDist: Float = 0f
@@ -100,7 +100,7 @@ class MathGesture {
         toolId = null
         zone = MathToolZone.NONE
         movedPx = 0f
-        pivot = Offset.Zero
+        pivot = null
         draggingPositiveEnd = true
         startSpan = 0f
         startDist = 0f
@@ -661,6 +661,12 @@ private fun hitTestCompass(tool: PlacedMathTool, point: Offset): MathToolZone {
     val up = -perpendicular(tool.rotationDeg)
     val jointSize = 34f * scale
     val handleTop = hinge + up * (jointSize / 2f + 28f * scale)
+    val pencil = compassPencil(tool)
+
+    val pencilDir = pencil - hinge
+    val pencilLen = pencilDir.getDistance().coerceAtLeast(1f)
+    val pNorm = pencilDir / pencilLen
+    val clampPos = hinge + pNorm * (pencilLen * 0.50f)
 
     // 1. Close button (X) on right side of hinge
     val closeBtn = compassCloseBtn(tool)
@@ -678,20 +684,19 @@ private fun hitTestCompass(tool: PlacedMathTool, point: Offset): MathToolZone {
     val spreadBtn = compassSpreadBtn(tool)
     if (near(point, spreadBtn, touchR * 1.1f)) return MathToolZone.SPREAD
 
-    // 5. Pencil tip handle (🖊) at pencil tip
-    val pencil = compassPencil(tool)
-    if (near(point, pencil, touchR * 1.2f)) return MathToolZone.PENCIL
+    // 5. Pencil-shaped drawing pointer: tip & pencil body have drawing priority over MOVE
+    if (near(point, pencil, touchR * 1.35f)) return MathToolZone.PENCIL
+    if (distanceToSegment(point, clampPos, pencil) <= 32f * scale) return MathToolZone.PENCIL
 
-    // 6. Needle anchor point (left tip) -> MOVE
-    if (near(point, tool.center, touchR * 1.2f)) return MathToolZone.MOVE
+    // 6. Needle anchor point (left tip) -> MOVE (allows manually repositioning the center-point pointer)
+    if (near(point, tool.center, touchR * 1.3f)) return MathToolZone.MOVE
 
-    // 7. Touch anywhere on the compass body (hinge, handle, legs, or interior) -> MOVE smoothly across board!
+    // 7. Touch on upper compass body (hinge, handle, or needle leg) -> MOVE smoothly across board
     if (distanceToSegment(point, hinge, handleTop) <= 36f * scale) return MathToolZone.MOVE
     if (near(point, hinge, touchR * 1.5f)) return MathToolZone.MOVE
     if (distanceToSegment(point, hinge, tool.center) <= 36f * scale) return MathToolZone.MOVE
-    if (distanceToSegment(point, hinge, pencil) <= 36f * scale) return MathToolZone.MOVE
-    if (distanceToSegment(point, tool.center, pencil) <= 32f * scale) return MathToolZone.MOVE
-    if (pointInTriangle(point, hinge, tool.center, pencil)) return MathToolZone.MOVE
+    if (distanceToSegment(point, hinge, clampPos) <= 28f * scale) return MathToolZone.MOVE
+    if (pointInTriangle(point, hinge, tool.center, (tool.center + pencil) / 2f)) return MathToolZone.MOVE
 
     return MathToolZone.NONE
 }
@@ -699,38 +704,41 @@ private fun hitTestCompass(tool: PlacedMathTool, point: Offset): MathToolZone {
 private fun hitTestProtractor(tool: PlacedMathTool, point: Offset): MathToolZone {
     val local = toLocal(point, tool.center, tool.rotationDeg)
     val span = tool.span
-    val shelfH = (span * 0.22f).coerceIn(48f, 64f)
+    val shelfH = (span * 0.22f).coerceIn(48f, 68f)
     val btnY = shelfH * 0.5f
-    val btnR = (shelfH * 0.36f).coerceIn(16f, 24f)
-    val touchR = btnR * 1.35f
+    val btnR = (shelfH * 0.34f).coerceIn(16f, 22f)
+    val touchR = maxOf(btnR * 1.5f, 32f)
 
     // 1. Floating Outer Rotate Handle above top apex outside the arc
     val topRotatePos = Offset(0f, -span - 28f)
-    if (near(local, topRotatePos, touchR * 1.2f)) return MathToolZone.ROTATE
+    if (near(local, topRotatePos, minOf(touchR, 24f))) return MathToolZone.ROTATE
 
-    // 2. Bottom shelf buttons (from left to right):
-    val closePos = Offset(-0.75f * span, btnY)
-    if (near(local, closePos, touchR)) return MathToolZone.CLOSE
+    // 2. Red Close Circle: strictly confined to the red close button circle so clicking outside does not close it
+    val closePos = Offset(-span * 0.75f, btnY)
+    val closeR = btnR.coerceIn(12f, 18f)
+    if (near(local, closePos, closeR * 1.15f)) return MathToolZone.CLOSE
 
-    val mode1Pos = Offset(-0.45f * span, btnY)
-    if (near(local, mode1Pos, touchR)) return MathToolZone.ANGLE_MODE_1
+    // 3. Bottom shelf buttons (from left to right):
+    if (local.y in -6f..(shelfH + 16f) && abs(local.x) <= span + 24f) {
+        val relX = local.x / span
+        return when {
+            relX in -0.60f..-0.30f -> MathToolZone.ANGLE_MODE_1
+            relX in -0.30f..0.0f -> MathToolZone.ANGLE_MODE_ARC_LEFT
+            relX in 0.0f..0.30f -> MathToolZone.ANGLE_MODE_ARC
+            relX in 0.30f..0.60f -> MathToolZone.ANGLE_MODE_2
+            relX > 0.60f -> MathToolZone.SCALE
+            else -> MathToolZone.MOVE
+        }
+    }
 
-    val arcLeftPos = Offset(-0.15f * span, btnY)
-    if (near(local, arcLeftPos, touchR)) return MathToolZone.ANGLE_MODE_ARC_LEFT
-
-    val modeArcPos = Offset(0.15f * span, btnY)
-    if (near(local, modeArcPos, touchR)) return MathToolZone.ANGLE_MODE_ARC
-
-    val mode2Pos = Offset(0.45f * span, btnY)
-    if (near(local, mode2Pos, touchR)) return MathToolZone.ANGLE_MODE_2
-
-    val scalePos = Offset(0.75f * span, btnY)
-    if (near(local, scalePos, touchR)) return MathToolZone.SCALE
-
-    // 3. Interactive Pointer Arm handle tab on the arc
+    // 3. Interactive Pointer Arm handle tab on the arc (including head outside rim)
     val pRad = Math.toRadians(tool.pointerAngleDeg.toDouble()).toFloat()
-    val armTip = Offset(span * cos(pRad), -span * sin(pRad))
-    if (near(local, armTip, 36f)) return MathToolZone.ANGLE_ARM
+    val pDir = Offset(cos(pRad), -sin(pRad))
+    val armTip = pDir * span
+    val s = (span / defaultMathSpan(MathToolKind.PROTRACTOR)).coerceIn(0.40f, 3.5f)
+    val tabH = (32f * s).coerceIn(18f, 60f)
+    val armTabCenter = pDir * (span + tabH * 0.52f + 3f)
+    if (near(local, armTabCenter, maxOf(tabH * 0.8f, 34f)) || near(local, armTip, 36f)) return MathToolZone.ANGLE_ARM
 
     // 4. Baseline handle tabs at 0° and 180°
     val base0Tip = Offset(span, 0f)
@@ -952,8 +960,9 @@ fun shortestAngleDelta(fromDeg: Float, toDeg: Float): Float {
  * becomes an arc instead of a radius change.
  */
 fun dragCompassPencil(tool: PlacedMathTool, pointer: Offset, gesture: MathGesture): PlacedMathTool {
-    val angle = compassAngleDeg(tool, pointer)
-    val radius = hypot(pointer.x - tool.center.x, pointer.y - tool.center.y)
+    val anchoredCenter = gesture.pivot ?: tool.center
+    val angle = compassAngleDeg(tool.copy(center = anchoredCenter), pointer)
+    val radius = hypot(pointer.x - anchoredCenter.x, pointer.y - anchoredCenter.y)
         .coerceIn(COMPASS_MIN_RADIUS, COMPASS_MAX_RADIUS)
     if (!gesture.arcMode && gesture.movedPx > MATH_TAP_SLOP) {
         val radial = abs(radius - gesture.startSpan)
@@ -965,9 +974,9 @@ fun dragCompassPencil(tool: PlacedMathTool, pointer: Offset, gesture: MathGestur
     gesture.sweepDeg += shortestAngleDelta(gesture.lastAngleDeg, angle)
     gesture.lastAngleDeg = angle
     return if (gesture.arcMode) {
-        tool.copy(rotationDeg = angle, span = gesture.startSpan)
+        tool.copy(center = anchoredCenter, rotationDeg = angle, span = gesture.startSpan)
     } else {
-        tool.copy(rotationDeg = angle, span = radius)
+        tool.copy(center = anchoredCenter, rotationDeg = angle, span = radius)
     }
 }
 
@@ -977,6 +986,20 @@ fun compassArcScreenPoints(tool: PlacedMathTool, startDeg: Float, sweepDeg: Floa
         val deg = startDeg + sweepDeg * (index / steps.toFloat())
         val rad = deg / RAD_TO_DEG
         tool.center + Offset(cos(rad) * tool.span, sin(rad) * tool.span)
+    }
+}
+
+fun snapProtractorPointerAngle(rawDeg: Float): Float {
+    val c = rawDeg.coerceIn(0f, 180f)
+    return if (abs(c - 90f) <= 2.5f) {
+        90.0f
+    } else if (abs(c - 0f) <= 1.5f) {
+        0.0f
+    } else if (abs(c - 180f) <= 1.5f) {
+        180.0f
+    } else {
+        val near5 = kotlin.math.round(c / 5f) * 5f
+        if (abs(c - near5) <= 0.8f) near5 else kotlin.math.round(c * 10f) / 10f
     }
 }
 
@@ -1207,11 +1230,18 @@ private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxP
 
     // 1. Compass Legs
     val legW = 8f * scaleFactor
-    // Left leg (Needle leg)
+    // Left leg (Needle leg with prominent center-point pointer)
     drawLine(legColor, hinge, tool.center, strokeWidth = legW, cap = StrokeCap.Round)
-    // Needle point at bottom-left
-    drawLine(borderColor, tool.center - (hinge - tool.center) * 0.08f, tool.center, strokeWidth = 3.5f * scaleFactor, cap = StrokeCap.Round)
-    drawCircle(borderColor, 4.5f * scaleFactor, tool.center)
+    val needleDir = tool.center - hinge
+    val needleLen = needleDir.getDistance().coerceAtLeast(1f)
+    val nNorm = needleDir / needleLen
+    val needleBase = tool.center - nNorm * (18f * scaleFactor)
+    // Steel needle pin
+    drawLine(borderColor, needleBase, tool.center, strokeWidth = 3.5f * scaleFactor, cap = StrokeCap.Round)
+    // Center-point pointer target anchor: target ring & precision center dot
+    drawCircle(borderColor, 7f * scaleFactor, tool.center, style = DrawStroke(1.6f))
+    drawCircle(if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7), 3.5f * scaleFactor, tool.center)
+    drawCircle(Color.White, 1.5f * scaleFactor, tool.center)
 
     // Right leg (Pencil Leg)
     val pencilDir = (pencil - hinge)
@@ -1245,6 +1275,10 @@ private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxP
     val pLeftWood = pencilWoodTop - pPerp * (shaftWidth / 2f)
     val pRightWood = pencilWoodTop + pPerp * (shaftWidth / 2f)
 
+    val pencilBodyColor = if (isDark) Color(0xFFD97706) else Color(0xFFF59E0B)
+    val cedarWoodColor = if (isDark) Color(0xFFC2A278) else Color(0xFFE5C494)
+    val graphiteColor = if (isDark) Color(0xFF0F172A) else Color(0xFF1E293B)
+
     val pencilBodyPath = Path().apply {
         moveTo(pLeftTop.x, pLeftTop.y)
         lineTo(pRightTop.x, pRightTop.y)
@@ -1252,8 +1286,8 @@ private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxP
         lineTo(pLeftWood.x, pLeftWood.y)
         close()
     }
-    drawPath(pencilBodyPath, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0))
-    drawLine(if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1), pencilShaftTop, pencilWoodTop, strokeWidth = 2f * scaleFactor)
+    drawPath(pencilBodyPath, pencilBodyColor)
+    drawLine(if (isDark) Color(0xFFB45309) else Color(0xFFD97706), pencilShaftTop, pencilWoodTop, strokeWidth = 2f * scaleFactor)
 
     // Silver metal ferrule band
     val ferruleTop = pencilShaftTop - pNorm * (8f * scaleFactor)
@@ -1273,7 +1307,7 @@ private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxP
         lineTo(pencilLeadTop.x, pencilLeadTop.y)
         close()
     }
-    drawPath(woodConePath, if (isDark) Color(0xFF64748B) else Color(0xFFD1D5DB))
+    drawPath(woodConePath, cedarWoodColor)
 
     // Graphite lead tip
     val leadPath = Path().apply {
@@ -1284,7 +1318,7 @@ private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxP
         lineTo(pencil.x, pencil.y)
         close()
     }
-    drawPath(leadPath, borderColor)
+    drawPath(leadPath, graphiteColor)
 
     // 2. Central Hinge Block & Top Grip Handle
     val jointSize = 34f * scaleFactor
@@ -1353,10 +1387,18 @@ private fun DrawScope.drawCompassTool(tool: PlacedMathTool, isDark: Boolean, pxP
     drawButtonCircle(spreadBtn, btnR, borderColor, isDark)
     drawSpreadIcon(spreadBtn, btnR * 0.5f, iconColor)
 
-    // Pencil tip handle at bottom-right
-    val pencilBtn = pencil
-    drawButtonCircle(pencilBtn, btnR, borderColor, isDark)
-    drawPencilIcon(pencilBtn, btnR * 0.5f, iconColor)
+    // Pencil-shaped drawing pointer at pencil contact point
+    drawCircle(borderColor, 7.5f * scaleFactor, pencil, style = DrawStroke(1.6f))
+    drawCircle(if (isDark) Color(0xFFF59E0B) else Color(0xFFD97706), 3.5f * scaleFactor, pencil)
+    drawCircle(Color(0xFF0F172A), 1.8f * scaleFactor, pencil)
+    val tipFinL = pencil - pNorm * (11f * scaleFactor) - pPerp * (6f * scaleFactor)
+    val tipFinR = pencil - pNorm * (11f * scaleFactor) + pPerp * (6f * scaleFactor)
+    val finPath = Path().apply {
+        moveTo(tipFinL.x, tipFinL.y)
+        lineTo(pencil.x, pencil.y)
+        lineTo(tipFinR.x, tipFinR.y)
+    }
+    drawPath(finPath, borderColor, style = DrawStroke(1.8f, cap = StrokeCap.Round))
 }
 
 private fun DrawScope.drawSetSquareTool(tool: PlacedMathTool, isDark: Boolean, pxPerCm: Float) {
@@ -1518,54 +1560,63 @@ private fun DrawScope.drawProtractorTool(tool: PlacedMathTool, isDark: Boolean, 
         drawPath(bodyPath, bodyColor)
         drawPath(bodyPath, borderColor, style = DrawStroke(1.8f))
 
-        // 2. Concentric Arcs - neatly spaced lanes scaling with protractor size
-        val s = (span / defaultMathSpan(MathToolKind.PROTRACTOR)).coerceIn(0.85f, 3.5f)
-        val outerLaneH = 28f * s.coerceIn(1f, 1.8f)
-        val innerLaneH = 28f * s.coerceIn(1f, 1.8f)
-        val midR = span - outerLaneH
-        val inR = span - outerLaneH - innerLaneH
-        val hubR = span * 0.20f
+        // 2. Concentric Arcs - neatly spaced lanes matching reference protractor
+        val s = (span / defaultMathSpan(MathToolKind.PROTRACTOR)).coerceIn(0.40f, 3.5f)
+        val tickLaneH = (22f * s).coerceIn(16f, 44f)
+        val midR = span - tickLaneH
+        val numLaneH = (36f * s).coerceIn(24f, 64f)
+        val inR = midR - numLaneH
+        val hubR = span * 0.18f
 
-        drawArc(borderColor, 180f, 180f, false, topLeft = Offset(cx - span, cy - span), size = Size(span * 2f, span * 2f), style = DrawStroke(1.5f))
+        drawArc(borderColor, 180f, 180f, false, topLeft = Offset(cx - span, cy - span), size = Size(span * 2f, span * 2f), style = DrawStroke(1.6f))
         drawArc(borderColor, 180f, 180f, false, topLeft = Offset(cx - midR, cy - midR), size = Size(midR * 2f, midR * 2f), style = DrawStroke(1.1f))
         drawArc(borderColor, 180f, 180f, false, topLeft = Offset(cx - inR, cy - inR), size = Size(inR * 2f, inR * 2f), style = DrawStroke(1.1f))
-        drawArc(borderColor, 180f, 180f, false, topLeft = Offset(cx - hubR, cy - hubR), size = Size(hubR * 2f, hubR * 2f), style = DrawStroke(1.1f))
+        drawArc(borderColor, 180f, 180f, false, topLeft = Offset(cx - hubR, cy - hubR), size = Size(hubR * 2f, hubR * 2f), style = DrawStroke(1.3f))
 
         // 3. Baseline ruler edge & Origin crosshair
         drawLine(borderColor, Offset(cx - span, cy), Offset(cx + span, cy), strokeWidth = 1.8f)
-        drawLine(borderColor, Offset(cx, cy - 14f), Offset(cx, cy + 14f), strokeWidth = 1.4f)
-        drawCircle(borderColor, 4.5f, Offset(cx, cy))
-        drawCircle(if (isDark) Color(0xFF1E293B) else Color.White, 2.5f, Offset(cx, cy))
+        drawLine(borderColor, Offset(cx, cy - 14f * s), Offset(cx, cy + 14f * s), strokeWidth = 1.4f)
+        drawCircle(borderColor, 4.5f * s.coerceIn(0.8f, 1.5f), Offset(cx, cy))
+        drawCircle(if (isDark) Color(0xFF1E293B) else Color.White, 2.5f * s.coerceIn(0.8f, 1.5f), Offset(cx, cy))
 
-        // 4. Degree ticks & Non-overlapping dual numbers
+        // 4. Degree ticks & Radially rotated dual numbers matching reference image
+        val rOuter = midR - numLaneH * 0.28f
+        val rInner = midR - numLaneH * 0.72f
+        val degFontSize = (8.5f * s).coerceIn(7f, 20f)
+
         for (deg in 0..180) {
             val is10 = deg % 10 == 0
             val is5 = deg % 5 == 0
-            if (!is5 && span < 200f) continue
-            if (!is5 && deg % 2 != 0) continue
 
             val rad = Math.toRadians(deg.toDouble()).toFloat()
             val cosA = cos(rad)
             val sinA = sin(rad)
 
-            val tickLen = if (is10) (10f * s.coerceIn(1f, 1.6f)) else if (is5) (6f * s.coerceIn(1f, 1.6f)) else (4f * s.coerceIn(1f, 1.6f))
+            // Every degree line is shown (0° to 180°)
+            val tickLen = if (is10) tickLaneH else if (is5) tickLaneH * 0.65f else tickLaneH * 0.38f
             val pStart = Offset(cx + (span - tickLen) * cosA, cy - (span - tickLen) * sinA)
             val pEnd = Offset(cx + span * cosA, cy - span * sinA)
-            drawLine(tickCompose, pStart, pEnd, strokeWidth = if (is10) 1.5f else 1f)
+            val tickStroke = if (is10) 1.4f else if (is5) 1.0f else 0.85f
+            drawLine(tickCompose, pStart, pEnd, strokeWidth = tickStroke)
 
             if (is10) {
-                val gStart = Offset(cx + hubR * cosA, cy - hubR * sinA)
-                val gEnd = Offset(cx + (inR - 4f) * cosA, cy - (inR - 4f) * sinA)
-                drawLine(faintGuide, gStart, gEnd, strokeWidth = 1f)
+                // Crisp radial lines connecting every 10° down to the center semicircular hub
+                if (deg in 10..170) {
+                    val gStart = Offset(cx + hubR * cosA, cy - hubR * sinA)
+                    val gEnd = Offset(cx + inR * cosA, cy - inR * sinA)
+                    drawLine(borderColor.copy(alpha = if (isDark) 0.65f else 0.55f), gStart, gEnd, strokeWidth = 1.2f)
+                }
 
-                val degFontSize = (11f * s).coerceIn(10f, 20f)
-                // Outer scale (0° at right, 180° at left) - sits cleanly centered in outer lane [midR, span]
-                val rOuter = span - outerLaneH * 0.50f
-                drawLabel("$deg", Offset(cx + rOuter * cosA, cy - rOuter * sinA + 3f), tickColorInt, degFontSize, isBold = true)
+                // Radially rotated dual scale numbers (top of number faces outer rim, bottom faces center)
+                val rotDeg = 90f - deg
 
-                // Inner scale (180° at right, 0° at left) - sits cleanly centered in inner lane [inR, midR]
-                val rInner = span - outerLaneH - innerLaneH * 0.50f
-                drawLabel("${180 - deg}", Offset(cx + rInner * cosA, cy - rInner * sinA + 3f), tickColorInt, degFontSize, isBold = true)
+                // Outer scale: 0° at left (deg=180), 180° at right (deg=0) -> (180 - deg)
+                val posOuter = Offset(cx + rOuter * cosA, cy - rOuter * sinA)
+                drawCenteredRotatedLabel("${180 - deg}", posOuter, rotDeg, tickColorInt, degFontSize, isBold = true)
+
+                // Inner scale: 180° at left (deg=180), 0° at right (deg=0) -> deg
+                val posInner = Offset(cx + rInner * cosA, cy - rInner * sinA)
+                drawCenteredRotatedLabel("$deg", posInner, rotDeg, tickColorInt, degFontSize, isBold = true)
             }
         }
 
@@ -1626,39 +1677,40 @@ private fun DrawScope.drawProtractorTool(tool: PlacedMathTool, isDark: Boolean, 
         // 5d. Pointer Line from origin to current angle arm tip
         drawLine(borderColor, Offset(cx, cy), armTip, strokeWidth = 2.4f)
 
-        // 5e. Handle Tabs - placed slightly outside rim so degree markings remain completely visible
-        val tabW = (28f * (span / 260f).coerceIn(0.85f, 1.4f)).coerceIn(24f, 40f)
-        val tabH = (40f * (span / 260f).coerceIn(0.85f, 1.4f)).coerceIn(34f, 52f)
-        val tabRadius = CornerRadius(6f, 6f)
+        // 5e. Handle Tabs - black nip placed completely OUTSIDE rim so degree markings remain 100% visible
+        val tabW = (24f * s).coerceIn(14f, 48f)
+        val tabH = (32f * s).coerceIn(18f, 60f)
+        val tabRadius = CornerRadius(4f * s, 4f * s)
         val tabColor = if (isDark) Color(0xEE334155) else Color(0xEE0F172A)
 
-        val rightTip = Offset(cx + span + tabW * 0.35f, cy)
+        val rightTip = Offset(cx + span + tabW * 0.55f + 3f, cy)
         drawRoundRect(tabColor, topLeft = rightTip - Offset(tabW / 2f, tabH / 2f), size = Size(tabW, tabH), cornerRadius = tabRadius)
-        val leftTip = Offset(cx - span - tabW * 0.35f, cy)
+        val leftTip = Offset(cx - span - tabW * 0.55f - 3f, cy)
         drawRoundRect(tabColor, topLeft = leftTip - Offset(tabW / 2f, tabH / 2f), size = Size(tabW, tabH), cornerRadius = tabRadius)
-        val armTabCenter = Offset(cx, cy) + pDir * (span + tabH * 0.35f)
+        val armTabCenter = Offset(cx, cy) + pDir * (span + tabH * 0.52f + 3f)
         drawRoundRect(tabColor, topLeft = armTabCenter - Offset(tabW / 2f, tabH / 2f), size = Size(tabW, tabH), cornerRadius = tabRadius)
 
-        // 5f. Dual Angle Readout Badge in center - clear non-overlapping lines
-        val badgePos = Offset(cx, cy - span * 0.38f)
-        val pillW = 96f * s.coerceIn(1f, 2.2f)
-        val pillH = 50f * s.coerceIn(1f, 2.2f)
+        // 5f. Dual Angle Readout Badge in center - size dynamically scales with protractor
+        val badgePos = Offset(cx, cy - span * 0.40f)
+        val pillW = 138f * s
+        val pillH = 58f * s
+        val cornerR = 12f * s
         drawRoundRect(
             if (isDark) Color(0xEE1E293B) else Color(0xFAFFFFFF),
             topLeft = badgePos - Offset(pillW / 2f, pillH / 2f),
             size = Size(pillW, pillH),
-            cornerRadius = CornerRadius(pillH / 2f, pillH / 2f)
+            cornerRadius = CornerRadius(cornerR, cornerR)
         )
         drawRoundRect(
             borderColor,
             topLeft = badgePos - Offset(pillW / 2f, pillH / 2f),
             size = Size(pillW, pillH),
-            cornerRadius = CornerRadius(pillH / 2f, pillH / 2f),
-            style = DrawStroke(1.5f * s.coerceIn(1f, 2f))
+            cornerRadius = CornerRadius(cornerR, cornerR),
+            style = DrawStroke(1.5f * s.coerceIn(0.8f, 2f))
         )
-        val badgeFontSize = (13f * s).coerceIn(11f, 32f)
-        drawLabel(String.format(Locale.US, "R: %.1f°", pDeg), Offset(badgePos.x, badgePos.y - 10f * s.coerceIn(1f, 2f)), tickColorInt, badgeFontSize, isBold = true)
-        drawLabel(String.format(Locale.US, "L: %.1f°", 180f - pDeg), Offset(badgePos.x, badgePos.y + 10f * s.coerceIn(1f, 2f)), if (isDark) 0xFFCBD5E1.toInt() else 0xFF475569.toInt(), badgeFontSize, isBold = true)
+        val badgeFontSize = (12f * s).coerceIn(8f, 26f)
+        drawLabel(String.format(Locale.US, "R: %.1f°", pDeg), Offset(badgePos.x, badgePos.y - 10f * s), tickColorInt, badgeFontSize, isBold = true)
+        drawLabel(String.format(Locale.US, "L: %.1f°", 180f - pDeg), Offset(badgePos.x, badgePos.y + 12f * s), if (isDark) 0xFFCBD5E1.toInt() else 0xFF475569.toInt(), badgeFontSize, isBold = true)
 
         // 6. Bottom Shelf Buttons
         val btnY = cy + shelfH * 0.5f
@@ -1963,6 +2015,36 @@ private fun DrawScope.drawLabel(
         at.y,
         paint
     )
+}
+
+private fun DrawScope.drawCenteredRotatedLabel(
+    text: String,
+    at: Offset,
+    rotationDeg: Float,
+    color: Int,
+    textSize: Float,
+    isBold: Boolean = true
+) {
+    val displayScale = 1.45f
+    val paint = Paint().apply {
+        this.color = color
+        this.textSize = textSize * displayScale
+        this.isAntiAlias = true
+        this.isFakeBoldText = isBold
+        this.typeface = if (isBold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        this.textAlign = Paint.Align.CENTER
+    }
+    val fontMetrics = paint.fontMetrics
+    val yCenterOffset = -(fontMetrics.ascent + fontMetrics.descent) / 2f
+    drawContext.canvas.nativeCanvas.save()
+    drawContext.canvas.nativeCanvas.rotate(rotationDeg, at.x, at.y)
+    drawContext.canvas.nativeCanvas.drawText(
+        text,
+        at.x,
+        at.y + yCenterOffset,
+        paint
+    )
+    drawContext.canvas.nativeCanvas.restore()
 }
 
 fun DrawScope.drawMathReadout(text: String, at: Offset) {

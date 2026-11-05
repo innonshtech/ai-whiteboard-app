@@ -1992,36 +1992,7 @@ class CanvasViewModel @Inject constructor(
         val isCurrentMindmap = current.isNotEmpty() && strokes.any { it.id in current && (isMindMapNode(it) || it.strokeType == StrokeType.CONNECTOR) }
         val finalSelection = if (addToExisting && isCurrentMindmap) current + newConnected else newConnected
 
-        val vpW = if (viewportWidth > 1f) viewportWidth else 1920f
-        val vpH = if (viewportHeight > 1f) viewportHeight else 1080f
-        val selectedNodes = strokes.filter { it.id in finalSelection && isMindMapNode(it) }
-
-        if (selectedNodes.isNotEmpty()) {
-            val minX = selectedNodes.minOf { it.bounds.left }
-            val maxX = selectedNodes.maxOf { it.bounds.right }
-            val minY = selectedNodes.minOf { it.bounds.top }
-            val maxY = selectedNodes.maxOf { it.bounds.bottom }
-
-            val selWidth = (maxX - minX).coerceAtLeast(100f)
-            val selHeight = (maxY - minY).coerceAtLeast(100f)
-            val availW = (vpW - 100f).coerceAtLeast(200f)
-            val availH = (vpH - 180f).coerceAtLeast(200f)
-
-            var targetScale = _state.value.scale
-            if (selWidth * targetScale > availW || selHeight * targetScale > availH) {
-                targetScale = minOf(availW / selWidth, availH / selHeight).coerceIn(0.2f, 1.0f)
-            }
-
-            val selCenterWorldX = (minX + maxX) / 2f
-            val selCenterWorldY = (minY + maxY) / 2f
-
-            val adjOffsetX = (vpW / 2f) - selCenterWorldX * targetScale
-            val adjOffsetY = (vpH / 2f) - selCenterWorldY * targetScale
-
-            _state.update { it.copy(selectedStrokeIds = finalSelection, scale = targetScale, offsetX = adjOffsetX, offsetY = adjOffsetY) }
-        } else {
-            _state.update { it.copy(selectedStrokeIds = finalSelection) }
-        }
+        _state.update { it.copy(selectedStrokeIds = finalSelection) }
     }
 
     fun getScreenWorldBounds(): Rect {
@@ -2467,11 +2438,16 @@ class CanvasViewModel @Inject constructor(
         scheduleSave()
     }
 
-    fun commitProtractorAngle(tag: String, newStrokes: List<Stroke>) {
+    fun commitProtractorAngle(newStrokes: List<Stroke>) {
+        if (newStrokes.isEmpty()) return
         saveToUndoStack()
         _state.update { s ->
+            val updatedStrokes = s.strokes + newStrokes
+            if (activePage in pages.indices) {
+                pages[activePage] = updatedStrokes
+            }
             s.copy(
-                strokes = s.strokes + newStrokes.map { it.copy(linkToId = tag) },
+                strokes = updatedStrokes,
                 canUndo = true,
                 canRedo = false
             )
@@ -2479,6 +2455,10 @@ class CanvasViewModel @Inject constructor(
         redoActionStack.clear()
         redoStack.clear()
         scheduleSave()
+    }
+
+    fun commitProtractorAngle(tag: String, newStrokes: List<Stroke>) {
+        commitProtractorAngle(newStrokes)
     }
 
     fun resizeStrokeWithInitialBounds(id: String, hit: ShapeHandleHit, point: Offset, initialBounds: Rect) {
@@ -4360,8 +4340,12 @@ class CanvasViewModel @Inject constructor(
             if (container != null) stroke.copy(linkToId = container.id) else stroke
         } else stroke
         _state.update { s ->
+            val updated = s.strokes + finalStroke
+            if (activePage in pages.indices) {
+                pages[activePage] = updated
+            }
             s.copy(
-                strokes = s.strokes + finalStroke,
+                strokes = updated,
                 currentStroke = null,
                 canUndo = true,
                 canRedo = false
