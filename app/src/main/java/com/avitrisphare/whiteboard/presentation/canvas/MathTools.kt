@@ -47,7 +47,9 @@ enum class MathToolZone {
     SIDE_2_PENCIL,
     SIDE_3_PENCIL,
     DRAW_MODE_TOGGLE,
-    FLIP_HORIZONTAL
+    FLIP_HORIZONTAL,
+    RULER_UNIT_DROPDOWN,
+    RULER_RESET_ROTATE
 }
 
 data class PlacedMathTool(
@@ -61,7 +63,8 @@ data class PlacedMathTool(
     val pointerAngleDeg: Float = 90f,
     val angleMode: Int = 0,
     val isDrawMode: Boolean = false,
-    val isFlippedHorizontal: Boolean = false
+    val isFlippedHorizontal: Boolean = false,
+    val rulerUnit: String = "cm"
 )
 
 /** Size, rotation, or protractor arm sent from the Geometry panel. Null fields stay as they are. */
@@ -398,18 +401,26 @@ private fun hitTestRuler(tool: PlacedMathTool, point: Offset): MathToolZone {
     val half = tool.span / 2f
     val halfT = RULER_THICKNESS / 2f
 
+    // Bottom-right ruler controls: [↺] Reset Rotate, [X] Close, [cm ▼] Unit Dropdown
+    val btnY = halfT - 22f
+    val rotateBtnCenter = Offset(half - 22f, btnY)
+    val closeBtnCenter = Offset(half - 54f, btnY)
+
+    if (near(local, rotateBtnCenter, 20f)) {
+        return MathToolZone.RULER_RESET_ROTATE
+    }
+    if (near(local, closeBtnCenter, 20f) || near(local, Offset(half - 24f, -halfT + 22f), 20f)) {
+        return MathToolZone.CLOSE
+    }
+    if (local.x in (half - 150f)..(half - 74f) && local.y in 4f..(halfT + 12f)) {
+        return MathToolZone.RULER_UNIT_DROPDOWN
+    }
+
     val distToTopEdge = abs(local.y - (-halfT))
     val distToBottomEdge = abs(local.y - halfT)
     val isNearDrawingEdge = (distToTopEdge <= RULER_EDGE_SLOP || distToBottomEdge <= RULER_EDGE_SLOP) &&
         abs(local.x) <= half + RULER_EDGE_SLOP &&
         abs(local.y) >= 20f
-
-    // Close button (top right inside ruler) - safe area check:
-    // Only triggers when tapping inside ruler body, never when drawing along top edge
-    val closeBtnCenter = Offset(half - 24f, -halfT + 22f)
-    if (near(local, closeBtnCenter, 20f) && distToTopEdge > 10f) {
-        return MathToolZone.CLOSE
-    }
 
     // If touching near the top edge or bottom edge (where ticks and numbers are),
     // always return NONE so straightedge line drawing triggers seamlessly!
@@ -563,23 +574,22 @@ fun snapToRulerEdge(
                 val inset = RULER_INSET
                 val zeroX = -half + inset
                 val maxMarkX = half - inset
-                val mmPx = pxPerCm / 10f
+                val unit = tool.rulerUnit.lowercase()
+                val tickStepPx = when (unit) {
+                    "inch", "in" -> (pxPerCm * 2.54f) / 16f
+                    else -> pxPerCm / 10f
+                }
 
+                // Strictly clamp to scale: never start or draw below zero, never past max mark
                 if (clampedX <= zeroX) {
                     clampedX = zeroX
                 } else if (clampedX >= maxMarkX) {
                     clampedX = maxMarkX
-                } else if (mmPx >= 1.5f) {
+                } else if (tickStepPx >= 1.5f) {
                     val relX = clampedX - zeroX
-                    val nearestMm = (relX / mmPx).roundToInt()
-                    val tickX = zeroX + nearestMm * mmPx
-                    val isCm = nearestMm % 10 == 0
-                    val isHalf = nearestMm % 5 == 0
-                    val snapThreshold = when {
-                        isCm -> 6.0f
-                        isHalf -> 4.5f
-                        else -> 3.2f
-                    }
+                    val nearestTick = (relX / tickStepPx).roundToInt()
+                    val tickX = zeroX + nearestTick * tickStepPx
+                    val snapThreshold = 4.5f
                     if (abs(clampedX - tickX) <= snapThreshold) {
                         clampedX = tickX.coerceIn(zeroX, maxMarkX)
                     }
@@ -1034,10 +1044,25 @@ fun droppedOnToolbar(fingerInRoot: Offset, dockInRoot: Rect?): Boolean {
     return dockInRoot.inflate(28f).contains(fingerInRoot)
 }
 
-fun formatCentimetres(screenPx: Float, pxPerCm: Float): String {
-    val cm = screenPx / pxPerCm.coerceAtLeast(1f)
-    return String.format(Locale.US, "%.1f cm", cm)
+fun formatMeasurement(screenPx: Float, pxPerCm: Float, unit: String): String {
+    val safe = pxPerCm.coerceAtLeast(1f)
+    return when (unit.lowercase()) {
+        "mm" -> {
+            val mm = (screenPx / safe) * 10f
+            String.format(Locale.US, "%.0f mm", mm)
+        }
+        "inch", "in" -> {
+            val inches = screenPx / (safe * 2.54f)
+            String.format(Locale.US, "%.2f in", inches)
+        }
+        else -> {
+            val cm = screenPx / safe
+            String.format(Locale.US, "%.1f cm", cm)
+        }
+    }
 }
+
+fun formatCentimetres(screenPx: Float, pxPerCm: Float): String = formatMeasurement(screenPx, pxPerCm, "cm")
 
 fun formatDegrees(angle: Float): String = "${angle.roundToInt().coerceIn(0, 180)}°"
 
@@ -1153,43 +1178,98 @@ private fun DrawScope.drawRulerTool(
             )
         }
 
-        // Ticks and centimeter numbers along both edges
-        val mm = (pxPerCm / 10f).coerceAtLeast(1.5f)
+        // Ticks and numbers along edge according to active measurement unit (cm, mm, inch)
+        val unit = tool.rulerUnit.lowercase()
         val inset = RULER_INSET
         val x0 = left + inset
         val usableWidth = (length - 2 * inset).coerceAtLeast(0f)
-        val totalMm = (usableWidth / mm).toInt()
+        val capacityText: String
 
-        for (index in 0..totalMm) {
-            val x = x0 + index * mm
-            val isCm = index % 10 == 0
-            val isHalf = index % 5 == 0
-            val tickHeight = when {
-                isCm -> thickness * 0.36f
-                isHalf -> thickness * 0.24f
-                else -> thickness * 0.14f
+        when (unit) {
+            "mm" -> {
+                val mmPx = (pxPerCm / 10f).coerceAtLeast(1.5f)
+                val totalMm = (usableWidth / mmPx).toInt()
+                capacityText = "$totalMm mm"
+
+                for (index in 0..totalMm) {
+                    val x = x0 + index * mmPx
+                    val is10mm = index % 10 == 0
+                    val is5mm = index % 5 == 0
+                    val tickHeight = when {
+                        is10mm -> 20f
+                        is5mm -> 14f
+                        else -> 8f
+                    }
+                    val width = if (is10mm) 1.8f else 1f
+                    val curColor = if (is10mm) Color(tick) else Color(tickSubtle)
+                    drawLine(curColor, Offset(x, top + 2f), Offset(x, top + 2f + tickHeight), width)
+
+                    if (is10mm) {
+                        val numFontSize = (12f * s).coerceIn(10.5f, 22f)
+                        drawLabel("$index", Offset(x, top + 45f), tick, numFontSize, isBold = true)
+                    }
+                }
             }
-            val width = if (isCm) 1.8f else 1f
-            val curColor = if (isCm) Color(tick) else Color(tickSubtle)
-            // Top edge ticks
-            drawLine(curColor, Offset(x, top + 2f), Offset(x, top + 2f + tickHeight), width)
-            // Bottom edge ticks
-            drawLine(curColor, Offset(x, top + thickness - 2f), Offset(x, top + thickness - 2f - tickHeight), width)
+            "inch", "in" -> {
+                val pxPerInch = pxPerCm * 2.54f
+                val subPx = (pxPerInch / 16f).coerceAtLeast(1.5f)
+                val totalSubs = (usableWidth / subPx).toInt()
+                val totalInches = totalSubs / 16f
+                capacityText = String.format(Locale.US, "%.1f in", totalInches)
 
-            if (isCm) {
-                val cmVal = index / 10
-                val cmFontSize = (14f * s).coerceIn(12.5f, 32f)
-                drawLabel("$cmVal", Offset(x, top + thickness / 2f + 5f), tick, cmFontSize, isBold = true)
-                if (cmVal == 0) {
-                    val unitFontSize = (11f * s).coerceIn(9.5f, 24f)
-                    drawLabel("cm", Offset(x + 14f * s.coerceIn(1f, 1.8f), top + thickness / 2f + 5f), tickSubtle, unitFontSize, isBold = true)
+                for (index in 0..totalSubs) {
+                    val x = x0 + index * subPx
+                    val isInch = index % 16 == 0
+                    val isHalf = index % 8 == 0
+                    val isQuarter = index % 4 == 0
+                    val isEighth = index % 2 == 0
+                    val tickHeight = when {
+                        isInch -> 20f
+                        isHalf -> 15f
+                        isQuarter -> 12f
+                        isEighth -> 9f
+                        else -> 7f
+                    }
+                    val width = if (isInch) 1.8f else 1f
+                    val curColor = if (isInch) Color(tick) else Color(tickSubtle)
+                    drawLine(curColor, Offset(x, top + 2f), Offset(x, top + 2f + tickHeight), width)
+
+                    if (isInch) {
+                        val inchVal = index / 16
+                        val numFontSize = (13f * s).coerceIn(11.5f, 24f)
+                        drawLabel("$inchVal", Offset(x, top + 45f), tick, numFontSize, isBold = true)
+                    }
+                }
+            }
+            else -> { // "cm" default
+                val mmPx = (pxPerCm / 10f).coerceAtLeast(1.5f)
+                val totalMm = (usableWidth / mmPx).toInt()
+                val capacityCm = totalMm / 10f
+                capacityText = String.format(Locale.US, "%.1f cm", capacityCm)
+
+                for (index in 0..totalMm) {
+                    val x = x0 + index * mmPx
+                    val isCm = index % 10 == 0
+                    val isHalf = index % 5 == 0
+                    val tickHeight = when {
+                        isCm -> 20f
+                        isHalf -> 14f
+                        else -> 8f
+                    }
+                    val width = if (isCm) 1.8f else 1f
+                    val curColor = if (isCm) Color(tick) else Color(tickSubtle)
+                    drawLine(curColor, Offset(x, top + 2f), Offset(x, top + 2f + tickHeight), width)
+
+                    if (isCm) {
+                        val cmVal = index / 10
+                        val cmFontSize = (13.5f * s).coerceIn(11.5f, 26f)
+                        drawLabel("$cmVal", Offset(x, top + 45f), tick, cmFontSize, isBold = true)
+                    }
                 }
             }
         }
 
         // Length readout label above ruler matching exact usable markings
-        val capacityCm = totalMm / 10f
-        val capacityText = String.format(Locale.US, "%.1f cm", capacityCm)
         val rulerTitle = "Ruler  •  $capacityText"
         drawLabel(rulerTitle, Offset(tool.center.x, top - 22f * s.coerceIn(1f, 1.5f)), tick, (15f * s).coerceIn(13f, 32f), isBold = true)
 
@@ -1197,9 +1277,63 @@ private fun DrawScope.drawRulerTool(
             drawLabel(segmentLabel, Offset(tool.center.x, top + thickness + 24f * s.coerceIn(1f, 1.5f)), tick, (14f * s).coerceIn(12f, 30f), isBold = true)
         }
 
-        // Close button (×) at top-right inside ruler
-        val closeCenter = Offset(left + length - 24f, top + 22f)
-        drawStandardCloseButton(closeCenter, 12f, isDark)
+        // Bottom-Right Controls Bar: [cm ▼] [X] [↺]
+        val btnY = top + thickness - 22f
+
+        // 1. Reset / Rotate icon [↺] (center at left + length - 22f)
+        val rotCenter = Offset(left + length - 22f, btnY)
+        drawCircle(Color(0xFFC04B37), 13f, rotCenter)
+        drawArc(
+            color = Color.White,
+            startAngle = 35f,
+            sweepAngle = 270f,
+            useCenter = false,
+            topLeft = Offset(rotCenter.x - 6.5f, rotCenter.y - 6.5f),
+            size = Size(13f, 13f),
+            style = DrawStroke(1.8f)
+        )
+        val arrowHead = Path().apply {
+            moveTo(rotCenter.x + 5.5f, rotCenter.y - 4.5f)
+            lineTo(rotCenter.x + 8.5f, rotCenter.y)
+            lineTo(rotCenter.x + 2.5f, rotCenter.y + 1f)
+            close()
+        }
+        drawPath(arrowHead, Color.White)
+
+        // 2. Red Close Button [X] (center at left + length - 54f)
+        val closeCenter = Offset(left + length - 54f, btnY)
+        drawRoundRect(
+            color = Color(0xFFD93829),
+            topLeft = Offset(closeCenter.x - 11f, closeCenter.y - 11f),
+            size = Size(22f, 22f),
+            cornerRadius = CornerRadius(4f, 4f)
+        )
+        val xSize = 5f
+        drawLine(Color.White, Offset(closeCenter.x - xSize, closeCenter.y - xSize), Offset(closeCenter.x + xSize, closeCenter.y + xSize), strokeWidth = 2f)
+        drawLine(Color.White, Offset(closeCenter.x - xSize, closeCenter.y + xSize), Offset(closeCenter.x + xSize, closeCenter.y - xSize), strokeWidth = 2f)
+
+        // 3. Unit Dropdown Button [cm ▼] (around left + length - 110f)
+        val unitLabel = when (unit) {
+            "mm" -> "mm"
+            "inch", "in" -> "inch"
+            else -> "cm"
+        }
+        val unitTextX = left + length - 110f
+        drawLabel(unitLabel, Offset(unitTextX - 8f, btnY + 4f), tick, 15f, isBold = true)
+        val triX = unitTextX + (if (unitLabel == "inch") 20f else 15f)
+        val arrowTriangle = Path().apply {
+            moveTo(triX, btnY - 2f)
+            lineTo(triX + 8f, btnY - 2f)
+            lineTo(triX + 4f, btnY + 4f)
+            close()
+        }
+        drawPath(arrowTriangle, Color(tick))
+
+        // 4. Live measurement readout if drawing/measuring along edge (e.g. 0.0)
+        if (segmentLabel != null) {
+            val numOnly = segmentLabel.replace(Regex("[^0-9.]"), "")
+            drawLabel(numOnly.ifEmpty { "0.0" }, Offset(unitTextX - 44f, btnY + 4f), 0xFFEA580C.toInt(), 15f, isBold = true)
+        }
 
         // Rotation & extension handles at both ends
         listOf(Offset(left, tool.center.y), Offset(left + length, tool.center.y)).forEach { handleCenter ->
