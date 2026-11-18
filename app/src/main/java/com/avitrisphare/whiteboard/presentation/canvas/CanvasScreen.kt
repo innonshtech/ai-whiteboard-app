@@ -1492,6 +1492,7 @@ fun CanvasScreen(
     var mathGhost by remember { mutableStateOf<PlacedMathTool?>(null) }
     var mathReadout by remember { mutableStateOf<Pair<String, Offset>?>(null) }
     var rulerLivePreview by remember { mutableStateOf<Pair<Offset, Offset>?>(null) }
+    var rulerUnitMenuState by remember { mutableStateOf<Pair<String, Offset>?>(null) }
     var shapePrompt by remember { mutableStateOf<ShapePrompt?>(null) }
     var shapePromptVisible by remember { mutableStateOf(false) }
 
@@ -2255,11 +2256,23 @@ fun CanvasScreen(
                             val tool = mathHit.tool
                             if (mathHit.zone == MathToolZone.CLOSE) {
                                 removeMathTool(tool.id)
+                                rulerUnitMenuState = null
                                 val toolName = tool.kind.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
                                 Toast.makeText(context, "$toolName closed", Toast.LENGTH_SHORT).show()
                                 mathGesture.reset()
+                            } else if (mathHit.zone == MathToolZone.RULER_RESET_ROTATE) {
+                                replaceMathTool(tool.copy(rotationDeg = 0f))
+                                mathGesture.reset()
+                            } else if (mathHit.zone == MathToolZone.RULER_UNIT_DROPDOWN) {
+                                val half = tool.span / 2f
+                                val halfT = 48f
+                                val localBtn = Offset(half - 110f, halfT - 22f)
+                                val screenPos = toCanvasPoint(localBtn, tool.center, tool.rotationDeg)
+                                rulerUnitMenuState = if (rulerUnitMenuState?.first == tool.id) null else (tool.id to screenPos)
+                                mathGesture.reset()
                             } else {
-                            mathGesture.toolId = tool.id
+                                rulerUnitMenuState = null
+                                mathGesture.toolId = tool.id
                             mathGesture.zone = mathHit.zone
                             mathGesture.draggingPositiveEnd = mathHit.zone == MathToolZone.ROTATE_POSITIVE
                             if (mathHit.zone == MathToolZone.ROTATE_POSITIVE || mathHit.zone == MathToolZone.ROTATE_NEGATIVE) {
@@ -2311,7 +2324,7 @@ fun CanvasScreen(
                             mathGesture.drawDir = direction(straightedge.rotationDeg)
                             mathGesture.rulerEdgeSign = rulerEdgeForPoint(straightedge, down.position)
 
-                            val snappedStartScreen = snapToRulerEdge(straightedge, down.position, mathGesture.rulerEdgeSign)
+                            val snappedStartScreen = snapToRulerEdge(straightedge, down.position, mathGesture.rulerEdgeSign, pxPerCm)
                             val snappedStartWorld = CanvasTransform.screenToWorld(
                                 snappedStartScreen,
                                 canvasScale,
@@ -2333,7 +2346,8 @@ fun CanvasScreen(
                             rulerLivePreview = snappedStartScreen to snappedStartScreen
                             val perp = perpendicular(straightedge.rotationDeg)
                             val readoutPos = snappedStartScreen + perp * (mathGesture.rulerEdgeSign * 38f)
-                            mathReadout = "Line: 0.0 cm" to readoutPos
+                            val initialReadout = formatMeasurement(0f, pxPerCm, straightedge.rulerUnit)
+                            mathReadout = "Line: $initialReadout" to readoutPos
                         }
 
                         if (state.selectedStrokeIds.isNotEmpty() && activeTool != WhiteboardTool.SELECT && activeTool != WhiteboardTool.LASSO && !erasing) {
@@ -2770,7 +2784,7 @@ fun CanvasScreen(
                                     replaceMathTool(updated)
                                     if (updated.kind == MathToolKind.RULER) {
                                         val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
-                                        mathReadout = "${formatCentimetres(updated.span, pxPerCm)} - ${deg}\u00B0" to centroid + Offset(0f, -42f)
+                                        mathReadout = "${formatMeasurement(updated.span, pxPerCm, updated.rulerUnit)} - ${deg}\u00B0" to centroid + Offset(0f, -42f)
                                     } else {
                                         mathReadout = null
                                     }
@@ -2998,7 +3012,7 @@ fun CanvasScreen(
                                                     replaceMathTool(updated)
                                                     val deg = ((updated.rotationDeg % 360f + 360f) % 360f).roundToInt()
                                                     val text = if (tool.kind == MathToolKind.RULER) {
-                                                        "${formatCentimetres(updated.span, pxPerCm)} \u2022 $deg\u00B0"
+                                                        "${formatMeasurement(updated.span, pxPerCm, updated.rulerUnit)} \u2022 $deg\u00B0"
                                                     } else {
                                                         "$deg\u00B0"
                                                     }
@@ -3054,14 +3068,14 @@ fun CanvasScreen(
                                                         replaceMathTool(tool.copy(span = newSpan))
                                                     }
                                                 }
-                                                MathToolZone.CLOSE, MathToolZone.DRAW_MODE_TOGGLE, MathToolZone.FLIP_HORIZONTAL, MathToolZone.ANGLE_MODE_1, MathToolZone.ANGLE_MODE_ARC_LEFT, MathToolZone.ANGLE_MODE_ARC, MathToolZone.ANGLE_MODE_2, MathToolZone.SIDE_1_PENCIL, MathToolZone.SIDE_2_PENCIL, MathToolZone.SIDE_3_PENCIL, MathToolZone.NONE -> Unit
+                                                MathToolZone.CLOSE, MathToolZone.RULER_RESET_ROTATE, MathToolZone.RULER_UNIT_DROPDOWN, MathToolZone.DRAW_MODE_TOGGLE, MathToolZone.FLIP_HORIZONTAL, MathToolZone.ANGLE_MODE_1, MathToolZone.ANGLE_MODE_ARC_LEFT, MathToolZone.ANGLE_MODE_ARC, MathToolZone.ANGLE_MODE_2, MathToolZone.SIDE_1_PENCIL, MathToolZone.SIDE_2_PENCIL, MathToolZone.SIDE_3_PENCIL, MathToolZone.NONE -> Unit
                                             }
                                         }
                                     } else if (mathGesture.rulerDrawing) {
                                         val ruler = mathTools.find { it.id == mathGesture.toolId }
                                         if (ruler != null && shapePoints.isNotEmpty()) {
                                             val snappedStartWorld = shapePoints.first()
-                                            val snappedCurrentScreen = snapToRulerEdge(ruler, change.position, mathGesture.rulerEdgeSign)
+                                            val snappedCurrentScreen = snapToRulerEdge(ruler, change.position, mathGesture.rulerEdgeSign, pxPerCm)
                                             val snappedCurrentWorld = CanvasTransform.screenToWorld(
                                                 snappedCurrentScreen,
                                                 canvasScale,
@@ -3091,7 +3105,7 @@ fun CanvasScreen(
                                             rulerLivePreview = snappedStartScreen to snappedCurrentScreen
 
                                             val segLengthPx = (snappedCurrentScreen - snappedStartScreen).getDistance()
-                                            val lengthText = formatCentimetres(segLengthPx, pxPerCm)
+                                            val lengthText = formatMeasurement(segLengthPx, pxPerCm, ruler.rulerUnit)
 
                                             val midScreen = (snappedStartScreen + snappedCurrentScreen) / 2f
                                             val readoutPos = if (ruler.kind == MathToolKind.RULER) {
@@ -3490,7 +3504,8 @@ fun CanvasScreen(
                                 val labelOffsetWorld = normal * (38f / canvasScale.coerceAtLeast(0.001f))
                                 val labelAt = mid + labelOffsetWorld
 
-                                val lengthText = formatCentimetres(lengthPx, pxPerCm)
+                                val currentRuler = mathTools.find { it.id == mathGesture.toolId }
+                                val lengthText = formatMeasurement(lengthPx, pxPerCm, currentRuler?.rulerUnit ?: "cm")
                                 val labelColor = if (state.selectedColor != 0) state.selectedColor else (if (state.isDarkCanvas) 0xFFFFFFFF.toInt() else 0xFF0F172A.toInt())
 
                                 var angleDeg = Math.toDegrees(kotlin.math.atan2(lineVec.y.toDouble(), lineVec.x.toDouble())).toFloat()
@@ -7143,6 +7158,70 @@ fun CanvasScreen(
                 quickTranslateState = quickTranslateState.copy(isVisible = false)
             }
         )
+    }
+
+    val currentRulerMenu = rulerUnitMenuState
+    if (currentRulerMenu != null) {
+        val (toolId, screenPos) = currentRulerMenu
+        val tool = mathTools.find { it.id == toolId }
+        if (tool != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(toolId) { detectTapGestures { rulerUnitMenuState = null } }
+            ) {
+                val density = LocalDensity.current
+                val menuW = 84.dp
+                val menuWPx = with(density) { menuW.toPx() }
+                val menuHPx = with(density) { 142.dp.toPx() }
+                val posX = (screenPos.x - menuWPx / 2f).coerceIn(16f, (canvasSize.width - menuWPx - 16f).coerceAtLeast(16f))
+                val posY = (screenPos.y - menuHPx - 8f).coerceIn(16f, (canvasSize.height - menuHPx - 16f).coerceAtLeast(16f))
+
+                Surface(
+                    modifier = Modifier
+                        .offset { IntOffset(posX.roundToInt(), posY.roundToInt()) }
+                        .width(menuW),
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (state.isDarkCanvas) Color(0xFF1E293B) else Color(0xFFFAFAFA),
+                    shadowElevation = 8.dp,
+                    border = BorderStroke(1.dp, if (state.isDarkCanvas) Color(0xFF475569) else Color(0xFFE2E8F0))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        for (unit in listOf("cm", "mm", "inch")) {
+                            val isSelected = tool.rulerUnit.equals(unit, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        replaceMathTool(tool.copy(rulerUnit = unit))
+                                        rulerUnitMenuState = null
+                                    }
+                                    .background(
+                                        if (isSelected) (if (state.isDarkCanvas) Color(0x3338BDF8) else Color(0x220284C7))
+                                        else Color.Transparent
+                                    )
+                                    .padding(vertical = 10.dp, horizontal = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = unit,
+                                    fontSize = 17.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) {
+                                        if (state.isDarkCanvas) Color(0xFF38BDF8) else Color(0xFF0284C7)
+                                    } else {
+                                        if (state.isDarkCanvas) Color(0xFFF1F5F9) else Color(0xFF0F172A)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
     }
 }
