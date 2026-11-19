@@ -107,6 +107,10 @@ object WhiteboardExportManager {
         splitCount: Int = 1,
         splitWeights: List<Float> = emptyList(),
         splitPanes: List<CanvasPane>? = null,
+        pageTitles: List<String> = emptyList(),
+        pageBackgroundKeys: List<String> = emptyList(),
+        pageCustomBackgroundUris: List<String> = emptyList(),
+        pageCustomBackgroundColors: List<Int?> = emptyList(),
         format: ExportFormat,
         destination: ExportDestination,
         onProgress: (Float, String) -> Unit = { _, _ -> }
@@ -156,8 +160,9 @@ object WhiteboardExportManager {
                 totalExportedPages = totalImages
                 pngFile
             }
-            ExportFormat.IWB -> {
-                exportIwb(
+            ExportFormat.GSH -> {
+                exportGsh(
+                    context = context,
                     safeTitle = safeTitle,
                     timestamp = timestamp,
                     lessonTitle = lessonTitle,
@@ -173,6 +178,10 @@ object WhiteboardExportManager {
                     splitCount = splitCount,
                     splitWeights = splitWeights,
                     splitPanes = splitPanes,
+                    pageTitles = pageTitles,
+                    pageBackgroundKeys = pageBackgroundKeys,
+                    pageCustomBackgroundUris = pageCustomBackgroundUris,
+                    pageCustomBackgroundColors = pageCustomBackgroundColors,
                     exportDir = exportDir,
                     onProgress = onProgress
                 )
@@ -733,6 +742,168 @@ object WhiteboardExportManager {
         onProgress = onProgress
     )
 
+    private fun encodeBase64(bytes: ByteArray): String {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            java.util.Base64.getEncoder().encodeToString(bytes)
+        } else {
+            android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+        }
+    }
+
+    private fun decodeBase64(str: String): ByteArray {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            java.util.Base64.getDecoder().decode(str.trim())
+        } else {
+            android.util.Base64.decode(str.trim(), android.util.Base64.DEFAULT)
+        }
+    }
+
+    private fun exportGsh(
+        context: Context,
+        safeTitle: String,
+        timestamp: Long,
+        lessonTitle: String,
+        pages: List<List<Stroke>>,
+        canvasBackground: CanvasBackground,
+        isDarkCanvas: Boolean,
+        showGrid: Boolean,
+        scale: Float,
+        offsetX: Float,
+        offsetY: Float,
+        activePage: Int,
+        document: BoardDocument?,
+        splitCount: Int,
+        splitWeights: List<Float>,
+        splitPanes: List<CanvasPane>?,
+        pageTitles: List<String> = emptyList(),
+        pageBackgroundKeys: List<String> = emptyList(),
+        pageCustomBackgroundUris: List<String> = emptyList(),
+        pageCustomBackgroundColors: List<Int?> = emptyList(),
+        exportDir: File,
+        onProgress: (Float, String) -> Unit
+    ): File {
+        onProgress(0.2f, "Packaging and bundling whiteboard assets...")
+
+        val assetsMap = mutableMapOf<String, String>()
+
+        fun bundleAsset(rawUri: String?): String {
+            if (rawUri.isNullOrBlank()) return ""
+            if (rawUri.startsWith("asset://")) return rawUri
+            try {
+                val bytes = when {
+                    rawUri.startsWith("content://") -> context.contentResolver.openInputStream(Uri.parse(rawUri))?.use { it.readBytes() }
+                    rawUri.startsWith("file://") -> File(Uri.parse(rawUri).path ?: rawUri).readBytes()
+                    rawUri.startsWith("/") -> {
+                        val f = File(rawUri)
+                        if (f.exists()) f.readBytes() else null
+                    }
+                    else -> {
+                        val f = File(rawUri)
+                        if (f.exists()) f.readBytes()
+                        else context.contentResolver.openInputStream(Uri.parse(rawUri))?.use { it.readBytes() }
+                    }
+                }
+                if (bytes != null && bytes.isNotEmpty()) {
+                    val ext = when {
+                        rawUri.endsWith(".jpg", ignoreCase = true) || rawUri.endsWith(".jpeg", ignoreCase = true) -> "jpg"
+                        rawUri.endsWith(".webp", ignoreCase = true) -> "webp"
+                        rawUri.endsWith(".svg", ignoreCase = true) -> "svg"
+                        else -> "png"
+                    }
+                    val assetKey = "img_${java.util.UUID.randomUUID().toString().replace("-", "").take(12)}.$ext"
+                    assetsMap[assetKey] = encodeBase64(bytes)
+                    return "asset://$assetKey"
+                }
+            } catch (_: Exception) {}
+            return rawUri
+        }
+
+        val gshPages = pages.mapIndexed { index, strokes ->
+            val portableStrokes = strokes.map { stroke ->
+                val dto = stroke.toDto()
+                if (dto.imageUri.isNotBlank()) {
+                    dto.copy(imageUri = bundleAsset(dto.imageUri))
+                } else {
+                    dto
+                }
+            }
+            val pageBgUri = pageCustomBackgroundUris.getOrNull(index)
+            val portableBgUri = if (!pageBgUri.isNullOrBlank()) bundleAsset(pageBgUri) else pageBgUri
+
+            GyoashIwbPage(
+                pageIndex = index,
+                title = pageTitles.getOrNull(index),
+                backgroundKey = pageBackgroundKeys.getOrNull(index) ?: canvasBackground.key,
+                customBackgroundUri = portableBgUri,
+                customBackgroundColor = pageCustomBackgroundColors.getOrNull(index),
+                layers = listOf(
+                    GyoashIwbLayer(
+                        id = "layer_ink_$index",
+                        name = "Ink & Content",
+                        visible = true,
+                        opacity = 1.0f,
+                        strokes = portableStrokes
+                    )
+                )
+            )
+        }
+
+        val gshPackage = GyoashIwbPackage(
+            format = "GSH_WHITEBOARD_V1",
+            version = 1,
+            app = "GSH Whiteboard",
+            exportedAt = timestamp,
+            title = lessonTitle,
+            metadata = GyoashIwbMetadata(
+                pageCount = pages.size,
+                activePage = activePage,
+                canvasBackground = canvasBackground.key,
+                isDarkCanvas = isDarkCanvas,
+                showGrid = showGrid,
+                scale = scale,
+                offsetX = offsetX,
+                offsetY = offsetY
+            ),
+            pages = gshPages,
+            documentPath = document?.path,
+            documentName = document?.name,
+            documentKind = document?.kind?.name,
+            splitCount = splitCount.takeIf { it > 1 },
+            splitWeights = splitWeights.takeIf { splitCount > 1 },
+            splitPanes = if (splitCount > 1) splitPanes?.map { pane ->
+                GyoashIwbPane(
+                    kind = pane.kind.name,
+                    strokes = pane.strokes.map { stroke ->
+                        val dto = stroke.toDto()
+                        if (dto.imageUri.isNotBlank()) dto.copy(imageUri = bundleAsset(dto.imageUri)) else dto
+                    },
+                    source = pane.source,
+                    label = pane.label,
+                    pageIndex = pane.pageIndex,
+                    pageCount = pane.pageCount,
+                    tool = pane.tool.name,
+                    color = pane.color,
+                    strokeWidth = pane.strokeWidth
+                )
+            } else null,
+            assets = assetsMap.takeIf { it.isNotEmpty() }
+        )
+
+        onProgress(0.5f, "Encrypting with AES-256-GCM and device-bound security...")
+
+        val json = gson.toJson(gshPackage)
+        val encryptedBytes = GshSecurityManager.encryptPayload(context, json.toByteArray(Charsets.UTF_8))
+
+        val gshFile = File(exportDir, "${safeTitle}_${timestamp}.gsh")
+        FileOutputStream(gshFile).use { fos ->
+            fos.write(encryptedBytes)
+            fos.flush()
+        }
+
+        onProgress(0.9f, "Finalizing secure GSH package...")
+        return gshFile
+    }
+
     private fun exportIwb(
         safeTitle: String,
         timestamp: Long,
@@ -1266,10 +1437,79 @@ object WhiteboardExportManager {
         return null
     }
 
+    fun importLesson(context: Context, uri: Uri): GyoashIwbPackage {
+        val bytes = try {
+            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        } catch (e: Exception) {
+            if (uri.scheme == "file") {
+                val path = uri.path
+                if (path != null) File(path).readBytes() else throw e
+            } else {
+                throw e
+            }
+        } ?: throw IllegalArgumentException("Could not read whiteboard lesson file")
+        return parseLessonBytes(context, bytes)
+    }
+
+    fun restorePortableAssets(context: Context, pkg: GyoashIwbPackage): GyoashIwbPackage {
+        val assets = pkg.assets ?: return pkg
+        if (assets.isEmpty()) return pkg
+
+        val mediaDir = File(context.filesDir, "media").apply { mkdirs() }
+        val assetToLocalMap = mutableMapOf<String, String>()
+
+        for ((assetKey, base64) in assets) {
+            try {
+                val bytes = decodeBase64(base64)
+                val fileName = assetKey.removePrefix("asset://")
+                val targetFile = File(mediaDir, fileName)
+                targetFile.writeBytes(bytes)
+                assetToLocalMap[assetKey] = targetFile.absolutePath
+                assetToLocalMap["asset://$assetKey"] = targetFile.absolutePath
+                assetToLocalMap[fileName] = targetFile.absolutePath
+            } catch (_: Exception) {}
+        }
+
+        val updatedPages = pkg.pages.map { page ->
+            val updatedBgUri = page.customBackgroundUri?.let { uri ->
+                assetToLocalMap[uri] ?: assetToLocalMap[uri.removePrefix("asset://")] ?: uri
+            }
+            val updatedLayers = page.layers.map { layer ->
+                val updatedStrokes = layer.strokes.map { strokeDto ->
+                    if (strokeDto.imageUri.isNotBlank()) {
+                        val resolved = assetToLocalMap[strokeDto.imageUri]
+                            ?: assetToLocalMap[strokeDto.imageUri.removePrefix("asset://")]
+                            ?: strokeDto.imageUri
+                        strokeDto.copy(imageUri = resolved)
+                    } else {
+                        strokeDto
+                    }
+                }
+                layer.copy(strokes = updatedStrokes)
+            }
+            page.copy(customBackgroundUri = updatedBgUri, layers = updatedLayers)
+        }
+
+        com.avitrisphare.whiteboard.presentation.canvas.BitmapCache.clear()
+        return pkg.copy(pages = updatedPages)
+    }
+
+    fun parseLessonBytes(context: Context, bytes: ByteArray): GyoashIwbPackage {
+        // Priority 1: Proprietary encrypted GSH Whiteboard Format
+        if (GshSecurityManager.isGshFile(bytes)) {
+            val decryptedBytes = GshSecurityManager.decryptPayload(context, bytes)
+            val json = String(decryptedBytes, Charsets.UTF_8)
+            val rawPkg = gson.fromJson(json, GyoashIwbPackage::class.java)
+                ?: throw GshCorruptFileException("Failed to deserialize decrypted GSH package")
+            return restorePortableAssets(context, rawPkg)
+        }
+
+        // Priority 2: Universal & legacy .iwb container format (ZIP with gyoash_lesson.json / content.xml or JSON)
+        return restorePortableAssets(context, parseIwbBytes(bytes))
+    }
+
     fun importIwb(context: Context, uri: Uri): GyoashIwbPackage {
-        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            ?: throw IllegalArgumentException("Could not read IWB file")
-        return parseIwbBytes(bytes)
+        return importLesson(context, uri)
     }
 
     fun launchShareIntent(

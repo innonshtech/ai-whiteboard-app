@@ -559,29 +559,29 @@ fun snapToRulerEdge(
 
             var clampedX = local.x.coerceIn(-half, half)
 
-            if (tool.kind == MathToolKind.RULER && pxPerCm > 0f) {
+            if (tool.kind == MathToolKind.RULER) {
                 val inset = RULER_INSET
                 val zeroX = -half + inset
                 val maxMarkX = half - inset
-                val mmPx = pxPerCm / 10f
 
                 if (clampedX <= zeroX) {
                     clampedX = zeroX
                 } else if (clampedX >= maxMarkX) {
                     clampedX = maxMarkX
-                } else if (mmPx >= 1.5f) {
-                    val relX = clampedX - zeroX
-                    val nearestMm = (relX / mmPx).roundToInt()
-                    val tickX = zeroX + nearestMm * mmPx
-                    val isCm = nearestMm % 10 == 0
-                    val isHalf = nearestMm % 5 == 0
-                    val snapThreshold = when {
-                        isCm -> 6.0f
-                        isHalf -> 4.5f
-                        else -> 3.2f
+                } else if (pxPerCm > 0f) {
+                    val unit = tool.rulerUnit.lowercase()
+                    val tickStepPx = when (unit) {
+                        "inch", "in" -> (pxPerCm * 2.54f) / 16f
+                        else -> pxPerCm / 10f
                     }
-                    if (abs(clampedX - tickX) <= snapThreshold) {
-                        clampedX = tickX.coerceIn(zeroX, maxMarkX)
+                    if (tickStepPx >= 1.5f) {
+                        val relX = clampedX - zeroX
+                        val nearestTick = (relX / tickStepPx).roundToInt()
+                        val tickX = zeroX + nearestTick * tickStepPx
+                        val snapThreshold = 4.5f
+                        if (abs(clampedX - tickX) <= snapThreshold) {
+                            clampedX = tickX.coerceIn(zeroX, maxMarkX)
+                        }
                     }
                 }
             }

@@ -2085,6 +2085,34 @@ class CanvasViewModel @Inject constructor(
         scheduleSave()
     }
 
+    private fun updateConnectorRoute(
+        connector: Stroke,
+        strokeMap: Map<String, Stroke>
+    ): Stroke {
+        if (connector.strokeType != StrokeType.CONNECTOR) return connector
+        val from = strokeMap[connector.linkFromId] ?: return connector
+        val to = strokeMap[connector.linkToId] ?: return connector
+        if (connector.stickerKind.startsWith("flow:")) {
+            return connector.copy(points = listOf(from.bounds.center, to.bounds.center))
+        }
+        val obstacles = strokeMap.values
+            .filter { it.id != from.id && it.id != to.id && (isMindMapNode(it) || it.isPlacedMedia()) }
+            .map { it.bounds }
+        val parallelCount = strokeMap.values.count {
+            it.strokeType == StrokeType.CONNECTOR && it.id != connector.id &&
+                (it.linkFromId == from.id || it.linkToId == from.id || it.linkFromId == to.id || it.linkToId == to.id)
+        }
+        val laneOffset = if (parallelCount > 0) ((parallelCount + 1) / 2) * 14f * if (parallelCount % 2 == 1) 1f else -1f else 0f
+        val newPoints = MindmapEngine.calculateCollisionFreeRoute(
+            from = from.bounds,
+            to = to.bounds,
+            obstacles = obstacles,
+            wireStyle = if (connector.stickerKind.isEmpty()) "orthogonal" else connector.stickerKind,
+            laneOffset = laneOffset
+        )
+        return connector.copy(points = newPoints)
+    }
+
     fun moveSelectedStrokes(delta: Offset) {
         if (delta == Offset.Zero || _state.value.selectedStrokeIds.isEmpty()) return
         val selectedIds = _state.value.selectedStrokeIds
@@ -2124,26 +2152,7 @@ class CanvasViewModel @Inject constructor(
                     val from = strokeMap[stroke.linkFromId]
                     val to = strokeMap[stroke.linkToId]
                     if (from != null && to != null && (from.id in selectedIds || to.id in selectedIds)) {
-                        if (stroke.stickerKind.isEmpty() || stroke.stickerKind.startsWith("flow:")) {
-                            stroke.copy(points = listOf(from.bounds.center, to.bounds.center))
-                        } else {
-                            val obstacles = strokeMap.values
-                                .filter { it.id != from.id && it.id != to.id && (isMindMapNode(it) || it.isPlacedMedia()) }
-                                .map { it.bounds }
-                            val parallelCount = movedStrokes.count {
-                                it.strokeType == StrokeType.CONNECTOR && it.id != stroke.id &&
-                                    (it.linkFromId == from.id || it.linkToId == from.id || it.linkFromId == to.id || it.linkToId == to.id)
-                            }
-                            val laneOffset = if (parallelCount > 0) ((parallelCount + 1) / 2) * 14f * if (parallelCount % 2 == 1) 1f else -1f else 0f
-                            val newPoints = MindmapEngine.calculateCollisionFreeRoute(
-                                from = from.bounds,
-                                to = to.bounds,
-                                obstacles = obstacles,
-                                wireStyle = stroke.stickerKind,
-                                laneOffset = laneOffset
-                            )
-                            stroke.copy(points = newPoints)
-                        }
+                        updateConnectorRoute(stroke, strokeMap)
                     } else stroke
                 } else stroke
             }
@@ -2393,16 +2402,7 @@ class CanvasViewModel @Inject constructor(
             val strokeMap = updated.associateBy { it.id }
             val withConnectors = updated.map { stroke ->
                 if (stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId == id || stroke.linkToId == id)) {
-                    val from = strokeMap[stroke.linkFromId]
-                    val to = strokeMap[stroke.linkToId]
-                    if (from != null && to != null) {
-                        val (p1, p2) = if (stroke.stickerKind == "straight") {
-                            MindmapEngine.calculateStraightAnchors(from.bounds, to.bounds)
-                        } else {
-                            MindmapEngine.calculateAnchors(from.bounds, to.bounds)
-                        }
-                        stroke.copy(points = listOf(p1, p2))
-                    } else stroke
+                    updateConnectorRoute(stroke, strokeMap)
                 } else stroke
             }
 
@@ -2553,18 +2553,7 @@ class CanvasViewModel @Inject constructor(
             val strokeMap = fullyScaled.associateBy { it.id }
             val withConnectors = fullyScaled.map { stroke ->
                 if (stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId == id || stroke.linkToId == id)) {
-                    val from = strokeMap[stroke.linkFromId]
-                    val to = strokeMap[stroke.linkToId]
-                    if (from != null && to != null) {
-                        val (p1, p2) = if (stroke.stickerKind == "straight") {
-                            MindmapEngine.calculateStraightAnchors(from.bounds, to.bounds)
-                        } else if (from.stickerKind.startsWith("flow:") || to.stickerKind.startsWith("flow:") || stroke.stickerKind.isEmpty()) {
-                            from.bounds.center to to.bounds.center
-                        } else {
-                            MindmapEngine.calculateAnchors(from.bounds, to.bounds)
-                        }
-                        stroke.copy(points = listOf(p1, p2))
-                    } else stroke
+                    updateConnectorRoute(stroke, strokeMap)
                 } else stroke
             }
             s.copy(strokes = withConnectors)
@@ -2641,16 +2630,7 @@ class CanvasViewModel @Inject constructor(
             val strokeMap = fullyScaled.associateBy { it.id }
             val withConnectors = fullyScaled.map { stroke ->
                 if (stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId == id || stroke.linkToId == id)) {
-                    val from = strokeMap[stroke.linkFromId]
-                    val to = strokeMap[stroke.linkToId]
-                    if (from != null && to != null) {
-                        val (p1, p2) = if (stroke.stickerKind == "straight") {
-                            MindmapEngine.calculateStraightAnchors(from.bounds, to.bounds)
-                        } else {
-                            MindmapEngine.calculateAnchors(from.bounds, to.bounds)
-                        }
-                        stroke.copy(points = listOf(p1, p2))
-                    } else stroke
+                    updateConnectorRoute(stroke, strokeMap)
                 } else stroke
             }
             s.copy(strokes = withConnectors)
@@ -2817,8 +2797,8 @@ class CanvasViewModel @Inject constructor(
             _state.update { it.copy(errorMessage = "Duplicating pages is disabled for document-backed boards.") }
             return
         }
-        if (index !in pages.indices || pages.size >= MAX_PAGES) return
         commitActivePage()
+        if (index !in pages.indices || pages.size >= MAX_PAGES) return
         val originalStrokes = pages[index]
         val idMap = mutableMapOf<String, String>()
         originalStrokes.forEach { idMap[it.id] = UUID.randomUUID().toString() }
@@ -3467,16 +3447,7 @@ class CanvasViewModel @Inject constructor(
             val strokeMap = updatedNodes.associateBy { it.id }
             val fullyUpdated = updatedNodes.map { stroke ->
                 if (stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId == nodeId || stroke.linkToId == nodeId)) {
-                    val from = strokeMap[stroke.linkFromId]
-                    val to = strokeMap[stroke.linkToId]
-                    if (from != null && to != null) {
-                        val (p1, p2) = if (from.stickerKind.startsWith("flow:") || to.stickerKind.startsWith("flow:") || stroke.stickerKind.isEmpty()) {
-                            from.bounds.center to to.bounds.center
-                        } else {
-                            MindmapEngine.calculateAnchors(from.bounds, to.bounds)
-                        }
-                        stroke.copy(points = listOf(p1, p2))
-                    } else stroke
+                    updateConnectorRoute(stroke, strokeMap)
                 } else stroke
             }
             s.copy(
@@ -3736,20 +3707,11 @@ class CanvasViewModel @Inject constructor(
     fun moveLinkedConnectors(movedIds: Set<String>) {
         if (movedIds.isEmpty()) return
         _state.update { s ->
+            val strokeMap = s.strokes.associateBy { it.id }
             s.copy(strokes = s.strokes.map { stroke ->
-                if (stroke.strokeType != StrokeType.CONNECTOR) stroke
-                else {
-                    val from = s.strokes.find { it.id == stroke.linkFromId }
-                    val to = s.strokes.find { it.id == stroke.linkToId }
-                    if (from != null && to != null && (from.id in movedIds || to.id in movedIds)) {
-                        val (p1, p2) = if (isMindMapNode(from) || isMindMapNode(to) || stroke.stickerKind in listOf("orthogonal", "curved") || from.stickerKind.startsWith("flow:") || to.stickerKind.startsWith("flow:")) {
-                            MindmapEngine.calculateAnchors(from.bounds, to.bounds)
-                        } else {
-                            from.bounds.center to to.bounds.center
-                        }
-                        stroke.copy(points = listOf(p1, p2))
-                    } else stroke
-                }
+                if (stroke.strokeType == StrokeType.CONNECTOR && (stroke.linkFromId in movedIds || stroke.linkToId in movedIds)) {
+                    updateConnectorRoute(stroke, strokeMap)
+                } else stroke
             })
         }
     }
@@ -5246,6 +5208,10 @@ class CanvasViewModel @Inject constructor(
                     splitCount = currentState.splitCount,
                     splitWeights = currentState.splitWeights,
                     splitPanes = currentState.splitPanes,
+                    pageTitles = currentState.pageTitles,
+                    pageBackgroundKeys = currentState.pageBackgroundKeys,
+                    pageCustomBackgroundUris = currentState.pageCustomBackgroundUris,
+                    pageCustomBackgroundColors = currentState.pageCustomBackgroundColors,
                     format = format,
                     destination = destination,
                     onProgress = onProgress
@@ -5262,33 +5228,53 @@ class CanvasViewModel @Inject constructor(
         }
     }
 
-    fun importIwbFile(context: Context, uri: Uri, onResult: (Boolean, String) -> Unit) {
+    fun importIwbFile(
+        context: Context,
+        uri: Uri,
+        targetNoteId: String? = null,
+        onResult: (Boolean, String) -> Unit
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val pkg = WhiteboardExportManager.importIwb(context, uri)
+                val pkg = WhiteboardExportManager.importLesson(context, uri)
                 val restoredPages = pkg.pages.map { page ->
                     page.layers.flatMap { layer -> layer.strokes.map { it.toDomain() } }
                 }
-                val background = CanvasBackground.fromKey(pkg.metadata.canvasBackground)
 
                 withContext(Dispatchers.Main) {
-                    commitActivePage()
+                    val resolvedNoteId = targetNoteId?.ifEmpty { null }
+                        ?: _state.value.noteId.ifEmpty { null }
+                        ?: java.util.UUID.randomUUID().toString()
+
+                    _state.update { it.copy(isLoading = true, noteId = resolvedNoteId) }
+
                     pages.clear()
+                    pageTitles.clear()
+                    pageBackgroundKeys.clear()
+                    pageCustomBackgroundUris.clear()
+                    pageCustomBackgroundColors.clear()
+                    pageMathTools.clear()
+
                     if (restoredPages.isEmpty()) {
                         pages.add(emptyList())
                     } else {
                         pages.addAll(restoredPages)
                     }
+
+                    pkg.pages.forEachIndexed { index, p ->
+                        pageTitles.add(p.title ?: "Page ${index + 1}")
+                        pageBackgroundKeys.add(p.backgroundKey ?: pkg.metadata.canvasBackground)
+                        pageCustomBackgroundUris.add(p.customBackgroundUri.orEmpty())
+                        pageCustomBackgroundColors.add(p.customBackgroundColor)
+                        pageMathTools.add(emptyList())
+                    }
+                    syncPageMetadataLists()
+
                     activePage = pkg.metadata.activePage.coerceIn(0, pages.lastIndex)
                     undoStack.clear()
                     redoStack.clear()
 
                     val effectiveTitle = pkg.title.ifBlank { "Imported Lesson" }
-                    val currentNoteId = _state.value.noteId.ifEmpty {
-                        val newId = java.util.UUID.randomUUID().toString()
-                        _state.update { it.copy(noteId = newId) }
-                        newId
-                    }
 
                     // Restore split panes if saved in package
                     if (pkg.splitCount != null && pkg.splitCount > 1 && !pkg.splitPanes.isNullOrEmpty()) {
@@ -5318,10 +5304,16 @@ class CanvasViewModel @Inject constructor(
                         }
                     }
 
+                    val activeBgKey = pageBackgroundKeys.getOrNull(activePage) ?: pkg.metadata.canvasBackground
+                    val activeBg = CanvasBackground.fromKey(activeBgKey)
+                    val activeBgColor = pageCustomBackgroundColors.getOrNull(activePage)
+
                     _state.update {
                         it.copy(
+                            noteId = resolvedNoteId,
                             noteTitle = effectiveTitle,
-                            canvasBackground = background,
+                            canvasBackground = activeBg,
+                            customBackgroundColor = activeBgColor,
                             isDarkCanvas = pkg.metadata.isDarkCanvas,
                             showGrid = pkg.metadata.showGrid,
                             strokes = pages[activePage],
@@ -5332,18 +5324,23 @@ class CanvasViewModel @Inject constructor(
                             offsetX = pkg.metadata.offsetX,
                             offsetY = pkg.metadata.offsetY,
                             document = null,
-                            errorMessage = null
+                            errorMessage = null,
+                            isLoading = false,
+                            pageTitles = pageTitles.toList(),
+                            pageBackgroundKeys = pageBackgroundKeys.toList(),
+                            pageCustomBackgroundUris = pageCustomBackgroundUris.toList(),
+                            pageCustomBackgroundColors = pageCustomBackgroundColors.toList()
                         )
                     }
 
                     // Persist to database & file
                     withContext(Dispatchers.IO) {
                         try {
-                            val existing = noteRepository.getNoteById(currentNoteId)
+                            val existing = noteRepository.getNoteById(resolvedNoteId)
                             if (existing != null) {
-                                noteRepository.updateNote(existing.copy(title = effectiveTitle, canvasBackground = background, updatedAt = System.currentTimeMillis()))
+                                noteRepository.updateNote(existing.copy(title = effectiveTitle, canvasBackground = activeBg, updatedAt = System.currentTimeMillis()))
                             } else {
-                                noteRepository.insertNote(com.avitrisphare.whiteboard.domain.model.Note(id = currentNoteId, title = effectiveTitle, canvasBackground = background))
+                                noteRepository.insertNote(com.avitrisphare.whiteboard.domain.model.Note(id = resolvedNoteId, title = effectiveTitle, canvasBackground = activeBg))
                             }
                         } catch (_: Exception) {}
                     }
@@ -5352,7 +5349,15 @@ class CanvasViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    onResult(false, "Failed to load GYOASH IWB: ${e.message}")
+                    val message = if (e is com.avitrisphare.whiteboard.presentation.canvas.export.GshUnauthorizedDeviceException) {
+                        "This GSH file is protected and can only be opened on an authorized GSH Whiteboard device."
+                    } else if (e is com.avitrisphare.whiteboard.presentation.canvas.export.GshCorruptFileException) {
+                        e.message ?: "Invalid or corrupted GSH whiteboard file."
+                    } else {
+                        "Failed to load lesson: ${e.message}"
+                    }
+                    _state.update { it.copy(errorMessage = message, isLoading = false) }
+                    onResult(false, message)
                 }
             }
         }
