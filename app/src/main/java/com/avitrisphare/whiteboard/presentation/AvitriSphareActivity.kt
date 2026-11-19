@@ -1,5 +1,8 @@
 package com.avitrisphare.whiteboard.presentation
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -53,6 +56,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.UUID
 import javax.inject.Inject
 
@@ -89,8 +95,72 @@ class AvitriSphareActivity : ComponentActivity() {
         super.attachBaseContext(ctx)
     }
 
+    private val externalImportUri = mutableStateOf<String?>(null)
+
+    private fun cacheIncomingUri(uri: Uri): Uri {
+        return try {
+            if (uri.scheme == "file") return uri
+            val cacheDir = File(cacheDir, "incoming_lessons").apply { mkdirs() }
+            val displayName = getDisplayName(uri) ?: "imported_${System.currentTimeMillis()}.gsh"
+            val targetFile = File(cacheDir, displayName)
+            contentResolver.openInputStream(uri)?.use { input: InputStream ->
+                targetFile.outputStream().use { output: OutputStream ->
+                    input.copyTo(output)
+                }
+            }
+            if (targetFile.exists() && targetFile.length() > 0) {
+                Uri.fromFile(targetFile)
+            } else {
+                uri
+            }
+        } catch (_: Exception) {
+            uri
+        }
+    }
+
+    private fun getDisplayName(uri: Uri): String? {
+        if (uri.scheme == "file") return uri.lastPathSegment
+        return try {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0) cursor.getString(idx) else null
+                } else null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun extractIncomingUri(intent: Intent?): String? {
+        if (intent == null) return null
+        val dataUri = intent.data
+        if (dataUri != null) return cacheIncomingUri(dataUri).toString()
+        val streamUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+        }
+        if (streamUri != null) return cacheIncomingUri(streamUri).toString()
+        val clipUri = intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+        if (clipUri != null) return cacheIncomingUri(clipUri).toString()
+        return null
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        extractIncomingUri(intent)?.let {
+            externalImportUri.value = it
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        extractIncomingUri(intent)?.let {
+            externalImportUri.value = it
+        }
         window.setFlags(
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
             WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
@@ -129,7 +199,7 @@ class AvitriSphareActivity : ComponentActivity() {
             var isDarkMode by remember { mutableStateOf(true) }
             var start by remember { mutableStateOf<String?>(null) }
             var isLocked by remember { mutableStateOf(false) }
-            var pendingImport by remember { mutableStateOf(intent?.data?.toString()) }
+            var pendingImport by remember { mutableStateOf(externalImportUri.value ?: intent?.data?.toString()) }
             val scope = rememberCoroutineScope()
 
             LaunchedEffect(Unit) {
@@ -187,10 +257,9 @@ class AvitriSphareActivity : ComponentActivity() {
                 classroomId = fresh.classroomId
                 start = when {
                     isLocked || fresh.isLocked -> "locked"
-                    !fresh.isLicensed -> "license"
-                    fresh.teacher == null -> "qr"
                     incoming != null -> {
                         pendingImport = null
+                        externalImportUri.value = null
                         val note = Note(
                             id = UUID.randomUUID().toString(),
                             title = "Imported Lesson"
@@ -198,6 +267,8 @@ class AvitriSphareActivity : ComponentActivity() {
                         withContext(Dispatchers.IO) { noteRepository.insertNote(note) }
                         "canvas/${note.id}?importUri=${android.net.Uri.encode(incoming)}"
                     }
+                    !fresh.isLicensed -> "license"
+                    fresh.teacher == null && !BuildConfig.DEMO_MODE -> "qr"
                     else -> "classhome"
                 }
             }
@@ -209,6 +280,19 @@ class AvitriSphareActivity : ComponentActivity() {
             ) {
                 AvitriSphareTheme(darkTheme = isDarkMode) {
                 val navController = rememberNavController()
+
+                LaunchedEffect(externalImportUri.value) {
+                    val incomingUri = externalImportUri.value ?: return@LaunchedEffect
+                    externalImportUri.value = null
+                    val note = Note(
+                        id = UUID.randomUUID().toString(),
+                        title = "Imported Lesson"
+                    )
+                    withContext(Dispatchers.IO) { noteRepository.insertNote(note) }
+                    navController.navigate("canvas/${note.id}?importUri=${android.net.Uri.encode(incomingUri)}") {
+                        launchSingleTop = true
+                    }
+                }
 
                 LaunchedEffect(start) {
                     if (start == null || start == "locked" || start == "license") return@LaunchedEffect

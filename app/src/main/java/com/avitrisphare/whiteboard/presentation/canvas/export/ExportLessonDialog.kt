@@ -211,12 +211,12 @@ fun ExportLessonDialog(
                     Spacer(Modifier.height(8.dp))
 
                     FormatOptionCard(
-                        format = ExportFormat.IWB,
+                        format = ExportFormat.GSH,
                         icon = Icons.Default.Layers,
                         accentColor = Color(0xFFA855F7),
-                        isSelected = selectedFormat == ExportFormat.IWB,
+                        isSelected = selectedFormat == ExportFormat.GSH,
                         enabled = !isExporting,
-                        onClick = { selectedFormat = ExportFormat.IWB }
+                        onClick = { selectedFormat = ExportFormat.GSH }
                     )
 
                     Spacer(Modifier.height(14.dp))

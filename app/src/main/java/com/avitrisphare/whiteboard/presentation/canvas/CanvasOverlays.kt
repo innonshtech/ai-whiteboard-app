@@ -852,22 +852,7 @@ fun CanvasSidebarMenu(
                         }
                     )
 
-                    if (onChangeLanguage != null) {
-                        Divider(
-                            color = Color(0xFFF3F4F6),
-                            thickness = 1.dp,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                        SidebarMenuItem(
-                            icon = Icons.Default.Language,
-                            label = "Change Language",
-                            shortcut = currentLanguageName,
-                            onClick = {
-                                onDismiss()
-                                onChangeLanguage()
-                            }
-                        )
-                    }
+
                 }
             }
         }

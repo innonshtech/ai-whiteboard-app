@@ -570,28 +570,30 @@ fun snapToRulerEdge(
 
             var clampedX = local.x.coerceIn(-half, half)
 
-            if (tool.kind == MathToolKind.RULER && pxPerCm > 0f) {
+            if (tool.kind == MathToolKind.RULER) {
                 val inset = RULER_INSET
                 val zeroX = -half + inset
                 val maxMarkX = half - inset
-                val unit = tool.rulerUnit.lowercase()
-                val tickStepPx = when (unit) {
-                    "inch", "in" -> (pxPerCm * 2.54f) / 16f
-                    else -> pxPerCm / 10f
-                }
 
                 // Strictly clamp to scale: never start or draw below zero, never past max mark
                 if (clampedX <= zeroX) {
                     clampedX = zeroX
                 } else if (clampedX >= maxMarkX) {
                     clampedX = maxMarkX
-                } else if (tickStepPx >= 1.5f) {
-                    val relX = clampedX - zeroX
-                    val nearestTick = (relX / tickStepPx).roundToInt()
-                    val tickX = zeroX + nearestTick * tickStepPx
-                    val snapThreshold = 4.5f
-                    if (abs(clampedX - tickX) <= snapThreshold) {
-                        clampedX = tickX.coerceIn(zeroX, maxMarkX)
+                } else if (pxPerCm > 0f) {
+                    val unit = tool.rulerUnit.lowercase()
+                    val tickStepPx = when (unit) {
+                        "inch", "in" -> (pxPerCm * 2.54f) / 16f
+                        else -> pxPerCm / 10f
+                    }
+                    if (tickStepPx >= 1.5f) {
+                        val relX = clampedX - zeroX
+                        val nearestTick = (relX / tickStepPx).roundToInt()
+                        val tickX = zeroX + nearestTick * tickStepPx
+                        val snapThreshold = 4.5f
+                        if (abs(clampedX - tickX) <= snapThreshold) {
+                            clampedX = tickX.coerceIn(zeroX, maxMarkX)
+                        }
                     }
                 }
             }

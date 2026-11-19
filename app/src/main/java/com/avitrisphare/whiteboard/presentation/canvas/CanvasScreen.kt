@@ -1321,15 +1321,13 @@ fun CanvasScreen(
 ) {
     val context = LocalContext.current
 
-    LaunchedEffect(noteId) {
-        viewModel.loadNote(noteId)
-    }
-
-    LaunchedEffect(initialImportUri) {
+    LaunchedEffect(noteId, initialImportUri) {
         if (initialImportUri != null) {
-            viewModel.importIwbFile(context, initialImportUri) { _, msg ->
+            viewModel.importIwbFile(context, initialImportUri, targetNoteId = noteId) { _, msg ->
                 Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
             }
+        } else {
+            viewModel.loadNote(noteId)
         }
     }
 
@@ -1739,7 +1737,7 @@ fun CanvasScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
-            viewModel.importIwbFile(context, uri) { _, msg ->
+            viewModel.importIwbFile(context, uri, targetNoteId = noteId) { _, msg ->
                 Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
             }
         }
@@ -5903,18 +5901,6 @@ fun CanvasScreen(
                                 modifier = Modifier.padding(vertical = 8.dp)
                             )
 
-                            // 9. Change Language (English, Hindi, Marathi)
-                            SidebarMenuItem(
-                                icon = Icons.Default.Language,
-                                label = stringResource(R.string.change_language),
-                                shortcut = currentLanguage.nativeName,
-                                isDark = isDark,
-                                onClick = {
-                                    showSidebar = false
-                                    showLanguageDialog = true
-                                }
-                            )
-
                             // 10. Theme (Light / Dark)
                             SidebarMenuItem(
                                 icon = if (isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
@@ -6052,12 +6038,12 @@ fun CanvasScreen(
                         "Clean all (everything including pen)" to { showCommandPalette = false; showCleanAllDialog = true },
                         "Clear page" to { showCommandPalette = false; showClearDialog = true },
                         "Export as PNG" to { showCommandPalette = false; viewModel.exportAsPng(context) { exportedUri = it; showExportDialog = true } },
-                        "Export lesson (PDF/ZIP/IWB)" to {
+                        "Export lesson (PDF/PNG/GSH)" to {
                             showCommandPalette = false
                             exportResult = null
                             showExportLessonDialog = true
                         },
-                        "Open GYOASH Lesson (.iwb)" to {
+                        "Open GSH Lesson (.gsh)" to {
                             showCommandPalette = false
                             iwbPickerLauncher.launch(arrayOf("*/*"))
                         },

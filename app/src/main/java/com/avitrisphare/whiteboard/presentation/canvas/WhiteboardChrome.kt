@@ -2368,10 +2368,6 @@ fun AvitriSphareWhiteboardChrome(
                         PopoverRow(Icons.Default.LayersClear, stringResource(R.string.clear_all)) { panel = null; onClear() }
                         PopoverRow(Icons.Default.Save, stringResource(R.string.tool_save)) { panel = null; onSave() }
                         PopoverRow(Icons.Default.Description, stringResource(R.string.save_slides_pdf)) { panel = null; onSaveSlides() }
-                        PopoverRow(Icons.Default.Language, stringResource(R.string.change_language)) {
-                            panel = null
-                            onOpenLanguageDialog()
-                        }
                         PopoverRow(Icons.Default.Add, stringResource(R.string.popover_zoom_in)) { onZoomIn() }
                         PopoverRow(Icons.Default.ChevronLeft, stringResource(R.string.popover_zoom_out)) { onZoomOut() }
                         PopoverRow(Icons.Default.CropFree, stringResource(R.string.popover_fit)) { panel = null; onFit() }
@@ -2609,16 +2605,6 @@ fun AvitriSphareWhiteboardChrome(
                                 ToolTile(Icons.Default.HelpOutline, stringResource(R.string.menu_help), Color(0xFF6B7280)) { panel = null; onHelp() }
                             )
                             else -> buildList {
-                                add(
-                                    ToolTile(
-                                        Icons.Default.Language,
-                                        stringResource(R.string.change_language),
-                                        Color(0xFF2563EB)
-                                    ) {
-                                        panel = null
-                                        onOpenLanguageDialog()
-                                    }
-                                )
                                 add(ToolTile(Icons.Default.ZoomIn, stringResource(R.string.popover_zoom_in), Color(0xFF0EA5E9)) { onZoomIn() })
                                 add(ToolTile(Icons.Default.ZoomOut, stringResource(R.string.popover_zoom_out), Color(0xFF6366F1)) { onZoomOut() })
                                 add(ToolTile(Icons.Default.CropFree, stringResource(R.string.popover_fit), Color(0xFF10B981)) { panel = null; onFit() })

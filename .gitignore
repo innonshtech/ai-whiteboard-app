@@ -41,6 +41,12 @@ app/schemas/
 *.pdf
 *.html
 logo/
+AVITRI_SPHARE_*.md
+*.py
+
+# Root test/device screenshots and IDE
+/*.png
+.vscode/
 
 # Local test screenshots
 board_*.png

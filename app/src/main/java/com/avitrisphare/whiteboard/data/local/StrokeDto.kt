@@ -25,38 +25,19 @@ data class StrokeDto(
 )
 
 fun StrokeDto.toDomain(): Stroke {
-    if (points.length > 100_000) {
-        return Stroke(
-            id = id.ifEmpty { UUID.randomUUID().toString() },
-            points = emptyList(),
-            colorValue = colorValue,
-            strokeWidth = strokeWidth,
-            isEraser = isEraser,
-            isHighlighter = isHighlighter,
-            strokeType = strokeType,
-            text = text,
-            fillColor = fillColor,
-            imageUri = imageUri,
-            opacity = opacity,
-            cornerRadius = cornerRadius,
-            showDimensions = showDimensions,
-            linkToId = linkToId,
-            linkFromId = linkFromId,
-            stickerKind = stickerKind
-        )
-    }
-    
-    val parsed = points.split(";").take(5000).mapNotNull { pair ->
-        val coords = pair.split(",")
-        if (coords.size >= 2) {
-            try {
-                val pressure = if (coords.size >= 3) coords[2].toFloat() else 1f
-                Offset(coords[0].toFloat(), coords[1].toFloat()) to pressure
-            } catch (e: Exception) {
-                null
-            }
-        } else null
-    }
+    val parsed = if (points.isNotBlank()) {
+        points.split(";").take(10000).mapNotNull { pair ->
+            val coords = pair.split(",")
+            if (coords.size >= 2) {
+                try {
+                    val pressure = if (coords.size >= 3) coords[2].toFloat() else 1f
+                    Offset(coords[0].toFloat(), coords[1].toFloat()) to pressure
+                } catch (e: Exception) {
+                    null
+                }
+            } else null
+        }
+    } else emptyList()
     return Stroke(
         id = id.ifEmpty { UUID.randomUUID().toString() },
         points = parsed.map { it.first },

@@ -39,7 +39,7 @@
     <string name="menu_rename_board">Rename board</string>
     <string name="menu_open">Open</string>
     <string name="menu_export_lesson">Export lesson...</string>
-    <string name="menu_open_iwb">Open GYOASH Lesson (.iwb)...</string>
+    <string name="menu_open_iwb">Open GSH Lesson (.gsh)...</string>
     <string name="menu_live_collab">Live collaboration...</string>
     <string name="menu_command_palette">Command palette</string>
     <string name="menu_find_on_canvas">Find on canvas</string>

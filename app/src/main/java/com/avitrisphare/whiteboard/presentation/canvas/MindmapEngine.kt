@@ -105,15 +105,51 @@ object MindmapEngine {
     }
 
     fun lineIntersectsRect(p1: Offset, p2: Offset, rect: Rect): Boolean {
-        if (rect.contains(p1) || rect.contains(p2)) return true
-        val tl = rect.topLeft
-        val tr = rect.topRight
-        val bl = rect.bottomLeft
-        val br = rect.bottomRight
+        val insetRect = if (rect.width > 6f && rect.height > 6f) rect.deflate(1.5f) else rect
+        if (insetRect.contains(p1) || insetRect.contains(p2)) return true
+        val tl = insetRect.topLeft
+        val tr = insetRect.topRight
+        val bl = insetRect.bottomLeft
+        val br = insetRect.bottomRight
         return lineIntersectsSegment(p1, p2, tl, tr) ||
             lineIntersectsSegment(p1, p2, tr, br) ||
             lineIntersectsSegment(p1, p2, br, bl) ||
             lineIntersectsSegment(p1, p2, bl, tl)
+    }
+
+    fun curveIntersectsRect(p1: Offset, p2: Offset, rect: Rect): Boolean {
+        if (lineIntersectsRect(p1, p2, rect)) return true
+        val cp = calculateCurvedControlPoints(p1, p2)
+        val insetRect = if (rect.width > 6f && rect.height > 6f) rect.deflate(1.5f) else rect
+        var prev = p1
+        for (step in 1..10) {
+            val t = step / 10f
+            val u = 1f - t
+            val currX = u * u * u * p1.x + 3f * u * u * t * cp.cx1 + 3f * u * t * t * cp.cx2 + t * t * t * p2.x
+            val currY = u * u * u * p1.y + 3f * u * u * t * cp.cy1 + 3f * u * t * t * cp.cy2 + t * t * t * p2.y
+            val curr = Offset(currX, currY)
+            if (lineIntersectsRect(prev, curr, insetRect) || insetRect.contains(curr)) return true
+            prev = curr
+        }
+        return false
+    }
+
+    fun orthogonalIntersectsRect(p1: Offset, p2: Offset, isHorizontal: Boolean, laneOffset: Float, rect: Rect): Boolean {
+        if (isHorizontal) {
+            val midX = (p1.x + p2.x) / 2f + laneOffset
+            val pMid1 = Offset(midX, p1.y)
+            val pMid2 = Offset(midX, p2.y)
+            return lineIntersectsRect(p1, pMid1, rect) ||
+                lineIntersectsRect(pMid1, pMid2, rect) ||
+                lineIntersectsRect(pMid2, p2, rect)
+        } else {
+            val midY = (p1.y + p2.y) / 2f + laneOffset
+            val pMid1 = Offset(p1.x, midY)
+            val pMid2 = Offset(p2.x, midY)
+            return lineIntersectsRect(p1, pMid1, rect) ||
+                lineIntersectsRect(pMid1, pMid2, rect) ||
+                lineIntersectsRect(pMid2, p2, rect)
+        }
     }
 
     /**
@@ -145,44 +181,45 @@ object MindmapEngine {
         val directP1 = directAnchors.first
         val directP2 = directAnchors.second
 
-        val directHits = blockingObstacles.any { obs -> lineIntersectsRect(directP1, directP2, obs) }
-
-        if (!directHits) {
+        if (blockingObstacles.isEmpty()) {
             if (wireStyle == "straight" || wireStyle == "curved") {
                 return listOf(directP1, directP2)
             }
-            if (isHorizontal) {
+            return if (isHorizontal) {
                 val midX = (directP1.x + directP2.x) / 2f + laneOffset
                 val pMid1 = Offset(midX, directP1.y)
                 val pMid2 = Offset(midX, directP2.y)
-                val stepHits = blockingObstacles.any { obs ->
-                    lineIntersectsRect(directP1, pMid1, obs) ||
-                        lineIntersectsRect(pMid1, pMid2, obs) ||
-                        lineIntersectsRect(pMid2, directP2, obs)
-                }
-                if (!stepHits) {
-                    return if (abs(pMid1.y - pMid2.y) < 2f && abs(directP1.x - directP2.x) < 2f) {
-                        listOf(directP1, directP2)
-                    } else {
-                        listOf(directP1, pMid1, pMid2, directP2)
-                    }
-                }
+                if (abs(pMid1.y - pMid2.y) < 2f && abs(directP1.x - directP2.x) < 2f) listOf(directP1, directP2)
+                else listOf(directP1, pMid1, pMid2, directP2)
             } else {
                 val midY = (directP1.y + directP2.y) / 2f + laneOffset
                 val pMid1 = Offset(directP1.x, midY)
                 val pMid2 = Offset(directP2.x, midY)
-                val stepHits = blockingObstacles.any { obs ->
-                    lineIntersectsRect(directP1, pMid1, obs) ||
-                        lineIntersectsRect(pMid1, pMid2, obs) ||
-                        lineIntersectsRect(pMid2, directP2, obs)
-                }
-                if (!stepHits) {
-                    return if (abs(pMid1.x - pMid2.x) < 2f && abs(directP1.y - directP2.y) < 2f) {
-                        listOf(directP1, directP2)
-                    } else {
-                        listOf(directP1, pMid1, pMid2, directP2)
-                    }
-                }
+                if (abs(pMid1.x - pMid2.x) < 2f && abs(directP1.y - directP2.y) < 2f) listOf(directP1, directP2)
+                else listOf(directP1, pMid1, pMid2, directP2)
+            }
+        }
+
+        val collides = when (wireStyle) {
+            "straight" -> blockingObstacles.any { obs -> lineIntersectsRect(directP1, directP2, obs) }
+            "curved" -> blockingObstacles.any { obs -> curveIntersectsRect(directP1, directP2, obs) }
+            else -> blockingObstacles.any { obs -> orthogonalIntersectsRect(directP1, directP2, isHorizontal, laneOffset, obs) }
+        }
+
+        if (!collides) {
+            if (wireStyle == "straight" || wireStyle == "curved") {
+                return listOf(directP1, directP2)
+            }
+            return if (isHorizontal) {
+                val midX = (directP1.x + directP2.x) / 2f + laneOffset
+                val pMid1 = Offset(midX, directP1.y)
+                val pMid2 = Offset(midX, directP2.y)
+                listOf(directP1, pMid1, pMid2, directP2)
+            } else {
+                val midY = (directP1.y + directP2.y) / 2f + laneOffset
+                val pMid1 = Offset(directP1.x, midY)
+                val pMid2 = Offset(directP2.x, midY)
+                listOf(directP1, pMid1, pMid2, directP2)
             }
         }
 
@@ -776,12 +813,22 @@ object MindmapEngine {
             path.quadraticBezierTo(points[1].x, points[1].y, points[2].x, points[2].y)
             return path
         }
-        for (i in 0 until points.size - 1) {
-            val pt1 = points[i]
-            val pt2 = points[i + 1]
-            val cp = calculateCurvedControlPoints(pt1, pt2)
-            path.cubicTo(cp.cx1, cp.cy1, cp.cx2, cp.cy2, pt2.x, pt2.y)
+        val r = 16f
+        for (i in 1 until points.size - 1) {
+            val prev = points[i - 1]
+            val curr = points[i]
+            val next = points[i + 1]
+            val dPrev = curr - prev
+            val dNext = next - curr
+            val lenPrev = dPrev.getDistance().coerceAtLeast(1f)
+            val lenNext = dNext.getDistance().coerceAtLeast(1f)
+            val cornerR = minOf(r, lenPrev / 2f, lenNext / 2f)
+            val pBefore = curr - (dPrev / lenPrev) * cornerR
+            val pAfter = curr + (dNext / lenNext) * cornerR
+            path.lineTo(pBefore.x, pBefore.y)
+            path.quadraticBezierTo(curr.x, curr.y, pAfter.x, pAfter.y)
         }
+        path.lineTo(points.last().x, points.last().y)
         return path
     }
 
@@ -804,12 +851,22 @@ object MindmapEngine {
             path.quadTo(points[1].x, points[1].y, points[2].x, points[2].y)
             return path
         }
-        for (i in 0 until points.size - 1) {
-            val pt1 = points[i]
-            val pt2 = points[i + 1]
-            val cp = calculateCurvedControlPoints(pt1, pt2)
-            path.cubicTo(cp.cx1, cp.cy1, cp.cx2, cp.cy2, pt2.x, pt2.y)
+        val r = 16f
+        for (i in 1 until points.size - 1) {
+            val prev = points[i - 1]
+            val curr = points[i]
+            val next = points[i + 1]
+            val dPrev = curr - prev
+            val dNext = next - curr
+            val lenPrev = dPrev.getDistance().coerceAtLeast(1f)
+            val lenNext = dNext.getDistance().coerceAtLeast(1f)
+            val cornerR = minOf(r, lenPrev / 2f, lenNext / 2f)
+            val pBefore = curr - (dPrev / lenPrev) * cornerR
+            val pAfter = curr + (dNext / lenNext) * cornerR
+            path.lineTo(pBefore.x, pBefore.y)
+            path.quadTo(curr.x, curr.y, pAfter.x, pAfter.y)
         }
+        path.lineTo(points.last().x, points.last().y)
         return path
     }
 
@@ -907,14 +964,16 @@ object MindmapEngine {
         }
         layoutNode(rootId, rootAnchor)
 
-        // Update all connector anchors
+        val obstacles = nodeMap.values.map { it.bounds }
+        // Update all connector anchors with collision-free avoidance
         val updatedStrokes = strokes.map { stroke ->
             if (stroke.strokeType == StrokeType.CONNECTOR) {
                 val from = nodeMap[stroke.linkFromId]
                 val to = nodeMap[stroke.linkToId]
                 if (from != null && to != null) {
-                    val (p1, p2) = calculateAnchors(from.bounds, to.bounds)
-                    stroke.copy(points = listOf(p1, p2))
+                    val obs = obstacles.filter { it != from.bounds && it != to.bounds }
+                    val newPoints = calculateCollisionFreeRoute(from.bounds, to.bounds, obs, stroke.stickerKind)
+                    stroke.copy(points = newPoints)
                 } else stroke
             } else {
                 nodeMap[stroke.id] ?: stroke

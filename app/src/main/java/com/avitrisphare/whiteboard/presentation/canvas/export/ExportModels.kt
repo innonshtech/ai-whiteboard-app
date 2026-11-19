@@ -25,17 +25,20 @@ enum class ExportFormat(
         description = "Direct high-resolution PNG image with all writing, graphs, diagrams, and content intact.",
         tag = "Direct .png"
     ),
-    IWB(
-        displayName = "GYOASH IWB Format (.iwb)",
-        extension = "iwb",
-        mimeType = "application/octet-stream",
-        description = "Universal & GYOASH format with all layers, strokes, and pages intact for re-opening on any interactive whiteboard.",
-        tag = "Re-openable & Layers"
+    GSH(
+        displayName = "GSH Whiteboard Format (.gsh)",
+        extension = "gsh",
+        mimeType = "application/x-gsh",
+        description = "Proprietary secure encrypted whiteboard format with all pages, strokes, shapes, and media intact.",
+        tag = "Secure & Re-openable"
     );
 
     companion object {
         @Deprecated("Use IMAGE instead for direct PNG export", ReplaceWith("IMAGE"))
         val IMAGE_ZIP: ExportFormat get() = IMAGE
+
+        @Deprecated("Use GSH instead for secure whiteboard format", ReplaceWith("GSH"))
+        val IWB: ExportFormat get() = GSH
     }
 }
 
@@ -84,7 +87,8 @@ data class GyoashIwbPackage(
     val documentKind: String? = null,
     val splitCount: Int? = null,
     val splitWeights: List<Float>? = null,
-    val splitPanes: List<GyoashIwbPane>? = null
+    val splitPanes: List<GyoashIwbPane>? = null,
+    val assets: Map<String, String>? = null
 )
 
 data class GyoashIwbMetadata(
@@ -100,7 +104,11 @@ data class GyoashIwbMetadata(
 
 data class GyoashIwbPage(
     val pageIndex: Int,
-    val layers: List<GyoashIwbLayer>
+    val layers: List<GyoashIwbLayer>,
+    val title: String? = null,
+    val backgroundKey: String? = null,
+    val customBackgroundUri: String? = null,
+    val customBackgroundColor: Int? = null
 )
 
 data class GyoashIwbLayer(
