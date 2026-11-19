@@ -1808,6 +1808,18 @@ fun CanvasScreen(
                         viewModel.redo()
                         true
                     }
+                    Key.C -> {
+                        if (state.selectedStrokeIds.isNotEmpty() && state.editingTextId == null) {
+                            viewModel.copySelectedStrokes()
+                            true
+                        } else false
+                    }
+                    Key.V -> {
+                        if (state.hasStrokeClipboard) {
+                            viewModel.pasteStrokeClipboard()
+                            true
+                        } else false
+                    }
                     else -> false
                 }
             }

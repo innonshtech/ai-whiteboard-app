@@ -309,6 +309,7 @@
     <string name="shape_fill_color">भरण्याचा रंग</string>
     <string name="rgb_custom_color">RGB कस्टम रंग</string>
     <string name="custom_color">सानुकूल रंग</string>
+    <string name="more_colors">अधिक रंग</string>
 
     <!-- Eraser & Pen Tools -->
     <string name="eraser_title">खोडरबर</string>

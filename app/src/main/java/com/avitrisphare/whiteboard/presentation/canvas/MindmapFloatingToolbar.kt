@@ -56,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.avitrisphare.whiteboard.R
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -321,8 +322,9 @@ fun FillColorPopover(
     onColorSelected: (Int) -> Unit,
     onClose: () -> Unit
 ) {
-    var selectedTab by remember { mutableStateOf(0) } // 0: Bucket (solid), 1: No-fill, 2: Palette
+    var selectedTab by remember { mutableStateOf(if (currentColor == 0) 1 else 0) } // 0: Bucket (solid), 1: No-fill, 2: Palette
     var pendingColor by remember { mutableStateOf(currentColor) }
+    var showColorWheel by remember { mutableStateOf(false) }
 
     // 4 rows x 8 columns curated palette matching Image 5
     val palette = listOf(
@@ -336,42 +338,81 @@ fun FillColorPopover(
         0xFFF472B6.toInt(), 0xFFEC4899.toInt(), 0xFFA855F7.toInt(), 0xFF9333EA.toInt(), 0xFFFFFFFF.toInt(), 0xFF9CA3AF.toInt(), 0xFF4B5563.toInt(), 0xFF000000.toInt()
     )
 
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = Color(0xFFF3F4F6),
-        shadowElevation = 14.dp,
-        modifier = Modifier.width(280.dp)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            // Top Tab icons (Bucket, No-fill, Palette)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (selectedTab == 0) Color.White else Color.Transparent)
-                        .clickable { selectedTab = 0 },
-                    contentAlignment = Alignment.Center
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        if (showColorWheel) {
+            ColorWheelPanel(
+                initialColor = if (pendingColor == 0) 0xFF3B82F6.toInt() else pendingColor,
+                title = "Fill Color Palette",
+                onColorSelected = { col ->
+                    pendingColor = col
+                    selectedTab = 0
+                    onColorSelected(col)
+                },
+                onClose = { showColorWheel = false },
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0xFFF3F4F6),
+            shadowElevation = 14.dp,
+            modifier = Modifier.width(280.dp)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                // Top Tab icons (Bucket, No-fill, Color Wheel)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.FormatPaint, contentDescription = "Solid", tint = Color(0xFF1F2937), modifier = Modifier.size(18.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selectedTab == 0 && !showColorWheel) Color.White else Color.Transparent)
+                            .clickable { selectedTab = 0; showColorWheel = false },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.FormatPaint, contentDescription = "Solid", tint = Color(0xFF1F2937), modifier = Modifier.size(18.dp))
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selectedTab == 1 && !showColorWheel) Color.White else Color.Transparent)
+                            .clickable {
+                                selectedTab = 1
+                                showColorWheel = false
+                                pendingColor = 0 // Transparent
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("⊘", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6B7280))
+                    }
+                    val rainbowBrush = remember {
+                        Brush.sweepGradient(
+                            listOf(
+                                Color.Red, Color.Yellow, Color.Green, Color.Cyan,
+                                Color.Blue, Color.Magenta, Color.Red
+                            )
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (showColorWheel) Color.White else Color.Transparent)
+                            .clickable { showColorWheel = !showColorWheel },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .background(rainbowBrush)
+                                .border(1.dp, Color(0xFFCBD5E1), CircleShape)
+                        )
+                    }
                 }
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (selectedTab == 1) Color.White else Color.Transparent)
-                        .clickable {
-                            selectedTab = 1
-                            pendingColor = 0 // Transparent
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("⊘", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6B7280))
-                }
-            }
 
             Spacer(Modifier.height(12.dp))
 
@@ -418,6 +459,7 @@ fun FillColorPopover(
                 Text("Select", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
             }
         }
+    }
     }
 }
 
@@ -521,43 +563,51 @@ fun OutlinePopover(
     onWidthSelected: (Float) -> Unit,
     onClose: () -> Unit
 ) {
-    val colors = listOf(
-        0xFF1E293B.toInt(), 0xFF8B5CF6.toInt(), 0xFF06B6D4.toInt(),
-        0xFF3B82F6.toInt(), 0xFFEC4899.toInt(), 0xFFF97316.toInt(), 0xFF10B981.toInt()
-    )
+    var showColorPicker by remember { mutableStateOf(false) }
 
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = Color.White,
-        shadowElevation = 14.dp,
-        modifier = Modifier.width(240.dp)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(stringResource(R.string.mindmap_border_color), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                colors.forEach { c ->
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(Color(c))
-                            .border(if (currentColor == c) 2.5.dp else 1.dp, Color.Black, CircleShape)
-                            .clickable { onColorSelected(c) }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        if (showColorPicker) {
+            ColorWheelPanel(
+                initialColor = if (currentColor == 0) 0xFF1B1F2A.toInt() else currentColor,
+                title = "Color Palette",
+                onColorSelected = onColorSelected,
+                onClose = { showColorPicker = false },
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color.White,
+            shadowElevation = 14.dp,
+            modifier = Modifier.width(270.dp)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Text(stringResource(R.string.mindmap_border_color), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ToolbarColorSwatches(
+                        selected = currentColor,
+                        swatchSize = 22.dp,
+                        spacing = 5.dp,
+                        isPaletteOpen = showColorPicker,
+                        onTogglePalette = { showColorPicker = !showColorPicker },
+                        onPick = onColorSelected
                     )
                 }
+                Spacer(Modifier.height(14.dp))
+                Text(stringResource(R.string.mindmap_thickness, currentWidth.toInt()), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
+                Slider(
+                    value = currentWidth.coerceIn(1f, 16f),
+                    onValueChange = onWidthSelected,
+                    valueRange = 1f..16f,
+                    colors = SliderDefaults.colors(thumbColor = Color(0xFF2563EB), activeTrackColor = Color(0xFF2563EB))
+                )
             }
-            Spacer(Modifier.height(14.dp))
-            Text(stringResource(R.string.mindmap_thickness, currentWidth.toInt()), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
-            Slider(
-                value = currentWidth.coerceIn(1f, 16f),
-                onValueChange = onWidthSelected,
-                valueRange = 1f..16f,
-                colors = SliderDefaults.colors(thumbColor = Color(0xFF2563EB), activeTrackColor = Color(0xFF2563EB))
-            )
         }
     }
 }
@@ -616,43 +666,13 @@ fun MindmapConnectorToolbar(
         modifier = Modifier.padding(bottom = 6.dp)
     ) {
         if (showColorPicker) {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = Color.White,
-                shadowElevation = 12.dp,
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE5E7EB)),
+            ColorWheelPanel(
+                initialColor = if (connector.colorValue == 0) 0xFF1B1F2A.toInt() else connector.colorValue,
+                title = "Color Palette",
+                onColorSelected = onColorChanged,
+                onClose = { showColorPicker = false },
                 modifier = Modifier.padding(bottom = 6.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val palette = listOf(
-                        0xFF8B5CF6.toInt(), 0xFF06B6D4.toInt(), 0xFF3B82F6.toInt(),
-                        0xFFEC4899.toInt(), 0xFFF97316.toInt(), 0xFF10B981.toInt(),
-                        0xFFEF4444.toInt(), 0xFF1E293B.toInt()
-                    )
-                    palette.forEach { colorVal ->
-                        val isSel = connector.colorValue == colorVal
-                        Box(
-                            modifier = Modifier
-                                .size(26.dp)
-                                .clip(CircleShape)
-                                .background(Color(colorVal))
-                                .border(
-                                    width = if (isSel) 2.5.dp else 1.dp,
-                                    color = if (isSel) Color.Black else Color(0x33000000),
-                                    shape = CircleShape
-                                )
-                                .clickable {
-                                    onColorChanged(colorVal)
-                                    showColorPicker = false
-                                }
-                        )
-                    }
-                }
-            }
+            )
         }
 
         Surface(
@@ -679,10 +699,14 @@ fun MindmapConnectorToolbar(
                     onClick = onToggleStyle
                 )
 
-                ToolbarButton(
-                    icon = Icons.Default.FormatColorFill,
-                    label = "Color",
-                    onClick = { showColorPicker = !showColorPicker }
+                ToolbarColorSwatches(
+                    selected = connector.colorValue,
+                    swatchSize = 18.dp,
+                    spacing = 4.dp,
+                    showCheck = false,
+                    isPaletteOpen = showColorPicker,
+                    onTogglePalette = { showColorPicker = !showColorPicker },
+                    onPick = onColorChanged
                 )
 
                 ToolbarButton(

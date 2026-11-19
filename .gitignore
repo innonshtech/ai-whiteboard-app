@@ -51,6 +51,8 @@ AVITRI_SPHARE_*.md
 # Local test screenshots
 board_*.png
 live_*.png
+screen_*.png
+*_crop.png
 
 # Worktrees
 .worktrees/

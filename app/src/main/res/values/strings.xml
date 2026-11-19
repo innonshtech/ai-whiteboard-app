@@ -224,6 +224,9 @@
     <string name="theme_black_board">Black Board</string>
     <string name="toast_color_swapped">Color swapped</string>
     <string name="toast_saved">Saved</string>
+    <string name="toast_copied_ready_to_paste">Copied! Ready to paste</string>
+    <string name="toast_copied">Copied</string>
+    <string name="toast_pasted">Pasted</string>
     <string name="customize_toolbar_title">Customize Toolbar</string>
     <string name="customize_toolbar_edit_mode">Drag tools to reorder • Tap ✕ to hide</string>
     <string name="customize_toolbar_reset">Reset</string>
@@ -309,6 +312,7 @@
     <string name="shape_fill_color">Fill Color</string>
     <string name="rgb_custom_color">RGB Custom Color</string>
     <string name="custom_color">Custom color</string>
+    <string name="more_colors">More colors</string>
 
     <!-- Eraser & Pen Tools -->
     <string name="eraser_title">Eraser</string>
