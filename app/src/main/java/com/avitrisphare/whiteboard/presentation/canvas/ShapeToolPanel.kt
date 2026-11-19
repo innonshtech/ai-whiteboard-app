@@ -37,12 +37,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Hub
@@ -121,19 +119,6 @@ private fun localizedShapeName(strokeType: StrokeType): String = when (strokeTyp
     StrokeType.SPHERE -> stringResource(R.string.shape_sphere)
     else -> strokeType.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
 }
-
-private val SHAPE_PRESET_COLORS = listOf(
-    0xFFEF4444.toInt(), // Red
-    0xFFF97316.toInt(), // Orange
-    0xFFFBBF24.toInt(), // Yellow
-    0xFF22C55E.toInt(), // Green
-    0xFF3B82F6.toInt(), // Blue
-    0xFF6366F1.toInt(), // Indigo
-    0xFFA855F7.toInt(), // Purple
-    0xFF1B1F2A.toInt(), // Black
-    0xFFFFFFFF.toInt()  // White
-)
-
 
 @Composable
 internal fun VerticalScrollbar(
@@ -224,6 +209,10 @@ fun ShapeToolPanel(
     val outerScrollState = rememberScrollState()
     val trackColor = if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)
 
+    LaunchedEffect(selectedCategory) {
+        outerScrollState.scrollTo(0)
+    }
+
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -239,14 +228,14 @@ fun ShapeToolPanel(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 300.dp)
+                    .heightIn(max = 360.dp)
             ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(outerScrollState)
-                .padding(horizontal = 14.dp, vertical = 10.dp)
-                .padding(end = if (outerScrollState.maxValue > 0) 6.dp else 0.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(end = 8.dp)
         ) {
         // --- Header (Drag Handle & Close Button) ---
         Row(
@@ -264,7 +253,7 @@ fun ShapeToolPanel(
                         }
                     } else Modifier
                 )
-                .padding(horizontal = 8.dp, vertical = 5.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -321,7 +310,7 @@ fun ShapeToolPanel(
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
 
         // --- Sub-category Pills (2D Shapes, Lines & Rays, 3D Solids) ---
         Row(
@@ -337,12 +326,12 @@ fun ShapeToolPanel(
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (isCatSelected) BrandOrange else (if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6)))
                         .clickable { selectedCategory = cat }
-                        .padding(vertical = 6.dp),
+                        .padding(vertical = 5.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = localizedShapeCategory(cat),
-                        fontSize = 11.5.sp,
+                        fontSize = 11.sp,
                         fontWeight = if (isCatSelected) FontWeight.Bold else FontWeight.Medium,
                         color = if (isCatSelected) Color.White else (if (isDark) Color(0xFFE2E8F0) else Color(0xFF374151)),
                         maxLines = 1
@@ -351,15 +340,12 @@ fun ShapeToolPanel(
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
 
-        // --- Vertical Shape Cards Grid with Scrollbar ---
         val shapesInCat = remember(selectedCategory) {
             ALL_SHAPES.filter { it.category == selectedCategory }
         }
-
         val shapeScrollState = rememberScrollState()
-
         LaunchedEffect(selectedCategory) {
             shapeScrollState.scrollTo(0)
         }
@@ -367,14 +353,14 @@ fun ShapeToolPanel(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(126.dp)
+                .height(118.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(end = if (shapeScrollState.maxValue > 0) 8.dp else 0.dp)
+                    .padding(end = 8.dp)
                     .verticalScroll(shapeScrollState),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 val chunkedShapes = remember(shapesInCat) {
                     shapesInCat.chunked(5)
@@ -382,14 +368,14 @@ fun ShapeToolPanel(
                 chunkedShapes.forEach { rowShapes ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         rowShapes.forEach { spec ->
                             val isSelected = spec.strokeType == state.activeShapeType
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(58.dp)
+                                    .height(54.dp)
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(if (isSelected) (if (isDark) Color(0xFF431407) else Color(0xFFFFF7ED)) else (if (isDark) Color(0xFF0F172A) else Color(0xFFF9FAFB)))
                                     .border(
@@ -400,7 +386,7 @@ fun ShapeToolPanel(
                                     .clickable {
                                         viewModel.setShapeType(spec.strokeType)
                                     }
-                                    .padding(horizontal = 2.dp, vertical = 4.dp),
+                                    .padding(horizontal = 2.dp, vertical = 3.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
@@ -408,10 +394,10 @@ fun ShapeToolPanel(
                                     spec = spec,
                                     tint = if (isSelected) (if (isDark) Color(0xFFFDBA74) else BrandOrange) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF374151))
                                 )
-                                Spacer(Modifier.height(2.dp))
+                                Spacer(Modifier.height(1.dp))
                                 Text(
                                     text = localizedShapeName(spec.strokeType),
-                                    fontSize = 9.sp,
+                                    fontSize = 8.5.sp,
                                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                                     color = if (isSelected) (if (isDark) Color(0xFFFDBA74) else BrandOrange) else (if (isDark) Color(0xFF94A3B8) else Color(0xFF4B5563)),
                                     maxLines = 1,
@@ -426,13 +412,12 @@ fun ShapeToolPanel(
                     }
                 }
             }
-
             if (shapeScrollState.maxValue > 0) {
                 VerticalScrollbar(
                     scrollState = shapeScrollState,
                     trackColor = trackColor,
-                    thumbColor = BrandOrange,
-                    thumbWidth = 4.dp,
+                    thumbColor = BrandOrange.copy(alpha = 0.6f),
+                    thumbWidth = 3.dp,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .fillMaxHeight()
@@ -534,13 +519,25 @@ fun ShapeToolPanel(
                 horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 val isBorder = state.shapeStyleMode == ShapeStyleMode.BORDER
-                Box(
+                val isFill = state.shapeStyleMode == ShapeStyleMode.FILL
+                val borderColor = if (state.shapeBorderColor == 0) 0xFF1B1F2A.toInt() else state.shapeBorderColor
+                val fillColor = state.shapeFillColor
+
+                Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(if (isBorder) (if (isDark) Color(0xFF334155) else Color.White) else Color.Transparent)
                         .clickable { viewModel.setShapeStyleMode(ShapeStyleMode.BORDER) }
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .border(1.6.dp, Color(borderColor), CircleShape)
+                    )
                     Text(
                         text = stringResource(R.string.shape_border),
                         fontSize = 12.sp,
@@ -549,14 +546,31 @@ fun ShapeToolPanel(
                     )
                 }
 
-                val isFill = state.shapeStyleMode == ShapeStyleMode.FILL
-                Box(
+                Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(if (isFill) (if (isDark) Color(0xFF334155) else Color.White) else Color.Transparent)
                         .clickable { viewModel.setShapeStyleMode(ShapeStyleMode.FILL) }
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    if (fillColor == 0) {
+                        Text(
+                            "⊘",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isFill) (if (isDark) Color.White else Color(0xFF1E293B)) else (if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B))
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(Color(fillColor))
+                                .border(1.dp, if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1), CircleShape)
+                        )
+                    }
                     Text(
                         text = stringResource(R.string.shape_fill),
                         fontSize = 12.sp,
@@ -601,32 +615,16 @@ fun ShapeToolPanel(
 
         Spacer(Modifier.height(10.dp))
 
-        // --- Color Header with Active Indicator ---
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = if (state.shapeStyleMode == ShapeStyleMode.BORDER) stringResource(R.string.shape_border_color) else stringResource(R.string.shape_fill_color),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = if (isDark) Color(0xFFCBD5E1) else Color(0xFF475569)
-            )
-
-            Box(
-                modifier = Modifier
-                    .size(16.dp)
-                    .clip(CircleShape)
-                    .background(if (currentModeColor == 0) Color.Transparent else Color(currentModeColor))
-                    .border(1.dp, if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                if (currentModeColor == 0) {
-                    Text("⊘", fontSize = 10.sp, color = if (isDark) Color(0xFF64748B) else Color(0xFF94A3B8))
-                }
-            }
-        }
+        Text(
+            text = if (state.shapeStyleMode == ShapeStyleMode.BORDER) {
+                stringResource(R.string.shape_border_color)
+            } else {
+                stringResource(R.string.shape_fill_color)
+            },
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (isDark) Color(0xFFCBD5E1) else Color(0xFF475569)
+        )
 
         Spacer(Modifier.height(6.dp))
 
@@ -636,87 +634,17 @@ fun ShapeToolPanel(
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
                 .padding(bottom = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // "None" option for fill mode
-            if (state.shapeStyleMode == ShapeStyleMode.FILL) {
-                val isNoneSelected = currentModeColor == 0
-                Box(
-                    modifier = Modifier
-                        .size(26.dp)
-                        .clip(CircleShape)
-                        .background(if (isDark) Color(0xFF334155) else Color(0xFFE5E7EB))
-                        .border(
-                            width = if (isNoneSelected) 2.dp else 1.dp,
-                            color = if (isNoneSelected) BrandOrange else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB)),
-                            shape = CircleShape
-                        )
-                        .clickable { viewModel.setShapeColor(0) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("⊘", fontSize = 12.sp, color = if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563))
-                }
-            }
-
-            val displayColors = if (currentModeColor != 0 && currentModeColor !in SHAPE_PRESET_COLORS) {
-                listOf(currentModeColor) + SHAPE_PRESET_COLORS
-            } else {
-                SHAPE_PRESET_COLORS
-            }
-
-            displayColors.forEach { colorInt ->
-                val isSelected = currentModeColor == colorInt
-                Box(
-                    modifier = Modifier
-                        .size(26.dp)
-                        .clip(CircleShape)
-                        .background(Color(colorInt))
-                        .border(
-                            width = if (isSelected) 2.dp else 1.dp,
-                            color = if (isSelected) BrandOrange else Color(0xFFD1D5DB),
-                            shape = CircleShape
-                        )
-                        .clickable { viewModel.setShapeColor(colorInt) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isSelected) {
-                        val checkTint = if (colorInt == 0xFFFFFFFF.toInt() || colorInt == 0xFFFBBF24.toInt()) {
-                            Color(0xFF1F2937)
-                        } else {
-                            Color.White
-                        }
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Selected",
-                            tint = checkTint,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
-            }
-
-            // Custom color button
-            Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .clip(CircleShape)
-                    .background(if (showColorPicker) (if (isDark) Color(0xFF431407) else Color(0xFFFFF7ED)) else (if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6)))
-                    .border(
-                        1.5.dp,
-                        if (showColorPicker) BrandOrange else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB)),
-                        CircleShape
-                    )
-                    .clickable { showColorPicker = !showColorPicker },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ColorLens,
-                    contentDescription = stringResource(R.string.custom_color),
-                    tint = if (showColorPicker) BrandOrange else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563)),
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+            ToolbarColorSwatches(
+                selected = currentModeColor,
+                isDark = isDark,
+                showNone = state.shapeStyleMode == ShapeStyleMode.FILL,
+                isPaletteOpen = showColorPicker,
+                onTogglePalette = { showColorPicker = !showColorPicker },
+                onPick = { viewModel.setShapeColor(it) },
+                onNone = { viewModel.setShapeColor(0) }
+            )
         }
         }
 
@@ -756,7 +684,7 @@ fun ShapeToolPanel(
  */
 @Composable
 private fun ShapeIconPreview(spec: ShapeSpec, tint: Color) {
-    Canvas(modifier = Modifier.size(28.dp)) {
+    Canvas(modifier = Modifier.size(26.dp)) {
         val pad = 3.dp.toPx()
         val box = Rect(pad, pad, size.width - pad, size.height - pad)
         val stroke = DrawStroke(width = 1.8f.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)

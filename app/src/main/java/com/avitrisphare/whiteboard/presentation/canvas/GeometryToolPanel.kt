@@ -34,9 +34,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -145,17 +143,6 @@ private val INSTRUMENTS = listOf(
     )
 )
 
-private val INK_COLORS = listOf(
-    0xFFEF4444.toInt(),
-    0xFFF97316.toInt(),
-    0xFFFBBF24.toInt(),
-    0xFF22C55E.toInt(),
-    0xFF3B82F6.toInt(),
-    0xFF6366F1.toInt(),
-    0xFFA855F7.toInt(),
-    0xFF1B1F2A.toInt(),
-    0xFFFFFFFF.toInt()
-)
 
 private val ROTATION_PRESETS = listOf(0f, 45f, 90f, 180f)
 private val ANGLE_PRESETS = listOf(30f, 45f, 60f, 90f, 120f, 135f, 150f)
@@ -371,7 +358,7 @@ fun GeometryToolPanel(
         Spacer(Modifier.height(4.dp))
         Text(stringResource(R.string.ink_colour), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = inkColor)
         Spacer(Modifier.height(6.dp))
-        InkSwatches(
+        ToolbarColorSwatches(
             selected = state.selectedColor,
             isDark = isDark,
             isPaletteOpen = showColorPicker,
@@ -549,68 +536,6 @@ private fun ChipRow(
                     color = if (on) (if (isDark) Color(0xFFFDBA74) else Orange) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563))
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun InkSwatches(
-    selected: Int,
-    isDark: Boolean = false,
-    isPaletteOpen: Boolean = false,
-    onTogglePalette: () -> Unit,
-    onPick: (Int) -> Unit
-) {
-    val colors = if (selected != 0 && selected !in INK_COLORS) listOf(selected) + INK_COLORS else INK_COLORS
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        colors.forEach { colorInt ->
-            val on = selected == colorInt
-            Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .clip(CircleShape)
-                    .background(Color(colorInt))
-                    .border(if (on) 2.dp else 1.dp, if (on) Orange else Color(0xFFD1D5DB), CircleShape)
-                    .clickable { onPick(colorInt) },
-                contentAlignment = Alignment.Center
-            ) {
-                if (on) {
-                    val tick = if (colorInt == 0xFFFFFFFF.toInt() || colorInt == 0xFFFBBF24.toInt()) {
-                        Color(0xFF1F2937)
-                    } else {
-                        Color.White
-                    }
-                    Icon(Icons.Default.Check, contentDescription = "Selected", tint = tick, modifier = Modifier.size(14.dp))
-                }
-            }
-        }
-
-        // Custom color palette button
-        Box(
-            modifier = Modifier
-                .size(26.dp)
-                .clip(CircleShape)
-                .background(if (isPaletteOpen) (if (isDark) Color(0xFF431407) else Color(0xFFFFF7ED)) else (if (isDark) Color(0xFF334155) else Color(0xFFF3F4F6)))
-                .border(
-                    1.5.dp,
-                    if (isPaletteOpen) Orange else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB)),
-                    CircleShape
-                )
-                .clickable(onClick = onTogglePalette),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.ColorLens,
-                contentDescription = stringResource(R.string.custom_color),
-                tint = if (isPaletteOpen) Orange else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563)),
-                modifier = Modifier.size(16.dp)
-            )
         }
     }
 }

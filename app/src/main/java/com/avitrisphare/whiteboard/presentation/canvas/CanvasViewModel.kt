@@ -2838,6 +2838,11 @@ class CanvasViewModel @Inject constructor(
         strokeClipboard = _state.value.strokes.filter { it.id in selected }
         strokeClipboardSourcePage = activePage
         _state.update { it.copy(hasStrokeClipboard = strokeClipboard.isNotEmpty()) }
+        if (strokeClipboard.isNotEmpty()) {
+            val count = strokeClipboard.size
+            val msg = if (count == 1) "Copied! Ready to paste" else "Copied $count items! Ready to paste"
+            showToast(msg)
+        }
     }
 
     fun pasteStrokeClipboard(targetCenter: Offset? = null) {
@@ -2904,6 +2909,9 @@ class CanvasViewModel @Inject constructor(
         redoActionStack.clear()
         redoStack.clear()
         scheduleSave()
+        if (targetCenter == null) {
+            showToast("Pasted")
+        }
     }
 
     fun swapPenColors() {

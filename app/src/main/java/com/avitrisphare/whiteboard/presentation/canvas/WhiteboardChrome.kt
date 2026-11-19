@@ -149,6 +149,8 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -383,6 +385,16 @@ fun AvitriSphareWhiteboardChrome(
     var pageToDeleteIndex by remember { mutableStateOf<Int?>(null) }
     var selectionColorTarget by remember { mutableStateOf("border") }
     var showBgColorWheel by remember { mutableStateOf(false) }
+    var showSelectionColorWheel by remember { mutableStateOf(false) }
+    var showStrokeColorWheel by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.selectedStrokeIds) {
+        if (state.selectedStrokeIds.isEmpty()) showSelectionColorWheel = false
+    }
+    LaunchedEffect(panel) {
+        if (panel != "color") showStrokeColorWheel = false
+        if (panel != "background") showBgColorWheel = false
+    }
 
     val toolIconBounds = remember { mutableStateMapOf<String, Rect>() }
     var chromeRootBounds by remember { mutableStateOf<Rect?>(null) }
@@ -530,6 +542,7 @@ fun AvitriSphareWhiteboardChrome(
             val isDiagram = remember(selectedStrokes) {
                 selectedStrokes.any { isMindMapNode(it) || it.strokeType == StrokeType.CONNECTOR }
             }
+            Box {
             if (!isDiagram) {
                 val hasImage = remember(selectedStrokes) {
                     selectedStrokes.any { it.strokeType == StrokeType.IMAGE }
@@ -866,73 +879,27 @@ fun AvitriSphareWhiteboardChrome(
                                 }
                             }
 
-                            // Color swatches (16.dp dots)
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                if (hasFillableShape && selectionColorTarget == "fill") {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFFF1F5F9))
-                                            .border(
-                                                if (currentFillColor == 0) 2.dp else 1.dp,
-                                                if (currentFillColor == 0) BrandOrange else Color(0xFFCBD5E1),
-                                                CircleShape
-                                            )
-                                            .clickable { viewModel.setSelectionFillColor(0) },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("⊘", color = Color(0xFF64748B), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            // Color swatches: 4–5 common colors plus More Colors (+)
+                            ToolbarColorSwatches(
+                                selected = if (hasFillableShape && selectionColorTarget == "fill") currentFillColor else currentBorderColor,
+                                isDark = state.isDarkTheme,
+                                swatchSize = 16.dp,
+                                spacing = 4.dp,
+                                showCheck = false,
+                                showNone = hasFillableShape && selectionColorTarget == "fill",
+                                isPaletteOpen = showSelectionColorWheel,
+                                onTogglePalette = { showSelectionColorWheel = !showSelectionColorWheel },
+                                onPick = { color ->
+                                    if (hasFillableShape && selectionColorTarget == "fill") {
+                                        viewModel.setSelectionFillColor(color)
+                                    } else if (hasFillableShape) {
+                                        viewModel.setSelectionBorderColor(color)
+                                    } else {
+                                        viewModel.recolorSelected(color)
                                     }
-
-                                    val fillPalette = listOf(
-                                        0xFFFFFFFF.toInt(),
-                                        0xFF1B1F2A.toInt(),
-                                        0xFFFF6B6B.toInt(),
-                                        0xFF3ECF8E.toInt(),
-                                        0xFF4ECDC4.toInt(),
-                                        0xFFFFE66D.toInt(),
-                                        0xFF60A5FA.toInt(),
-                                        0xFFAA96DA.toInt()
-                                    )
-                                    fillPalette.forEach { color ->
-                                        val isSelected = currentFillColor == color
-                                        Box(
-                                            modifier = Modifier
-                                                .size(16.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(color))
-                                                .then(
-                                                    if (isSelected) Modifier.border(2.dp, BrandOrange, CircleShape)
-                                                    else Modifier.border(0.8.dp, Color(0x33000000), CircleShape)
-                                                )
-                                                .clickable { viewModel.setSelectionFillColor(color) }
-                                        )
-                                    }
-                                } else {
-                                    val borderPalette = PEN_COLORS.take(7)
-                                    borderPalette.forEach { color ->
-                                        val isSelected = (if (hasFillableShape) currentBorderColor else state.selectedColor) == color
-                                        Box(
-                                            modifier = Modifier
-                                                .size(16.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(color))
-                                                .then(
-                                                    if (isSelected) Modifier.border(2.dp, BrandOrange, CircleShape)
-                                                    else Modifier.border(0.8.dp, Color(0x33000000), CircleShape)
-                                                )
-                                                .clickable {
-                                                    if (hasFillableShape) viewModel.setSelectionBorderColor(color)
-                                                    else viewModel.recolorSelected(color)
-                                                }
-                                        )
-                                    }
-                                }
-                            }
+                                },
+                                onNone = { viewModel.setSelectionFillColor(0) }
+                            )
 
                             if (canEdit && editableStroke != null && state.editingTextId == null) {
                                 Text(
@@ -1124,22 +1091,16 @@ fun AvitriSphareWhiteboardChrome(
                             )
                         }
 
-                        // Color swatches for border/node color
-                        val borderPalette = PEN_COLORS.take(7)
-                        borderPalette.forEach { color ->
-                            val isSelected = mindmapBorderColor == color
-                            Box(
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(color))
-                                    .then(
-                                        if (isSelected) Modifier.border(2.dp, BrandOrange, CircleShape)
-                                        else Modifier.border(0.8.dp, Color(0x33000000), CircleShape)
-                                    )
-                                    .clickable { viewModel.recolorSelected(color) }
-                            )
-                        }
+                        ToolbarColorSwatches(
+                            selected = mindmapBorderColor,
+                            isDark = state.isDarkTheme,
+                            swatchSize = 16.dp,
+                            spacing = 4.dp,
+                            showCheck = false,
+                            isPaletteOpen = showSelectionColorWheel,
+                            onTogglePalette = { showSelectionColorWheel = !showSelectionColorWheel },
+                            onPick = { viewModel.recolorSelected(it) }
+                        )
 
                         // Edit text button for single mindmap node
                         if (mindmapNode != null && state.editingTextId == null) {
@@ -1247,6 +1208,36 @@ fun AvitriSphareWhiteboardChrome(
                         }
                     }
                 }
+            }
+
+            if (showSelectionColorWheel) {
+                val fillable = selectedStrokes.any { isFillableShape(it.strokeType) }
+                val activeShape = selectedStrokes.firstOrNull { isFillableShape(it.strokeType) }
+                val pickerColor = if (fillable && selectionColorTarget == "fill") {
+                    activeShape?.fillColor ?: 0
+                } else {
+                    activeShape?.colorValue
+                        ?: selectedStrokes.firstOrNull()?.colorValue
+                        ?: state.selectedColor
+                }
+                ColorWheelDialog(
+                    initialColor = if (pickerColor == 0) 0xFF1B1F2A.toInt() else pickerColor,
+                    isDark = state.isDarkTheme,
+                    title = if (fillable && selectionColorTarget == "fill") {
+                        stringResource(R.string.shape_fill_color)
+                    } else {
+                        stringResource(R.string.custom_color)
+                    },
+                    onColorSelected = { color ->
+                        if (fillable && selectionColorTarget == "fill") {
+                            viewModel.setSelectionFillColor(color)
+                        } else {
+                            viewModel.recolorSelected(color)
+                        }
+                    },
+                    onDismiss = { showSelectionColorWheel = false }
+                )
+            }
             }
         }
 
@@ -2150,16 +2141,31 @@ fun AvitriSphareWhiteboardChrome(
                 "more" -> 320.dp
                 "profile" -> 300.dp
                 "background" -> 340.dp
-                "color" -> 260.dp
+                "color" -> 300.dp
                 else -> 320.dp
             }
             with(density) { dpWidth.toPx() }
         }
-        var popoverMeasuredWidthPx by remember(panel) { mutableFloatStateOf(0f) }
+        var popoverMeasuredWidthPx by remember { mutableFloatStateOf(0f) }
         val activePopoverWidthPx = if (popoverMeasuredWidthPx > 0f) popoverMeasuredWidthPx else expectedPopoverWidthPx
+        var lastPanel by remember { mutableStateOf<String?>(null) }
+        SideEffect {
+            if (panel != null) lastPanel = panel
+        }
+        LaunchedEffect(panel) {
+            popoverMeasuredWidthPx = 0f
+        }
+        val shownPanel = panel ?: lastPanel
 
-        if (panel != null) {
-            val iconBounds = toolIconBounds[panel]
+        AnimatedVisibility(
+            visible = panel != null,
+            enter = fadeIn(tween(150)) + slideInVertically(tween(180)) { it / 5 },
+            exit = fadeOut(tween(110)) + slideOutVertically(tween(130)) { it / 8 },
+            modifier = Modifier
+                .align(if (toolIconBounds[shownPanel] != null) Alignment.BottomStart else Alignment.BottomCenter)
+                .padding(bottom = 86.dp)
+        ) {
+            val iconBounds = toolIconBounds[shownPanel]
             val chromeBounds = chromeRootBounds
             val localX = if (iconBounds != null && chromeBounds != null) {
                 val iconCenterXInChrome = iconBounds.center.x - chromeBounds.left
@@ -2171,12 +2177,12 @@ fun AvitriSphareWhiteboardChrome(
                 0f
             }
 
-            val dragOffsetX = when (panel) {
+            val dragOffsetX = when (shownPanel) {
                 "shapes" -> shapesWindowOffset.x
                 "profile" -> leftBarOffset.x
                 else -> centerBarOffset.x
             }
-            val dragOffsetY = when (panel) {
+            val dragOffsetY = when (shownPanel) {
                 "shapes" -> shapesWindowOffset.y + centerBarOffset.y
                 "profile" -> leftBarOffset.y
                 else -> centerBarOffset.y
@@ -2184,8 +2190,6 @@ fun AvitriSphareWhiteboardChrome(
 
             Box(
                 modifier = Modifier
-                    .align(if (iconBounds != null) Alignment.BottomStart else Alignment.BottomCenter)
-                    .padding(bottom = 86.dp)
                     .offset {
                         if (iconBounds != null) {
                             IntOffset((localX + dragOffsetX).roundToInt(), dragOffsetY.roundToInt())
@@ -2194,10 +2198,13 @@ fun AvitriSphareWhiteboardChrome(
                         }
                     }
                     .onGloballyPositioned {
-                        popoverMeasuredWidthPx = it.size.width.toFloat()
+                        val width = it.size.width.toFloat()
+                        if (kotlin.math.abs(width - popoverMeasuredWidthPx) > 2f) {
+                            popoverMeasuredWidthPx = width
+                        }
                     }
             ) {
-                when (panel) {
+                when (shownPanel) {
                     "profile" -> DockPopover(title = "Profile", maxWidth = 300.dp, onClose = { panel = null }) {
                         OutlinedTextField(
                             value = state.userName,
@@ -2667,30 +2674,41 @@ fun AvitriSphareWhiteboardChrome(
                             panel = null
                         })
                     }
-                    "color" -> DockPopover(title = "Stroke & Width", onClose = { panel = null }) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            PEN_COLORS.take(8).forEach { color ->
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(color))
-                                        .clickable { viewModel.setColor(color) }
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Slider(
-                            value = state.strokeWidth,
-                            onValueChange = { viewModel.setStrokeWidth(it) },
-                            valueRange = 1f..50f,
-                            modifier = Modifier.width(220.dp),
-                            colors = SliderDefaults.colors(
-                                thumbColor = BrandOrange,
-                                activeTrackColor = BrandOrange,
-                                inactiveTrackColor = Color(0xFFFFEDD5)
+                    "color" -> Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        DockPopover(title = "Stroke & Width", onClose = { panel = null; showStrokeColorWheel = false }) {
+                            ToolbarColorSwatches(
+                                selected = state.selectedColor,
+                                isDark = state.isDarkTheme,
+                                swatchSize = 22.dp,
+                                isPaletteOpen = showStrokeColorWheel,
+                                onTogglePalette = { showStrokeColorWheel = !showStrokeColorWheel },
+                                onPick = { viewModel.setColor(it) }
                             )
-                        )
+                            Spacer(Modifier.height(8.dp))
+                            Slider(
+                                value = state.strokeWidth,
+                                onValueChange = { viewModel.setStrokeWidth(it) },
+                                valueRange = 1f..50f,
+                                modifier = Modifier.width(220.dp),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = BrandOrange,
+                                    activeTrackColor = BrandOrange,
+                                    inactiveTrackColor = Color(0xFFFFEDD5)
+                                )
+                            )
+                        }
+                        if (showStrokeColorWheel) {
+                            ColorWheelPanel(
+                                initialColor = if (state.selectedColor == 0) 0xFF1B1F2A.toInt() else state.selectedColor,
+                                isDark = state.isDarkTheme,
+                                title = stringResource(R.string.custom_color),
+                                onColorSelected = { viewModel.setColor(it) },
+                                onClose = { showStrokeColorWheel = false }
+                            )
+                        }
                     }
                     "background" -> Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),

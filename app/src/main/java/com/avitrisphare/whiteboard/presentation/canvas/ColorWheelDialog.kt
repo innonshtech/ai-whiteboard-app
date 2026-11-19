@@ -26,7 +26,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
+import com.avitrisphare.whiteboard.R
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -74,8 +79,8 @@ fun ColorWheelPanel(
         shadowElevation = 14.dp,
         border = BorderStroke(1.dp, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)),
         modifier = modifier
-            .width(260.dp)
-            .heightIn(max = 280.dp)
+            .width(280.dp)
+            .heightIn(max = 360.dp)
     ) {
         ColorWheelCard(
             initialColor = initialColor,
@@ -152,7 +157,7 @@ fun ColorWheelCard(
             selectedHue = currentHue,
             selectedSat = currentSat,
             brightness = currentVal,
-            modifier = Modifier.size(130.dp),
+            modifier = Modifier.size(148.dp),
             onColorPick = { hue, sat, col ->
                 currentHue = hue
                 currentSat = sat
@@ -409,6 +414,144 @@ fun CircularColorWheel(
                     radius = 5.dp.toPx(),
                     center = Offset(thumbX, thumbY),
                     style = Stroke(width = 1.dp.toPx())
+                )
+            }
+        }
+    }
+}
+
+/** Common ink colors shown in compact toolbar palettes before the Rainbow Color Circle. */
+val TOOLBAR_QUICK_COLORS = listOf(
+    0xFF1B1F2A.toInt(), // Ink (Black)
+    0xFFFFFFFF.toInt(), // White
+    0xFF3ECF8E.toInt(), // Green
+    0xFFFF6B6B.toInt(), // Red
+    0xFF4ECDC4.toInt(), // Cyan
+    0xFFFFE66D.toInt(), // Yellow
+    0xFF95E1D0.toInt()  // Mint
+)
+
+/**
+ * Compact toolbar color row: shows all common swatches plus a Rainbow Color Circle
+ * that opens the full circular color wheel so the user can select ANY color they want.
+ */
+@Composable
+fun ToolbarColorSwatches(
+    selected: Int,
+    isDark: Boolean = false,
+    swatchSize: Dp = 26.dp,
+    spacing: Dp = 6.dp,
+    showCheck: Boolean = true,
+    showNone: Boolean = false,
+    isPaletteOpen: Boolean = false,
+    onTogglePalette: () -> Unit,
+    onPick: (Int) -> Unit,
+    onNone: (() -> Unit)? = null,
+    commonColors: List<Int> = TOOLBAR_QUICK_COLORS
+) {
+    // If user has chosen a custom color not in commonColors, append it as a visible swatch
+    val displayColors = remember(selected, commonColors) {
+        if (selected != 0 && selected !in commonColors) {
+            commonColors + listOf(selected)
+        } else {
+            commonColors
+        }
+    }
+
+    val rainbowBrush = remember {
+        Brush.sweepGradient(
+            listOf(
+                Color.Red,
+                Color.Yellow,
+                Color.Green,
+                Color.Cyan,
+                Color.Blue,
+                Color.Magenta,
+                Color.Red
+            )
+        )
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(spacing),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (showNone && onNone != null) {
+            val isNoneSelected = selected == 0
+            Box(
+                modifier = Modifier
+                    .size(swatchSize)
+                    .clip(CircleShape)
+                    .background(if (isDark) Color(0xFF334155) else Color(0xFFF1F5F9))
+                    .border(
+                        width = if (isNoneSelected) 2.dp else 1.dp,
+                        color = if (isNoneSelected) BrandOrange else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB)),
+                        shape = CircleShape
+                    )
+                    .clickable(onClick = onNone),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "⊘",
+                    color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                    fontSize = (swatchSize.value * 0.55f).sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        displayColors.forEach { colorInt ->
+            val isSelected = selected == colorInt
+            Box(
+                modifier = Modifier
+                    .size(swatchSize)
+                    .clip(CircleShape)
+                    .background(Color(colorInt))
+                    .border(
+                        width = if (isSelected) 2.dp else 1.dp,
+                        color = if (isSelected) BrandOrange else (if (isDark) Color(0xFF475569) else Color(0xFFD1D5DB)),
+                        shape = CircleShape
+                    )
+                    .clickable { onPick(colorInt) },
+                contentAlignment = Alignment.Center
+            ) {
+                if (showCheck && isSelected) {
+                    val isLight = colorInt == 0xFFFFFFFF.toInt() ||
+                        colorInt == 0xFFFFE66D.toInt() ||
+                        colorInt == 0xFFFBBF24.toInt() ||
+                        colorInt == 0xFF95E1D0.toInt()
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Selected",
+                        tint = if (isLight) Color(0xFF1F2937) else Color.White,
+                        modifier = Modifier.size((swatchSize.value * 0.55f).dp)
+                    )
+                }
+            }
+        }
+
+        // Rainbow Color Circle (opens Color Wheel Palette)
+        val isCustomPicked = selected != 0 && selected !in commonColors
+        Box(
+            modifier = Modifier
+                .size(swatchSize)
+                .clip(CircleShape)
+                .background(rainbowBrush)
+                .border(
+                    width = if (isPaletteOpen || isCustomPicked) 2.dp else 1.dp,
+                    color = if (isPaletteOpen || isCustomPicked) BrandOrange else (if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1)),
+                    shape = CircleShape
+                )
+                .clickable(onClick = onTogglePalette),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isPaletteOpen) {
+                Box(
+                    modifier = Modifier
+                        .size((swatchSize.value * 0.4f).dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .border(0.5.dp, Color.Black.copy(alpha = 0.3f), CircleShape)
                 )
             }
         }
