@@ -228,14 +228,14 @@ fun ShapeToolPanel(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 360.dp)
+                    .heightIn(max = 310.dp)
             ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(outerScrollState)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .padding(end = 8.dp)
+                .padding(end = if (outerScrollState.maxValue > 0) 6.dp else 0.dp)
         ) {
         // --- Header (Drag Handle & Close Button) ---
         Row(
@@ -345,84 +345,60 @@ fun ShapeToolPanel(
         val shapesInCat = remember(selectedCategory) {
             ALL_SHAPES.filter { it.category == selectedCategory }
         }
-        val shapeScrollState = rememberScrollState()
-        LaunchedEffect(selectedCategory) {
-            shapeScrollState.scrollTo(0)
-        }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(118.dp)
+        // --- Shape Cards Grid: shows all shapes at once without inner scrollbar ---
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(end = 8.dp)
-                    .verticalScroll(shapeScrollState),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                val chunkedShapes = remember(shapesInCat) {
-                    shapesInCat.chunked(5)
-                }
-                chunkedShapes.forEach { rowShapes ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        rowShapes.forEach { spec ->
-                            val isSelected = spec.strokeType == state.activeShapeType
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(54.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isSelected) (if (isDark) Color(0xFF431407) else Color(0xFFFFF7ED)) else (if (isDark) Color(0xFF0F172A) else Color(0xFFF9FAFB)))
-                                    .border(
-                                        width = if (isSelected) 2.dp else 1.dp,
-                                        color = if (isSelected) BrandOrange else (if (isDark) Color(0xFF334155) else Color(0xFFE5E7EB)),
-                                        shape = RoundedCornerShape(10.dp)
-                                    )
-                                    .clickable {
-                                        viewModel.setShapeType(spec.strokeType)
-                                    }
-                                    .padding(horizontal = 2.dp, vertical = 3.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                ShapeIconPreview(
-                                    spec = spec,
-                                    tint = if (isSelected) (if (isDark) Color(0xFFFDBA74) else BrandOrange) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF374151))
+            val chunkedShapes = remember(shapesInCat) {
+                shapesInCat.chunked(5)
+            }
+            chunkedShapes.forEach { rowShapes ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    rowShapes.forEach { spec ->
+                        val isSelected = spec.strokeType == state.activeShapeType
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(54.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isSelected) (if (isDark) Color(0xFF431407) else Color(0xFFFFF7ED)) else (if (isDark) Color(0xFF0F172A) else Color(0xFFF9FAFB)))
+                                .border(
+                                    width = if (isSelected) 2.dp else 1.dp,
+                                    color = if (isSelected) BrandOrange else (if (isDark) Color(0xFF334155) else Color(0xFFE5E7EB)),
+                                    shape = RoundedCornerShape(10.dp)
                                 )
-                                Spacer(Modifier.height(1.dp))
-                                Text(
-                                    text = localizedShapeName(spec.strokeType),
-                                    fontSize = 8.5.sp,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (isSelected) (if (isDark) Color(0xFFFDBA74) else BrandOrange) else (if (isDark) Color(0xFF94A3B8) else Color(0xFF4B5563)),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                        repeat(5 - rowShapes.size) {
-                            Spacer(Modifier.weight(1f))
+                                .clickable {
+                                    viewModel.setShapeType(spec.strokeType)
+                                }
+                                .padding(horizontal = 2.dp, vertical = 3.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            ShapeIconPreview(
+                                spec = spec,
+                                tint = if (isSelected) (if (isDark) Color(0xFFFDBA74) else BrandOrange) else (if (isDark) Color(0xFFCBD5E1) else Color(0xFF374151))
+                            )
+                            Spacer(Modifier.height(1.dp))
+                            Text(
+                                text = localizedShapeName(spec.strokeType),
+                                fontSize = 8.5.sp,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isSelected) (if (isDark) Color(0xFFFDBA74) else BrandOrange) else (if (isDark) Color(0xFF94A3B8) else Color(0xFF4B5563)),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
+                    repeat(5 - rowShapes.size) {
+                        Spacer(Modifier.weight(1f))
+                    }
                 }
-            }
-            if (shapeScrollState.maxValue > 0) {
-                VerticalScrollbar(
-                    scrollState = shapeScrollState,
-                    trackColor = trackColor,
-                    thumbColor = BrandOrange.copy(alpha = 0.6f),
-                    thumbWidth = 3.dp,
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
-                        .padding(vertical = 2.dp)
-                )
             }
         }
 
