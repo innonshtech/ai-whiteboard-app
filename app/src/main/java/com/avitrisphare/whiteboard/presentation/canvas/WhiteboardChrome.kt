@@ -150,7 +150,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -441,7 +440,15 @@ fun AvitriSphareWhiteboardChrome(
             .padding(horizontal = 14.dp, vertical = 12.dp)
             .onGloballyPositioned { chromeRootBounds = it.boundsInRoot() }
     ) {
-        if (panel != null) {
+        var allowPanelDismiss by remember { mutableStateOf(false) }
+        LaunchedEffect(panel) {
+            allowPanelDismiss = false
+            if (panel != null) {
+                kotlinx.coroutines.delay(50)
+                allowPanelDismiss = true
+            }
+        }
+        if (panel != null && allowPanelDismiss) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1713,19 +1720,12 @@ fun AvitriSphareWhiteboardChrome(
                                             active = activeDockTool == ActiveDockTool.PEN,
                                             modifier = Modifier.onGloballyPositioned { toolIconBounds["ink"] = it.boundsInRoot() },
                                             onPenClick = {
-                                                if (activeDockTool == ActiveDockTool.PEN) {
-                                                    val nextSlot = if (state.useSecondaryPenColor) 1 else 2
-                                                    viewModel.setActivePenSlot(nextSlot)
-                                                    val label = if (nextSlot == 1) "Tip 1" else "Tip 2"
-                                                    Toast.makeText(context, "$label active", Toast.LENGTH_SHORT).show()
+                                                if (state.useSecondaryPenColor) {
+                                                    viewModel.setSecondaryInkTool(state.secondaryInkTool)
                                                 } else {
-                                                    if (state.useSecondaryPenColor) {
-                                                        viewModel.setSecondaryInkTool(state.secondaryInkTool)
-                                                    } else {
-                                                        viewModel.setTool(state.inkTool)
-                                                    }
+                                                    viewModel.setTool(state.inkTool)
                                                 }
-                                                panel = null
+                                                toggle("ink")
                                             },
                                             onDropdownClick = {
                                                 toggle("ink")
@@ -2148,24 +2148,9 @@ fun AvitriSphareWhiteboardChrome(
         }
         var popoverMeasuredWidthPx by remember { mutableFloatStateOf(0f) }
         val activePopoverWidthPx = if (popoverMeasuredWidthPx > 0f) popoverMeasuredWidthPx else expectedPopoverWidthPx
-        var lastPanel by remember { mutableStateOf<String?>(null) }
-        SideEffect {
-            if (panel != null) lastPanel = panel
-        }
-        LaunchedEffect(panel) {
-            popoverMeasuredWidthPx = 0f
-        }
-        val shownPanel = panel ?: lastPanel
 
-        AnimatedVisibility(
-            visible = panel != null,
-            enter = fadeIn(tween(150)) + slideInVertically(tween(180)) { it / 5 },
-            exit = fadeOut(tween(110)) + slideOutVertically(tween(130)) { it / 8 },
-            modifier = Modifier
-                .align(if (toolIconBounds[shownPanel] != null) Alignment.BottomStart else Alignment.BottomCenter)
-                .padding(bottom = 86.dp)
-        ) {
-            val iconBounds = toolIconBounds[shownPanel]
+        if (panel != null) {
+            val iconBounds = toolIconBounds[panel]
             val chromeBounds = chromeRootBounds
             val localX = if (iconBounds != null && chromeBounds != null) {
                 val iconCenterXInChrome = iconBounds.center.x - chromeBounds.left
@@ -2177,12 +2162,12 @@ fun AvitriSphareWhiteboardChrome(
                 0f
             }
 
-            val dragOffsetX = when (shownPanel) {
+            val dragOffsetX = when (panel) {
                 "shapes" -> shapesWindowOffset.x
                 "profile" -> leftBarOffset.x
                 else -> centerBarOffset.x
             }
-            val dragOffsetY = when (shownPanel) {
+            val dragOffsetY = when (panel) {
                 "shapes" -> shapesWindowOffset.y + centerBarOffset.y
                 "profile" -> leftBarOffset.y
                 else -> centerBarOffset.y
@@ -2190,6 +2175,8 @@ fun AvitriSphareWhiteboardChrome(
 
             Box(
                 modifier = Modifier
+                    .align(if (iconBounds != null) Alignment.BottomStart else Alignment.BottomCenter)
+                    .padding(bottom = 86.dp)
                     .offset {
                         if (iconBounds != null) {
                             IntOffset((localX + dragOffsetX).roundToInt(), dragOffsetY.roundToInt())
@@ -2204,7 +2191,7 @@ fun AvitriSphareWhiteboardChrome(
                         }
                     }
             ) {
-                when (shownPanel) {
+                when (panel) {
                     "profile" -> DockPopover(title = "Profile", maxWidth = 300.dp, onClose = { panel = null }) {
                         OutlinedTextField(
                             value = state.userName,
@@ -3085,7 +3072,12 @@ private fun DockBar(
     content: @Composable RowScope.() -> Unit
 ) {
     Surface(
-        modifier = modifier.figmaDropShadow(
+        modifier = modifier
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { /* consume toolbar taps so the canvas cannot dismiss the panel */ }
+            .figmaDropShadow(
             cornerRadius = cornerRadius,
             offsetY = 8.dp,
             blurRadius = 20.dp,
@@ -3122,6 +3114,7 @@ private fun DockItem(
     Box(
         modifier = modifier
             .padding(horizontal = 2.dp)
+            .heightIn(min = 44.dp)
             .then(
                 if (active) {
                     Modifier

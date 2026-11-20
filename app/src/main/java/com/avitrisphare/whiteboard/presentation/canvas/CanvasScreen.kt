@@ -154,6 +154,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameMillis
@@ -1470,6 +1471,7 @@ fun CanvasScreen(
     var lineConnectionSourceNodeId by remember { mutableStateOf<String?>(null) }
     var lineConnectionPointerWorld by remember { mutableStateOf<Offset?>(null) }
     var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
+    val canvasOriginNow by rememberUpdatedState(canvasOrigin)
     val chromeBounds = remember { ChromeBounds() }
     var dockDismissNonce by remember { mutableIntStateOf(0) }
     var selectionToolbarDismissed by remember { mutableStateOf(false) }
@@ -1978,8 +1980,14 @@ fun CanvasScreen(
                             return false
                         }
                         var down = awaitFirstDown(requireUnconsumed = false)
-                        dockDismissNonce++
-                        viewModel.dismissSmartWrite()
+                        val downInRoot = canvasOriginNow + down.position
+                        val tappedChrome = down.isConsumed ||
+                            droppedOnToolbar(downInRoot, chromeBounds.dock) ||
+                            chromeBounds.frost.any { it.inflate(16f).contains(downInRoot) }
+                        if (!tappedChrome) {
+                            dockDismissNonce++
+                            viewModel.dismissSmartWrite()
+                        }
                         while (down.rejectedPalm(stylusDrawing = false)) {
                             down.consume()
                             val skipped = awaitPointerEvent()
