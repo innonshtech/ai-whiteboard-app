@@ -1067,20 +1067,6 @@ fun InkToolPanel(
                         modifier = Modifier.size(15.dp)
                     )
                 }
-                Spacer(Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFFF1F5F9))
-                        .padding(horizontal = 8.dp, vertical = 5.dp)
-                ) {
-                    Text(
-                        text = "💧 100%",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF475569)
-                    )
-                }
             }
 
             Box(
