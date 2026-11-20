@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -216,6 +217,8 @@ fun GeometryToolPanel(
     }
 
     val isDark = state.isDarkTheme
+    val scrollState = rememberScrollState()
+    val trackColor = if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)
     var showColorPicker by remember { mutableStateOf(false) }
     val titleColor = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1F2937)
     val inkColor = if (isDark) Color(0xFFE2E8F0) else Ink
@@ -235,12 +238,17 @@ fun GeometryToolPanel(
             border = BorderStroke(1.dp, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)),
             modifier = Modifier.width(340.dp)
         ) {
-            Column(
+            Box(
                 modifier = Modifier
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .fillMaxWidth()
                     .heightIn(max = 280.dp)
-                    .verticalScroll(rememberScrollState())
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState)
+                        .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = if (scrollState.maxValue > 0) 18.dp else 12.dp)
+                ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -365,6 +373,20 @@ fun GeometryToolPanel(
             onTogglePalette = { showColorPicker = !showColorPicker },
             onPick = { viewModel.setColor(it) }
         )
+                }
+
+                if (scrollState.maxValue > 0) {
+                    VerticalScrollbar(
+                        scrollState = scrollState,
+                        trackColor = trackColor,
+                        thumbColor = BrandOrange,
+                        thumbWidth = 3.dp,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .padding(vertical = 12.dp, horizontal = 2.dp)
+                    )
+                }
             }
         }
 
