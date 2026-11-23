@@ -808,9 +808,13 @@ object WhiteboardExportManager {
                         rawUri.endsWith(".jpg", ignoreCase = true) || rawUri.endsWith(".jpeg", ignoreCase = true) -> "jpg"
                         rawUri.endsWith(".webp", ignoreCase = true) -> "webp"
                         rawUri.endsWith(".svg", ignoreCase = true) -> "svg"
+                        rawUri.endsWith(".pdf", ignoreCase = true) -> "pdf"
+                        rawUri.endsWith(".pptx", ignoreCase = true) -> "pptx"
+                        rawUri.endsWith(".ppt", ignoreCase = true) -> "ppt"
                         else -> "png"
                     }
-                    val assetKey = "img_${java.util.UUID.randomUUID().toString().replace("-", "").take(12)}.$ext"
+                    val prefix = if (ext == "pdf" || ext == "ppt" || ext == "pptx") "doc_" else "img_"
+                    val assetKey = "${prefix}${java.util.UUID.randomUUID().toString().replace("-", "").take(12)}.$ext"
                     assetsMap[assetKey] = encodeBase64(bytes)
                     return "asset://$assetKey"
                 }
@@ -865,7 +869,9 @@ object WhiteboardExportManager {
                 offsetY = offsetY
             ),
             pages = gshPages,
-            documentPath = document?.path,
+            documentPath = if (document != null && document.path.isNotBlank()) {
+                bundleAsset(document.path)
+            } else null,
             documentName = document?.name,
             documentKind = document?.kind?.name,
             splitCount = splitCount.takeIf { it > 1 },
@@ -1438,16 +1444,29 @@ object WhiteboardExportManager {
     }
 
     fun importLesson(context: Context, uri: Uri): GyoashIwbPackage {
+        android.util.Log.i("GSH_DEBUG", "WhiteboardExportManager.importLesson: uri=$uri, scheme=${uri.scheme}, path=${uri.path}")
         val bytes = try {
-            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-        } catch (e: Exception) {
             if (uri.scheme == "file") {
-                val path = uri.path
-                if (path != null) File(path).readBytes() else throw e
+                val path = uri.path ?: uri.toString().removePrefix("file://")
+                android.util.Log.i("GSH_DEBUG", "Reading bytes from File($path)")
+                File(path).readBytes()
             } else {
+                android.util.Log.i("GSH_DEBUG", "Opening stream via contentResolver for: $uri")
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: if (uri.path != null && File(uri.path!!).exists()) File(uri.path!!).readBytes()
+                    else throw IllegalArgumentException("Could not read stream for $uri")
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("GSH_DEBUG", "Primary read failed: ${e.message}, attempting fallback")
+            val path = uri.path
+            if (path != null && File(path).exists()) {
+                File(path).readBytes()
+            } else {
+                android.util.Log.e("GSH_DEBUG", "Fallback read failed", e)
                 throw e
             }
-        } ?: throw IllegalArgumentException("Could not read whiteboard lesson file")
+        }
+        android.util.Log.i("GSH_DEBUG", "Read ${bytes.size} bytes from $uri, parsing...")
         return parseLessonBytes(context, bytes)
     }
 
@@ -1456,18 +1475,24 @@ object WhiteboardExportManager {
         if (assets.isEmpty()) return pkg
 
         val mediaDir = File(context.filesDir, "media").apply { mkdirs() }
+        val docsDir = File(context.filesDir, "documents").apply { mkdirs() }
         val assetToLocalMap = mutableMapOf<String, String>()
 
         for ((assetKey, base64) in assets) {
             try {
                 val bytes = decodeBase64(base64)
                 val fileName = assetKey.removePrefix("asset://")
-                val targetFile = File(mediaDir, fileName)
+                val isDoc = fileName.startsWith("doc_") || fileName.endsWith(".pdf", true) || fileName.endsWith(".ppt", true) || fileName.endsWith(".pptx", true)
+                val targetFile = File(if (isDoc) docsDir else mediaDir, fileName)
                 targetFile.writeBytes(bytes)
                 assetToLocalMap[assetKey] = targetFile.absolutePath
                 assetToLocalMap["asset://$assetKey"] = targetFile.absolutePath
                 assetToLocalMap[fileName] = targetFile.absolutePath
             } catch (_: Exception) {}
+        }
+
+        val updatedDocPath = pkg.documentPath?.let { docPath ->
+            assetToLocalMap[docPath] ?: assetToLocalMap[docPath.removePrefix("asset://")] ?: docPath
         }
 
         val updatedPages = pkg.pages.map { page ->
@@ -1490,8 +1515,8 @@ object WhiteboardExportManager {
             page.copy(customBackgroundUri = updatedBgUri, layers = updatedLayers)
         }
 
-        com.avitrisphare.whiteboard.presentation.canvas.BitmapCache.clear()
-        return pkg.copy(pages = updatedPages)
+        runCatching { com.avitrisphare.whiteboard.presentation.canvas.BitmapCache.clear() }
+        return pkg.copy(pages = updatedPages, documentPath = updatedDocPath)
     }
 
     fun parseLessonBytes(context: Context, bytes: ByteArray): GyoashIwbPackage {

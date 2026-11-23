@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
 
     <!-- Enables support for Android TV, Smart Boards, IFPDs, Tablets, and Phones -->
     <!-- Declaring touchscreen and faketouch as NOT required allows installation on Android TV / non-touch TV OS -->
@@ -27,12 +30,14 @@
         android:hardwareAccelerated="true"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
+        android:requestLegacyExternalStorage="true"
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/Theme.AvitriSphare">
         <activity
             android:name=".presentation.AvitriSphareActivity"
             android:exported="true"
             android:hardwareAccelerated="true"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.AvitriSphare">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -46,7 +51,8 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="file" />
                 <data android:scheme="content" />
-                <data android:host="*" />
+                <data android:pathSuffix=".gsh" />
+                <data android:pathSuffix=".GSH" />
                 <data android:pathPattern=".*\\.gsh" />
                 <data android:pathPattern=".*\\..*\\.gsh" />
                 <data android:pathPattern=".*\\.GSH" />
@@ -68,6 +74,8 @@
                 <data android:scheme="file" />
                 <data android:scheme="content" />
                 <data android:mimeType="application/octet-stream" />
+                <data android:pathSuffix=".gsh" />
+                <data android:pathSuffix=".GSH" />
                 <data android:pathPattern=".*\\.gsh" />
                 <data android:pathPattern=".*\\..*\\.gsh" />
                 <data android:pathPattern=".*\\.GSH" />
@@ -80,6 +88,8 @@
                 <data android:scheme="file" />
                 <data android:scheme="content" />
                 <data android:mimeType="*/*" />
+                <data android:pathSuffix=".gsh" />
+                <data android:pathSuffix=".GSH" />
                 <data android:pathPattern=".*\\.gsh" />
                 <data android:pathPattern=".*\\..*\\.gsh" />
                 <data android:pathPattern=".*\\.GSH" />
