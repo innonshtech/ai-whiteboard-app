@@ -783,10 +783,10 @@ fun CanvasSidebarMenu(
                         }
                     )
 
-                    // 3. Open GYOASH Lesson (.iwb)...
+                    // 3. Open GSH Lesson (.gsh)...
                     SidebarMenuItem(
                         icon = Icons.Default.FolderOpen,
-                        label = "Open GYOASH Lesson (.iwb)...",
+                        label = "Open GSH Lesson (.gsh)...",
                         onClick = {
                             onDismiss()
                             onOpenIwb()

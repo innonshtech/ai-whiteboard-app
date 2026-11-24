@@ -5228,6 +5228,7 @@ class CanvasViewModel @Inject constructor(
                     onResult(result)
                 }
             } catch (e: Exception) {
+                android.util.Log.e("GSH_DEBUG", "CanvasViewModel.importIwbFile failed with exception", e)
                 withContext(Dispatchers.Main) {
                     onProgress(0f, "Export failed: ${e.message}")
                     Toast.makeText(context, "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
@@ -5242,9 +5243,11 @@ class CanvasViewModel @Inject constructor(
         targetNoteId: String? = null,
         onResult: (Boolean, String) -> Unit
     ) {
+        android.util.Log.i("GSH_DEBUG", "CanvasViewModel.importIwbFile called: uri=$uri, targetNoteId=$targetNoteId")
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val pkg = WhiteboardExportManager.importLesson(context, uri)
+                android.util.Log.i("GSH_DEBUG", "CanvasViewModel.importLesson succeeded: title=${pkg.title}, pagesCount=${pkg.pages.size}")
                 val restoredPages = pkg.pages.map { page ->
                     page.layers.flatMap { layer -> layer.strokes.map { it.toDomain() } }
                 }
@@ -5316,6 +5319,21 @@ class CanvasViewModel @Inject constructor(
                     val activeBg = CanvasBackground.fromKey(activeBgKey)
                     val activeBgColor = pageCustomBackgroundColors.getOrNull(activePage)
 
+                    val restoredDoc = if (!pkg.documentPath.isNullOrBlank()) {
+                        val docFile = File(pkg.documentPath)
+                        if (docFile.exists()) {
+                            val kind = runCatching { DocumentKind.valueOf(pkg.documentKind ?: "PDF") }
+                                .getOrDefault(documentKind(pkg.documentName ?: docFile.name, null) ?: DocumentKind.PDF)
+                            BoardDocument(
+                                name = pkg.documentName ?: docFile.name,
+                                kind = kind,
+                                path = docFile.absolutePath,
+                                pageWidth = 1f,
+                                pageHeight = 1f
+                            )
+                        } else null
+                    } else null
+
                     _state.update {
                         it.copy(
                             noteId = resolvedNoteId,
@@ -5331,7 +5349,7 @@ class CanvasViewModel @Inject constructor(
                             scale = pkg.metadata.scale.coerceIn(CanvasTransform.MIN_SCALE, CanvasTransform.MAX_SCALE),
                             offsetX = pkg.metadata.offsetX,
                             offsetY = pkg.metadata.offsetY,
-                            document = null,
+                            document = restoredDoc,
                             errorMessage = null,
                             isLoading = false,
                             pageTitles = pageTitles.toList(),
@@ -5339,6 +5357,10 @@ class CanvasViewModel @Inject constructor(
                             pageCustomBackgroundUris = pageCustomBackgroundUris.toList(),
                             pageCustomBackgroundColors = pageCustomBackgroundColors.toList()
                         )
+                    }
+
+                    if (restoredDoc != null) {
+                        renderDocumentPage(activePage)
                     }
 
                     // Persist to database & file
@@ -5356,6 +5378,7 @@ class CanvasViewModel @Inject constructor(
                     onResult(true, "Lesson '$effectiveTitle' loaded with ${pages.size} page(s) and all layers intact!")
                 }
             } catch (e: Exception) {
+                android.util.Log.e("GSH_DEBUG", "CanvasViewModel.importIwbFile failed with exception", e)
                 withContext(Dispatchers.Main) {
                     val message = if (e is com.avitrisphare.whiteboard.presentation.canvas.export.GshUnauthorizedDeviceException) {
                         "This GSH file is protected and can only be opened on an authorized GSH Whiteboard device."

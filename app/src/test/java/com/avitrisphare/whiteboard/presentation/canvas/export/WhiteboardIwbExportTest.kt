@@ -175,4 +175,56 @@ class WhiteboardIwbExportTest {
         assertEquals(1, importedPkg.pages[0].layers[0].strokes.size)
         assertEquals(0xFF3B82F6.toInt(), importedPkg.pages[0].layers[0].strokes[0].colorValue)
     }
+
+    @Test
+    fun testRestorePortableAssetsExtractsDocumentAndRemapsPath() {
+        val context = io.mockk.mockk<android.content.Context>(relaxed = true)
+        val filesDir = tempFolder.newFolder("files")
+        io.mockk.every { context.filesDir } returns filesDir
+
+        val samplePdfContent = "PDF_MOCK_CONTENT".toByteArray(Charsets.UTF_8)
+        val encodedDoc = java.util.Base64.getEncoder().encodeToString(samplePdfContent)
+
+        val pkg = GyoashIwbPackage(
+            format = "GSH_WHITEBOARD_V1",
+            title = "Test Lesson",
+            metadata = GyoashIwbMetadata(
+                pageCount = 1,
+                canvasBackground = "DARK",
+                isDarkCanvas = true,
+                showGrid = false
+            ),
+            pages = emptyList(),
+            documentPath = "asset://doc_test_123.pdf",
+            documentName = "Sample.pdf",
+            documentKind = "PDF",
+            assets = mapOf("doc_test_123.pdf" to encodedDoc)
+        )
+
+        val restoredPkg = WhiteboardExportManager.restorePortableAssets(context, pkg)
+        assertNotNull(restoredPkg.documentPath)
+        val restoredDocFile = File(restoredPkg.documentPath!!)
+        assertTrue(restoredDocFile.exists())
+        assertEquals("PDF_MOCK_CONTENT", restoredDocFile.readText(Charsets.UTF_8))
+        assertTrue(restoredDocFile.parentFile.name == "documents")
+    }
+
+    @Test
+    fun testParseRealAsdfgTestGsh() {
+        val testFile = File("../asdfg_test.gsh").takeIf { it.exists() } ?: File("asdfg_test.gsh")
+        if (!testFile.exists()) {
+            println("asdfg_test.gsh not found, skipping")
+            return
+        }
+        val bytes = testFile.readBytes()
+        val context = io.mockk.mockk<android.content.Context>(relaxed = true)
+        val filesDir = tempFolder.newFolder("real_files")
+        io.mockk.every { context.filesDir } returns filesDir
+        val pkg = WhiteboardExportManager.parseLessonBytes(context, bytes)
+        println("REAL PKG TITLE: ${pkg.title}")
+        println("REAL PKG PAGES: ${pkg.pages.size}")
+        pkg.pages.forEachIndexed { i, p ->
+            println("PAGE $i STROKES: ${p.layers.flatMap { it.strokes }.size}")
+        }
+    }
 }
