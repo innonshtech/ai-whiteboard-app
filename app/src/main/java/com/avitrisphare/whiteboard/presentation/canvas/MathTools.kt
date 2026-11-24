@@ -711,6 +711,24 @@ private fun hitTestCompass(tool: PlacedMathTool, point: Offset): MathToolZone {
     return MathToolZone.NONE
 }
 
+fun protractorRotateBtnLocal(span: Float): Offset {
+    val s = (span / defaultMathSpan(MathToolKind.PROTRACTOR)).coerceIn(0.40f, 3.5f)
+    val tickLaneH = (22f * s).coerceIn(16f, 44f)
+    val midR = span - tickLaneH
+    val numLaneH = (36f * s).coerceIn(24f, 64f)
+    val inR = midR - numLaneH
+    val shelfH = (span * 0.22f).coerceIn(48f, 68f)
+    val btnR = (shelfH * 0.34f).coerceIn(16f, 22f)
+    val rotR = (inR - btnR * 1.30f).coerceAtLeast(span * 0.45f)
+    val rotAngleRad = Math.toRadians(73.0).toFloat()
+    return Offset(cos(rotAngleRad) * rotR, -sin(rotAngleRad) * rotR)
+}
+
+fun protractorRotateBtn(tool: PlacedMathTool): Offset {
+    val local = protractorRotateBtnLocal(tool.span)
+    return toWorld(local, tool.center, tool.rotationDeg)
+}
+
 private fun hitTestProtractor(tool: PlacedMathTool, point: Offset): MathToolZone {
     val local = toLocal(point, tool.center, tool.rotationDeg)
     val span = tool.span
@@ -719,9 +737,9 @@ private fun hitTestProtractor(tool: PlacedMathTool, point: Offset): MathToolZone
     val btnR = (shelfH * 0.34f).coerceIn(16f, 22f)
     val touchR = maxOf(btnR * 1.5f, 32f)
 
-    // 1. Floating Outer Rotate Handle above top apex outside the arc
-    val topRotatePos = Offset(0f, -span - 28f)
-    if (near(local, topRotatePos, minOf(touchR, 24f))) return MathToolZone.ROTATE
+    // 1. Rotate Handle inside body near 73° (pink mark)
+    val rotPos = protractorRotateBtnLocal(span)
+    if (near(local, rotPos, touchR)) return MathToolZone.ROTATE
 
     // 2. Red Close Circle: strictly confined to the red close button circle so clicking outside does not close it
     val closePos = Offset(-span * 0.75f, btnY)
@@ -1840,11 +1858,10 @@ private fun DrawScope.drawProtractorTool(tool: PlacedMathTool, isDark: Boolean, 
         val btnR = (shelfH * 0.34f).coerceIn(16f, 22f)
         val iconColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF0F172A)
 
-        // Floating Outer Rotate Handle above top apex outside the arc
-        val topRotatePos = Offset(cx, cy - span - 28f)
-        drawLine(borderColor, Offset(cx, cy - span), topRotatePos, strokeWidth = 1.8f)
-        drawButtonCircle(topRotatePos, btnR, borderColor, isDark)
-        drawRotateIcon(topRotatePos, btnR * 0.5f, iconColor)
+        // Rotate Handle inside body near 73° (pink mark)
+        val rotPos = Offset(cx, cy) + protractorRotateBtnLocal(span)
+        drawButtonCircle(rotPos, btnR, borderColor, isDark)
+        drawRotateIcon(rotPos, btnR * 0.5f, iconColor)
 
         // 1. [X] Standard Close
         val closePos = Offset(cx - span * 0.75f, btnY)
