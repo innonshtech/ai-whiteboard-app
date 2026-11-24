@@ -60,7 +60,7 @@ data class PlacedMathTool(
     val span: Float,
     val toolScale: Float = 1.0f,
     val markedAngleDeg: Float? = null,
-    val pointerAngleDeg: Float = 90f,
+    val pointerAngleDeg: Float = 45f,
     val angleMode: Int = 0,
     val isDrawMode: Boolean = false,
     val isFlippedHorizontal: Boolean = false,
@@ -749,13 +749,6 @@ private fun hitTestProtractor(tool: PlacedMathTool, point: Offset): MathToolZone
     val tabH = (32f * s).coerceIn(18f, 60f)
     val armTabCenter = pDir * (span + tabH * 0.52f + 3f)
     if (near(local, armTabCenter, maxOf(tabH * 0.8f, 34f)) || near(local, armTip, 36f)) return MathToolZone.ANGLE_ARM
-
-    // 4. Baseline handle tabs at 0° and 180°
-    val base0Tip = Offset(span, 0f)
-    if (near(local, base0Tip, 36f)) return MathToolZone.ANGLE_ARM
-
-    val base180Tip = Offset(-span, 0f)
-    if (near(local, base180Tip, 36f)) return MathToolZone.ANGLE_ARM
 
     // 5. Pointer arm segment drag
     if (distanceToSegment(local, Offset.Zero, armTip) <= 24f) return MathToolZone.ANGLE_ARM
@@ -1811,16 +1804,12 @@ private fun DrawScope.drawProtractorTool(tool: PlacedMathTool, isDark: Boolean, 
         // 5d. Pointer Line from origin to current angle arm tip
         drawLine(borderColor, Offset(cx, cy), armTip, strokeWidth = 2.4f)
 
-        // 5e. Handle Tabs - black nip placed completely OUTSIDE rim so degree markings remain 100% visible
+        // 5e. Handle Tab on Angle Arm - placed outside rim so degree markings remain 100% visible
         val tabW = (24f * s).coerceIn(14f, 48f)
         val tabH = (32f * s).coerceIn(18f, 60f)
         val tabRadius = CornerRadius(4f * s, 4f * s)
         val tabColor = if (isDark) Color(0xEE334155) else Color(0xEE0F172A)
 
-        val rightTip = Offset(cx + span + tabW * 0.55f + 3f, cy)
-        drawRoundRect(tabColor, topLeft = rightTip - Offset(tabW / 2f, tabH / 2f), size = Size(tabW, tabH), cornerRadius = tabRadius)
-        val leftTip = Offset(cx - span - tabW * 0.55f - 3f, cy)
-        drawRoundRect(tabColor, topLeft = leftTip - Offset(tabW / 2f, tabH / 2f), size = Size(tabW, tabH), cornerRadius = tabRadius)
         val armTabCenter = Offset(cx, cy) + pDir * (span + tabH * 0.52f + 3f)
         drawRoundRect(tabColor, topLeft = armTabCenter - Offset(tabW / 2f, tabH / 2f), size = Size(tabW, tabH), cornerRadius = tabRadius)
 

@@ -17,6 +17,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -165,6 +167,7 @@ fun GeometryToolPanel(
     onMathDragEnd: (MathToolKind, Offset, Boolean) -> Unit,
     onMathAdjust: (MathToolKind, MathToolAdjust) -> Unit,
     onClose: () -> Unit,
+    onDrag: ((Offset) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
 
@@ -175,7 +178,7 @@ fun GeometryToolPanel(
 
     var stagedSpan by remember { mutableStateOf(mapOf<MathToolKind, Float>()) }
     var stagedRotation by remember { mutableStateOf(mapOf<MathToolKind, Float>()) }
-    var stagedPointer by remember { mutableStateOf(90f) }
+    var stagedPointer by remember { mutableStateOf(45f) }
 
     fun spanOf(kind: MathToolKind): Float {
         return placed.find { it.kind == kind }?.span
@@ -249,21 +252,76 @@ fun GeometryToolPanel(
                         .verticalScroll(scrollState)
                         .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = if (scrollState.maxValue > 0) 18.dp else 12.dp)
                 ) {
+        // --- Header (Drag Handle & Close Button) ---
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (isDark) Color(0xFF0F172A) else Color(0xFFF1F5F9))
+                .then(
+                    if (onDrag != null) {
+                        Modifier.pointerInput(Unit) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                onDrag(dragAmount)
+                            }
+                        }
+                    } else Modifier
+                )
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(stringResource(R.string.geo_title), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = titleColor)
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(chipBg)
-                    .clickable(onClick = onClose),
-                contentAlignment = Alignment.Center
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.dialog_close), tint = if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563), modifier = Modifier.size(14.dp))
+                Icon(
+                    imageVector = Icons.Default.DragHandle,
+                    contentDescription = "Move Geometry Window",
+                    tint = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = stringResource(R.string.geo_title),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF334155)
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (onDrag != null) {
+                    Text(
+                        text = stringResource(R.string.drag_to_move),
+                        fontSize = 11.sp,
+                        color = if (isDark) Color(0xFF64748B) else Color(0xFF94A3B8)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(28.dp)
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1))
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0))
+                        .clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.dialog_close),
+                        tint = if (isDark) Color(0xFFCBD5E1) else Color(0xFF4B5563),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
 
