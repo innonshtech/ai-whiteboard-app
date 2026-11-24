@@ -110,7 +110,7 @@ class MathToolsTest {
         assertEquals(MathToolZone.ANGLE_MODE_ARC, hitTestMathTool(protractor, Offset(0.15f * pSpan, shelfY)))
         assertEquals(MathToolZone.ANGLE_MODE_2, hitTestMathTool(protractor, Offset(0.45f * pSpan, shelfY)))
         assertEquals(MathToolZone.SCALE, hitTestMathTool(protractor, Offset(0.75f * pSpan, shelfY)))
-        assertEquals(MathToolZone.ROTATE, hitTestMathTool(protractor, Offset(0f, -pSpan - 28f)))
+        assertEquals(MathToolZone.ROTATE, hitTestMathTool(protractor, protractorRotateBtn(protractor)))
         assertEquals(MathToolZone.ANGLE_ARM, hitTestMathTool(protractor, Offset(0f, -pSpan)))
         assertEquals(MathToolZone.MOVE, hitTestMathTool(protractor, Offset(60f, -60f)))
 
@@ -120,8 +120,8 @@ class MathToolsTest {
             span = 150f
         )
         val half = setSquare.span / 2f
-        assertEquals(MathToolZone.CLOSE, hitTestMathTool(setSquare, Offset(-half * 0.55f, -half * 0.45f)))
-        assertEquals(MathToolZone.SCALE, hitTestMathTool(setSquare, Offset(-half * 0.30f, half * 0.30f)))
+        assertEquals(MathToolZone.CLOSE, hitTestMathTool(setSquare, Offset(-half * 0.50f, -half * 0.30f)))
+        assertEquals(MathToolZone.SCALE, hitTestMathTool(setSquare, Offset(half * 0.15f, half * 0.55f)))
         assertEquals(MathToolZone.ROTATE, hitTestMathTool(setSquare, Offset(-half, -half - 28f)))
         assertEquals(MathToolZone.MOVE, hitTestMathTool(setSquare, Offset(-45f, 10f)))
         // Touching near set square bottom edge returns NONE so edge line drawing flows like ruler!
@@ -135,8 +135,8 @@ class MathToolsTest {
         )
         val side = triangle.span * 1.8f
         val h = side * 0.8660254f
-        assertEquals(MathToolZone.CLOSE, hitTestMathTool(triangle, Offset(0f, -h * 0.35f)))
-        assertEquals(MathToolZone.SCALE, hitTestMathTool(triangle, Offset(0f, 20f)))
+        assertEquals(MathToolZone.CLOSE, hitTestMathTool(triangle, Offset(0f, -h * 0.25f)))
+        assertEquals(MathToolZone.SCALE, hitTestMathTool(triangle, Offset(side * 0.20f, h * 0.08f)))
         assertEquals(MathToolZone.ROTATE, hitTestMathTool(triangle, Offset(0f, -h * 0.6667f - 28f)))
         assertEquals(MathToolZone.MOVE, hitTestMathTool(triangle, Offset(0f, -20f)))
         // Touching near triangle bottom edge returns NONE so edge line drawing flows like ruler!
@@ -274,7 +274,7 @@ class MathToolsTest {
         // Clamping to ruler span limits
         val pastRightEdgeTouch = Offset(700f, 360f)
         val snappedRight = snapToRulerEdge(ruler, pastRightEdgeTouch, edgeSign = -1f)
-        assertEquals(600f, snappedRight.x, 0.01f) // 400 + 200 = 600 max
+        assertEquals(600f - RULER_INSET, snappedRight.x, 0.01f) // clamped to max scale mark
         assertEquals(352f, snappedRight.y, 0.01f)
     }
 
