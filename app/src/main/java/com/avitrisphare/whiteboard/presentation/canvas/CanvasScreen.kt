@@ -1355,6 +1355,7 @@ fun CanvasScreen(
     val context = LocalContext.current
 
     LaunchedEffect(noteId, initialImportUri) {
+        android.util.Log.i("GSH_DEBUG", "CanvasScreen LaunchedEffect noteId=$noteId, initialImportUri=$initialImportUri")
         if (initialImportUri != null) {
             val path = initialImportUri.path.orEmpty()
             val uriStr = initialImportUri.toString()
@@ -1365,7 +1366,8 @@ fun CanvasScreen(
                 viewModel.loadNote(noteId)
                 viewModel.openDocument(initialImportUri, 3840f, 2160f)
             } else {
-                viewModel.importIwbFile(context, initialImportUri, targetNoteId = noteId) { _, msg ->
+                viewModel.importIwbFile(context, initialImportUri, targetNoteId = noteId) { success, msg ->
+                    android.util.Log.i("GSH_DEBUG", "CanvasScreen import callback: success=$success, msg=$msg")
                     Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                 }
             }
@@ -1497,6 +1499,11 @@ fun CanvasScreen(
     var showCanvasPasteMenu by remember { mutableStateOf(false) }
     var canvasPasteMenuScreenPos by remember { mutableStateOf(Offset.Zero) }
     var canvasPasteMenuWorldPos by remember { mutableStateOf(Offset.Zero) }
+    LaunchedEffect(state.currentTool, state.pageIndex, state.selectedStrokeIds) {
+        if (showCanvasPasteMenu) {
+            showCanvasPasteMenu = false
+        }
+    }
     val composeView = LocalView.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -2092,6 +2099,9 @@ fun CanvasScreen(
                             return false
                         }
                         var down = awaitFirstDown(requireUnconsumed = false)
+                        if (showCanvasPasteMenu) {
+                            showCanvasPasteMenu = false
+                        }
                         val downInRoot = canvasOriginNow + down.position
                         val tappedChrome = down.isConsumed ||
                             droppedOnToolbar(downInRoot, chromeBounds.dock) ||
@@ -4115,6 +4125,22 @@ fun CanvasScreen(
                     }
                 }
         ) {
+            LaunchedEffect(state.strokes, state.pageIndex, state.canvasBackground, state.scale, state.offsetX, state.offsetY) {
+                boardStage?.syncPage(
+                    strokes = if (eraserSession.active) eraserSession.strokes else state.strokes,
+                    background = state.canvasBackground,
+                    showGrid = state.showGrid,
+                    dark = state.isDarkCanvas,
+                    scale = state.scale,
+                    offsetX = state.offsetX,
+                    offsetY = state.offsetY,
+                    selected = state.selectedStrokeIds,
+                    customBackgroundUri = state.pageCustomBackgroundUris.getOrElse(state.pageIndex) { "" },
+                    pageIndex = state.pageIndex,
+                    hasLassoSelection = lassoSelectionPath != null,
+                    customBackgroundColor = state.customBackgroundColor
+                )
+            }
             AndroidView(
                 factory = { context ->
                     BoardStageView(context).also {
@@ -4134,7 +4160,7 @@ fun CanvasScreen(
                     stage.onCloseMedia = { id ->
                         viewModel.deleteStroke(id)
                     }
-                    val page = viewModel.state.value
+                    val page = state
                     stage.syncPage(
                         strokes = if (eraserSession.active) eraserSession.strokes else page.strokes,
                         background = page.canvasBackground,
@@ -4706,55 +4732,65 @@ fun CanvasScreen(
         if (showCanvasPasteMenu && state.hasStrokeClipboard) {
             Box(
                 modifier = Modifier
-                    .offset {
-                        val x = (canvasPasteMenuScreenPos.x - 48.dp.toPx()).roundToInt().coerceIn(16, (canvasSize.width - 120.dp.toPx()).roundToInt().coerceAtLeast(16))
-                        val y = (canvasPasteMenuScreenPos.y - 48.dp.toPx()).roundToInt().coerceIn(16, (canvasSize.height - 70.dp.toPx()).roundToInt().coerceAtLeast(16))
-                        IntOffset(x, y)
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures {
+                            showCanvasPasteMenu = false
+                        }
                     }
             ) {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color(0xFF0F172A),
-                    border = BorderStroke(1.5.dp, BrandOrange),
-                    shadowElevation = 12.dp,
-                    modifier = Modifier.clickable {
-                        viewModel.pasteStrokeClipboard(targetCenter = canvasPasteMenuWorldPos)
-                        showCanvasPasteMenu = false
-                        val latest = viewModel.state.value
-                        boardStage?.syncPage(
-                            strokes = latest.strokes,
-                            background = latest.canvasBackground,
-                            showGrid = latest.showGrid,
-                            dark = latest.isDarkCanvas,
-                            scale = latest.scale,
-                            offsetX = latest.offsetX,
-                            offsetY = latest.offsetY,
-                            selected = latest.selectedStrokeIds,
-                            customBackgroundUri = latest.pageCustomBackgroundUris.getOrElse(latest.pageIndex) { "" },
-                            pageIndex = latest.pageIndex
-                        )
-                        boardStage?.invalidate()
-                        Toast.makeText(context, "Pasted at position", Toast.LENGTH_SHORT).show()
-                    }
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            val x = (canvasPasteMenuScreenPos.x - 48.dp.toPx()).roundToInt().coerceIn(16, (canvasSize.width - 120.dp.toPx()).roundToInt().coerceAtLeast(16))
+                            val y = (canvasPasteMenuScreenPos.y - 48.dp.toPx()).roundToInt().coerceIn(16, (canvasSize.height - 70.dp.toPx()).roundToInt().coerceAtLeast(16))
+                            IntOffset(x, y)
+                        }
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0xFF0F172A),
+                        border = BorderStroke(1.5.dp, BrandOrange),
+                        shadowElevation = 12.dp,
+                        modifier = Modifier.clickable {
+                            viewModel.pasteStrokeClipboard(targetCenter = canvasPasteMenuWorldPos)
+                            showCanvasPasteMenu = false
+                            val latest = viewModel.state.value
+                            boardStage?.syncPage(
+                                strokes = latest.strokes,
+                                background = latest.canvasBackground,
+                                showGrid = latest.showGrid,
+                                dark = latest.isDarkCanvas,
+                                scale = latest.scale,
+                                offsetX = latest.offsetX,
+                                offsetY = latest.offsetY,
+                                selected = latest.selectedStrokeIds,
+                                customBackgroundUri = latest.pageCustomBackgroundUris.getOrElse(latest.pageIndex) { "" },
+                                pageIndex = latest.pageIndex
+                            )
+                            boardStage?.invalidate()
+                            Toast.makeText(context, "Pasted at position", Toast.LENGTH_SHORT).show()
+                        }
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentPaste,
-                            contentDescription = "Paste",
-                            tint = BrandOrange,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = "Paste",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentPaste,
+                                contentDescription = "Paste",
+                                tint = BrandOrange,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "Paste",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }

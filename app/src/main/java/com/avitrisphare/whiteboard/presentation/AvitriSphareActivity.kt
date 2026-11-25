@@ -98,22 +98,55 @@ class AvitriSphareActivity : ComponentActivity() {
     private val externalImportUri = mutableStateOf<String?>(null)
 
     private fun cacheIncomingUri(uri: Uri): Uri {
+        android.util.Log.i("GSH_DEBUG", "cacheIncomingUri called with uri: $uri, scheme: ${uri.scheme}, path: ${uri.path}")
         return try {
-            if (uri.scheme == "file") return uri
             val cacheDir = File(cacheDir, "incoming_lessons").apply { mkdirs() }
-            val displayName = getDisplayName(uri) ?: "imported_${System.currentTimeMillis()}.gsh"
+            val rawName = getDisplayName(uri) ?: "imported_${System.currentTimeMillis()}.gsh"
+            val displayName = if (rawName.endsWith(".gsh", true) || rawName.endsWith(".iwb", true)) rawName else "$rawName.gsh"
             val targetFile = File(cacheDir, displayName)
-            contentResolver.openInputStream(uri)?.use { input: InputStream ->
-                targetFile.outputStream().use { output: OutputStream ->
-                    input.copyTo(output)
+            android.util.Log.i("GSH_DEBUG", "cacheIncomingUri targetFile: ${targetFile.absolutePath}")
+
+            // If already cached in our internal cache directory, return it directly
+            if (uri.scheme == "file") {
+                val path = uri.path ?: uri.toString().removePrefix("file://")
+                val sourceFile = File(path)
+                try {
+                    if (sourceFile.canonicalPath.startsWith(cacheDir.canonicalPath)) {
+                        android.util.Log.i("GSH_DEBUG", "Already in internal cache: $path")
+                        return uri
+                    }
+                    if (sourceFile.exists()) {
+                        android.util.Log.i("GSH_DEBUG", "Copying from file path: $path to ${targetFile.absolutePath}")
+                        sourceFile.copyTo(targetFile, overwrite = true)
+                        if (targetFile.exists() && targetFile.length() > 0) {
+                            return Uri.fromFile(targetFile)
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("GSH_DEBUG", "sourceFile copy failed: ${e.message}")
                 }
             }
+
+            android.util.Log.i("GSH_DEBUG", "Opening input stream via contentResolver for: $uri")
+            val stream = contentResolver.openInputStream(uri)
+            if (stream != null) {
+                stream.use { input: InputStream ->
+                    targetFile.outputStream().use { output: OutputStream ->
+                        input.copyTo(output)
+                    }
+                }
+                android.util.Log.i("GSH_DEBUG", "Successfully copied to targetFile, size: ${targetFile.length()}")
+            } else {
+                android.util.Log.w("GSH_DEBUG", "contentResolver.openInputStream returned null for $uri")
+            }
+
             if (targetFile.exists() && targetFile.length() > 0) {
                 Uri.fromFile(targetFile)
             } else {
                 uri
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e("GSH_DEBUG", "cacheIncomingUri exception for $uri", e)
             uri
         }
     }
@@ -134,23 +167,37 @@ class AvitriSphareActivity : ComponentActivity() {
 
     private fun extractIncomingUri(intent: Intent?): String? {
         if (intent == null) return null
+        android.util.Log.i("GSH_DEBUG", "extractIncomingUri: action=${intent.action}, data=${intent.data}, type=${intent.type}, clipData=${intent.clipData}")
         val dataUri = intent.data
-        if (dataUri != null) return cacheIncomingUri(dataUri).toString()
+        if (dataUri != null) {
+            val res = cacheIncomingUri(dataUri).toString()
+            android.util.Log.i("GSH_DEBUG", "extractIncomingUri dataUri resolved to: $res")
+            return res
+        }
         val streamUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
         } else {
             @Suppress("DEPRECATION")
             intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
         }
-        if (streamUri != null) return cacheIncomingUri(streamUri).toString()
+        if (streamUri != null) {
+            val res = cacheIncomingUri(streamUri).toString()
+            android.util.Log.i("GSH_DEBUG", "extractIncomingUri streamUri resolved to: $res")
+            return res
+        }
         val clipUri = intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
-        if (clipUri != null) return cacheIncomingUri(clipUri).toString()
+        if (clipUri != null) {
+            val res = cacheIncomingUri(clipUri).toString()
+            android.util.Log.i("GSH_DEBUG", "extractIncomingUri clipUri resolved to: $res")
+            return res
+        }
         return null
     }
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
+        android.util.Log.i("GSH_DEBUG", "onNewIntent called with intent: $intent")
         extractIncomingUri(intent)?.let {
             externalImportUri.value = it
         }
@@ -158,6 +205,7 @@ class AvitriSphareActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        android.util.Log.i("GSH_DEBUG", "onCreate called with intent: $intent")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val needed = mutableListOf<String>()
             if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -300,14 +348,13 @@ class AvitriSphareActivity : ComponentActivity() {
                 LaunchedEffect(externalImportUri.value) {
                     val incomingUri = externalImportUri.value ?: return@LaunchedEffect
                     externalImportUri.value = null
+                    android.util.Log.i("GSH_DEBUG", "LaunchedEffect externalImportUri: navigating to canvas for $incomingUri")
                     val note = Note(
                         id = UUID.randomUUID().toString(),
                         title = "Imported Lesson"
                     )
                     withContext(Dispatchers.IO) { noteRepository.insertNote(note) }
-                    navController.navigate("canvas/${note.id}?importUri=${android.net.Uri.encode(incomingUri)}") {
-                        launchSingleTop = true
-                    }
+                    navController.navigate("canvas/${note.id}?importUri=${android.net.Uri.encode(incomingUri)}")
                 }
 
                 LaunchedEffect(start) {

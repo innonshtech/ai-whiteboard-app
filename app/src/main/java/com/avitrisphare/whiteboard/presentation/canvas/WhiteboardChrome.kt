@@ -383,6 +383,7 @@ fun AvitriSphareWhiteboardChrome(
     val context = LocalContext.current
     var panel by remember { mutableStateOf<String?>(null) }
     var shapesWindowOffset by remember { mutableStateOf(Offset.Zero) }
+    var geometryWindowOffset by remember { mutableStateOf(Offset.Zero) }
     var selectionToolbarOffset by remember { mutableStateOf(Offset.Zero) }
     var pageMenuIndex by remember { mutableStateOf<Int?>(null) }
     var pageToDeleteIndex by remember { mutableStateOf<Int?>(null) }
@@ -2262,11 +2263,13 @@ fun AvitriSphareWhiteboardChrome(
 
             val dragOffsetX = when (panel) {
                 "shapes" -> shapesWindowOffset.x
+                "geometry" -> geometryWindowOffset.x
                 "profile" -> leftBarOffset.x
                 else -> centerBarOffset.x
             }
             val dragOffsetY = when (panel) {
                 "shapes" -> shapesWindowOffset.y + centerBarOffset.y
+                "geometry" -> geometryWindowOffset.y + centerBarOffset.y
                 "profile" -> leftBarOffset.y
                 else -> centerBarOffset.y
             }
@@ -2361,7 +2364,13 @@ fun AvitriSphareWhiteboardChrome(
                             onMathDrag = onMathDrag,
                             onMathDragEnd = onMathDragEnd,
                             onMathAdjust = onMathAdjust,
-                            onClose = { panel = null }
+                            onClose = { panel = null },
+                            onDrag = { dragAmount ->
+                                geometryWindowOffset = Offset(
+                                    (geometryWindowOffset.x + dragAmount.x).coerceIn(-1800f, 1800f),
+                                    (geometryWindowOffset.y + dragAmount.y).coerceIn(-1800f, 60f)
+                                )
+                            }
                         )
                     }
                     "media" -> DockPopover(title = "Media", onClose = { panel = null }) {
@@ -2647,13 +2656,6 @@ fun AvitriSphareWhiteboardChrome(
                                     state.isDarkTheme
                                 ) {
                                     viewModel.toggleAppTheme()
-                                },
-                                ToolTile(
-                                    Icons.Default.MoreHoriz,
-                                    stringResource(R.string.more_tools_title),
-                                    Color(0xFF8B5CF6)
-                                ) {
-                                    panel = "more_tools"
                                 }
                             )
                             1 -> listOf(
