@@ -1073,28 +1073,30 @@ object MindmapEngine {
         movingBounds: List<Rect>,
         otherBounds: List<Rect>,
         delta: Offset,
-        boundary: Rect,
+        boundary: Rect? = null,
         gap: Float = MIN_BOX_GAP
     ): Offset {
         if (movingBounds.isEmpty() || delta == Offset.Zero) return delta
         var dx = delta.x
         var dy = delta.y
 
-        // 1. Boundary clamping (keep all moving boxes strictly within screen/page boundary)
-        for (m in movingBounds) {
-            if (dx > 0f) {
-                val maxRight = boundary.right - m.right
-                dx = minOf(dx, maxRight.coerceAtLeast(0f))
-            } else if (dx < 0f) {
-                val maxLeft = boundary.left - m.left
-                dx = maxOf(dx, maxLeft.coerceAtMost(0f))
-            }
-            if (dy > 0f) {
-                val maxBottom = boundary.bottom - m.bottom
-                dy = minOf(dy, maxBottom.coerceAtLeast(0f))
-            } else if (dy < 0f) {
-                val maxTop = boundary.top - m.top
-                dy = maxOf(dy, maxTop.coerceAtMost(0f))
+        // 1. Boundary clamping (keep all moving boxes strictly within screen/page boundary if specified)
+        if (boundary != null) {
+            for (m in movingBounds) {
+                if (dx > 0f) {
+                    val maxRight = boundary.right - m.right
+                    dx = minOf(dx, maxRight.coerceAtLeast(0f))
+                } else if (dx < 0f) {
+                    val maxLeft = boundary.left - m.left
+                    dx = maxOf(dx, maxLeft.coerceAtMost(0f))
+                }
+                if (dy > 0f) {
+                    val maxBottom = boundary.bottom - m.bottom
+                    dy = minOf(dy, maxBottom.coerceAtLeast(0f))
+                } else if (dy < 0f) {
+                    val maxTop = boundary.top - m.top
+                    dy = maxOf(dy, maxTop.coerceAtMost(0f))
+                }
             }
         }
 
@@ -1136,11 +1138,13 @@ object MindmapEngine {
             }
         }
 
-        // 4. Strict verification: Ensure proposed delta causes ZERO actual overlap and stays in boundary
+        // 4. Strict verification: Ensure proposed delta causes ZERO actual overlap and stays in boundary (if provided)
         for (m in movingBounds) {
             val moved = Rect(m.left + dx, m.top + dy, m.right + dx, m.bottom + dy)
-            if (moved.left < boundary.left || moved.right > boundary.right) dx = 0f
-            if (moved.top < boundary.top || moved.bottom > boundary.bottom) dy = 0f
+            if (boundary != null) {
+                if (moved.left < boundary.left || moved.right > boundary.right) dx = 0f
+                if (moved.top < boundary.top || moved.bottom > boundary.bottom) dy = 0f
+            }
 
             for (o in otherBounds) {
                 if (moved.overlaps(o)) {
