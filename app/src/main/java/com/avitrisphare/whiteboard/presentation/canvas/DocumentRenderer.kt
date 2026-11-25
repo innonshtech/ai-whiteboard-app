@@ -8,6 +8,7 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import java.io.Closeable
 import java.io.File
 import kotlin.math.max
 
@@ -24,6 +25,10 @@ object DocumentRenderer {
             DocumentKind.PDF -> pdfCount(file)
             DocumentKind.PPT -> PptxSlides.read(file).slides.size
         }
+    }
+
+    fun openSession(file: File, kind: DocumentKind): DocumentSession {
+        return DocumentSession(file, kind)
     }
 
     fun render(file: File, kind: DocumentKind, index: Int): Bitmap {
@@ -46,7 +51,8 @@ object DocumentRenderer {
         val descriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
         descriptor.use {
             PdfRenderer(it).use { renderer ->
-                val page = renderer.openPage(index.coerceIn(0, renderer.pageCount - 1))
+                val safeIndex = index.coerceIn(0, (renderer.pageCount - 1).coerceAtLeast(0))
+                val page = renderer.openPage(safeIndex)
                 page.use {
                     val width = TARGET_WIDTH
                     val height = max(1, (page.height.toFloat() / page.width.coerceAtLeast(1) * width).toInt())
@@ -103,5 +109,74 @@ object DocumentRenderer {
             }
         }
         return bitmap
+    }
+}
+
+/**
+ * Keeps an open file descriptor and renderer for an active document session,
+ * avoiding re-opening the file and re-parsing the PDF/PPT on every page change.
+ */
+class DocumentSession(val file: File, val kind: DocumentKind) : Closeable {
+    private var pfd: ParcelFileDescriptor? = null
+    private var pdfRenderer: PdfRenderer? = null
+    private var pptxDeck: PptxDeck? = null
+    val pageCount: Int
+
+    init {
+        when (kind) {
+            DocumentKind.PDF -> {
+                val descriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+                pfd = descriptor
+                val renderer = PdfRenderer(descriptor)
+                pdfRenderer = renderer
+                pageCount = renderer.pageCount
+            }
+            DocumentKind.PPT -> {
+                val deck = PptxSlides.read(file)
+                pptxDeck = deck
+                pageCount = deck.slides.size
+            }
+        }
+    }
+
+    /**
+     * Renders a page into a Bitmap. Synchronized because PdfRenderer allows only one page to be open/rendered at a time.
+     */
+    @Synchronized
+    fun renderPage(index: Int, targetWidth: Int = DocumentRenderer.TARGET_WIDTH): Bitmap {
+        return when (kind) {
+            DocumentKind.PDF -> {
+                val renderer = pdfRenderer ?: throw IllegalStateException("PdfRenderer is closed")
+                val safeIndex = index.coerceIn(0, (renderer.pageCount - 1).coerceAtLeast(0))
+                val page = renderer.openPage(safeIndex)
+                try {
+                    val width = targetWidth
+                    val height = max(1, (page.height.toFloat() / page.width.coerceAtLeast(1) * width).toInt())
+                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                    bitmap.eraseColor(Color.WHITE)
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    bitmap
+                } finally {
+                    page.close()
+                }
+            }
+            DocumentKind.PPT -> {
+                val deck = pptxDeck ?: throw IllegalStateException("PptxDeck is closed")
+                DocumentRenderer.renderSlide(deck, index)
+            }
+        }
+    }
+
+    override fun close() {
+        try {
+            pdfRenderer?.close()
+        } catch (_: Exception) {}
+        pdfRenderer = null
+
+        try {
+            pfd?.close()
+        } catch (_: Exception) {}
+        pfd = null
+        pptxDeck = null
     }
 }

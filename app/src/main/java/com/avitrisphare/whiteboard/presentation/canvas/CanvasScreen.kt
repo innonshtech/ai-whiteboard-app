@@ -3,6 +3,7 @@ package com.avitrisphare.whiteboard.presentation.canvas
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.ui.window.DialogProperties
 import com.avitrisphare.whiteboard.core.theme.BrandOrange
+import com.avitrisphare.whiteboard.domain.model.TextStrokeConfig
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -58,6 +59,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -80,6 +82,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.AutoFixNormal
 import androidx.compose.material.icons.filled.Bolt
@@ -133,6 +140,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
@@ -533,7 +541,8 @@ fun DrawScope.renderStroke(
     context: Context,
     stroke: Stroke,
     currentScale: Float = 1f,
-    isSelected: Boolean = false
+    isSelected: Boolean = false,
+    editingTextId: String? = null
 ) {
     val pointsList = stroke.points
     if (pointsList.isEmpty()) return
@@ -892,8 +901,15 @@ fun DrawScope.renderStroke(
                         val dummyParent = stroke.copy(strokeType = shapeType)
                         drawShapeFittedImage(dummyParent, b, bmp, safeScale)
                     } else {
-                        val destRect = android.graphics.Rect(b.left.toInt(), b.top.toInt(), b.right.toInt(), b.bottom.toInt())
-                        drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, null)
+                        val left = minOf(b.left, b.right).toInt()
+                        val top = minOf(b.top, b.bottom).toInt()
+                        val right = maxOf(b.left, b.right).toInt()
+                        val bottom = maxOf(b.top, b.bottom).toInt()
+                        if (right > left && bottom > top) {
+                            val destRect = android.graphics.Rect(left, top, right, bottom)
+                            val imagePaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+                            drawContext.canvas.nativeCanvas.drawBitmap(bmp, null, destRect, imagePaint)
+                        }
                     }
                 }
             }
@@ -956,11 +972,16 @@ fun DrawScope.renderStroke(
                 val angleDeg = if (isMeasurement) {
                     stroke.stickerKind.removePrefix("measurement:").toFloatOrNull() ?: 0f
                 } else 0f
+                val textSize = if (isMeasurement) {
+                    (stroke.strokeWidth).coerceIn(13f, 20f)
+                } else {
+                    if (stroke.strokeWidth in TextStrokeConfig.MIN_FONT_SIZE..TextStrokeConfig.MAX_FONT_SIZE) stroke.strokeWidth else TextStrokeConfig.DEFAULT_FONT_SIZE
+                }
                 val paint = Paint().apply {
-                    color = stroke.colorValue
-                    textSize = if (isMeasurement) (stroke.strokeWidth).coerceIn(13f, 20f) else if (stroke.strokeWidth >= 12f) stroke.strokeWidth else 20f
+                    color = if (stroke.colorValue != 0) stroke.colorValue else 0xFF1B1F2A.toInt()
+                    this.textSize = textSize
                     isAntiAlias = true
-                    typeface = if (isMeasurement) Typeface.DEFAULT_BOLD else Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    typeface = if (isMeasurement) Typeface.DEFAULT_BOLD else Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                     textAlign = if (isMeasurement) Paint.Align.CENTER else Paint.Align.LEFT
                 }
                 if (isMeasurement) {
@@ -977,10 +998,12 @@ fun DrawScope.renderStroke(
                     }
                 } else {
                     val lines = stroke.text.split("\n")
-                    var curY = origin.y + 20f
+                    val nativeSpacing = paint.fontSpacing
+                    val lineHeight = if (nativeSpacing > 0f) nativeSpacing else (textSize * TextStrokeConfig.LINE_HEIGHT_RATIO)
+                    var curY = origin.y + textSize
                     for (line in lines) {
                         drawText(line, origin.x, curY, paint)
-                        curY += 26f
+                        curY += lineHeight
                     }
                 }
             }
@@ -1307,6 +1330,15 @@ fun BackgroundSwatch(type: CanvasBackground, isSelected: Boolean, onClick: () ->
     }
 }
 
+object DocumentViewerConfig {
+    const val FRAME_NUDGE_STEP_PX = 60f
+    const val ZOOM_IN_FACTOR = 1.1f
+    const val ZOOM_OUT_FACTOR = 0.9f
+    const val MIN_SCALE = 0.2f
+    const val MAX_SCALE = 3.0f
+    const val TITLE_MAX_LENGTH = 28
+}
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun CanvasScreen(
@@ -1324,8 +1356,18 @@ fun CanvasScreen(
 
     LaunchedEffect(noteId, initialImportUri) {
         if (initialImportUri != null) {
-            viewModel.importIwbFile(context, initialImportUri, targetNoteId = noteId) { _, msg ->
-                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            val path = initialImportUri.path.orEmpty()
+            val uriStr = initialImportUri.toString()
+            val isDoc = path.endsWith(".pdf", ignoreCase = true) || uriStr.endsWith(".pdf", ignoreCase = true) ||
+                        path.endsWith(".ppt", ignoreCase = true) || uriStr.endsWith(".ppt", ignoreCase = true) ||
+                        path.endsWith(".pptx", ignoreCase = true) || uriStr.endsWith(".pptx", ignoreCase = true)
+            if (isDoc) {
+                viewModel.loadNote(noteId)
+                viewModel.openDocument(initialImportUri, 3840f, 2160f)
+            } else {
+                viewModel.importIwbFile(context, initialImportUri, targetNoteId = noteId) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                }
             }
         } else {
             viewModel.loadNote(noteId)
@@ -1366,6 +1408,8 @@ fun CanvasScreen(
     var showEditTitleDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var showExportLessonDialog by remember { mutableStateOf(false) }
+    var isDocumentBarCollapsed by remember { mutableStateOf(false) }
+    var showCloseDocConfirmDialog by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
     var exportProgress by remember { mutableFloatStateOf(0f) }
     var exportStatusMessage by remember { mutableStateOf("") }
@@ -1696,7 +1740,7 @@ fun CanvasScreen(
     }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
             val centerWorld = CanvasTransform.screenToWorld(
@@ -1704,15 +1748,77 @@ fun CanvasScreen(
                 scale = canvasScale,
                 offset = Offset(canvasOffsetX, canvasOffsetY)
             )
-            viewModel.addImage(it.toString(), centerWorld)
+            val mediaDir = java.io.File(context.filesDir, "media").apply { mkdirs() }
+            val ext = if (context.contentResolver.getType(it)?.contains("png") == true) "png" else "jpg"
+            val targetFile = java.io.File(mediaDir, "img_${System.currentTimeMillis()}.$ext")
+            val copied = try {
+                var stream = runCatching { context.contentResolver.openInputStream(it) }.getOrNull()
+                if (stream == null) {
+                    stream = runCatching { context.contentResolver.openFileDescriptor(it, "r")?.let { pfd -> java.io.FileInputStream(pfd.fileDescriptor) } }.getOrNull()
+                }
+                if (stream == null) {
+                    val mediaId = it.lastPathSegment
+                    if (!mediaId.isNullOrBlank()) {
+                        val cursor = runCatching {
+                            context.contentResolver.query(
+                                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                                arrayOf(android.provider.MediaStore.Images.Media.DATA),
+                                "${android.provider.MediaStore.Images.Media._ID} = ?",
+                                arrayOf(mediaId),
+                                null
+                            )
+                        }.getOrNull()
+                        val filePath = cursor?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+                        if (!filePath.isNullOrBlank()) {
+                            val f = java.io.File(filePath)
+                            if (f.exists() && f.canRead()) stream = java.io.FileInputStream(f)
+                        }
+                    }
+                }
+                if (stream == null) {
+                    stream = BitmapCache.openInputStream(context, it.toString())
+                }
+                stream?.use { inStream ->
+                    targetFile.outputStream().use { outStream ->
+                        inStream.copyTo(outStream)
+                    }
+                }
+                targetFile.exists() && targetFile.length() > 0
+            } catch (e: Exception) {
+                android.util.Log.e("CanvasScreen", "Failed to copy picked image stream", e)
+                false
+            }
+            val finalPath = if (copied) {
+                android.util.Log.i("CanvasScreen", "Copied image successfully: ${targetFile.absolutePath} (${targetFile.length()} bytes)")
+                targetFile.absolutePath
+            } else {
+                it.toString()
+            }
+            viewModel.addImage(finalPath, centerWorld)
         }
     }
 
     val customBgPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            viewModel.setPageBackground(CanvasBackground.CUSTOM, it.toString())
+            val mediaDir = java.io.File(context.filesDir, "media").apply { mkdirs() }
+            val ext = if (context.contentResolver.getType(it)?.contains("png") == true) "png" else "jpg"
+            val targetFile = java.io.File(mediaDir, "bg_${System.currentTimeMillis()}.$ext")
+            val copied = try {
+                var stream = runCatching { context.contentResolver.openInputStream(it) }.getOrNull()
+                    ?: BitmapCache.openInputStream(context, it.toString())
+                stream?.use { input ->
+                    targetFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                targetFile.exists() && targetFile.length() > 0
+            } catch (e: Exception) {
+                false
+            }
+            val finalPath = if (copied) targetFile.absolutePath else it.toString()
+            viewModel.setPageBackground(CanvasBackground.CUSTOM, finalPath)
         }
     }
 
@@ -1761,6 +1867,12 @@ fun CanvasScreen(
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
+    }
+
+    LaunchedEffect(state.document != null) {
+        if (state.document != null) {
+            isDocumentBarCollapsed = false
+        }
     }
 
     LaunchedEffect(state.paneRequest) {
@@ -2242,6 +2354,7 @@ fun CanvasScreen(
                             eraseAlong(downWorld, down.position, customEraserRadius)
                         }
                         var isDraggingSelection = false
+                        var isDraggingDocument = false
                         var selectingBox = false
                         var strokeHit = false
                         var resizeStrokeId: String? = null
@@ -2479,7 +2592,23 @@ fun CanvasScreen(
                                                 beginWebOrDrag(hit)
                                             } else {
                                                 viewModel.clearSelection()
-                                                selectingBox = true
+                                                val currentDoc = state.document
+                                                val isInsidePdf = if (currentDoc != null && state.splitCount <= 1) {
+                                                    val docW = if (currentDoc.pageWidth > 0f) currentDoc.pageWidth else 1600f
+                                                    val docH = if (currentDoc.pageHeight > 0f) currentDoc.pageHeight else 2262f
+                                                    val frameScale = state.documentFrameScale
+                                                    val docLeft = state.documentFrameX
+                                                    val docTop = state.documentFrameY
+                                                    val docRight = docLeft + docW * frameScale
+                                                    val docBottom = docTop + docH * frameScale
+                                                    downWorld.x in docLeft..docRight && downWorld.y in docTop..docBottom
+                                                } else false
+
+                                                if (isInsidePdf) {
+                                                    isDraggingDocument = true
+                                                } else {
+                                                    selectingBox = true
+                                                }
                                             }
                                         }
                                     }
@@ -3203,6 +3332,18 @@ fun CanvasScreen(
                                             pageIndex = cur.pageIndex,
                                             customBackgroundColor = cur.customBackgroundColor
                                         )
+                                    } else if (activeTool == WhiteboardTool.SELECT && isDraggingDocument) {
+                                        val prevWorld = CanvasTransform.screenToWorld(
+                                            screenPoint = prevPosition,
+                                            scale = canvasScale,
+                                            offset = Offset(canvasOffsetX, canvasOffsetY)
+                                        )
+                                        val deltaX = curWorld.x - prevWorld.x
+                                        val deltaY = curWorld.y - prevWorld.y
+                                        val newX = state.documentFrameX + deltaX
+                                        val newY = state.documentFrameY + deltaY
+                                        viewModel.setDocumentFrame(newX, newY, state.documentFrameScale)
+                                        boardStage?.setDocumentFrame(newX, newY, state.documentFrameScale)
                                     } else if (activeTool == WhiteboardTool.SELECT && selectingBox) {
                                         boardStage?.setMarquee(downWorld, curWorld)
                                     } else if ((activeTool == WhiteboardTool.SELECT || activeTool == WhiteboardTool.LASSO) && isDraggingSelection) {
@@ -3401,6 +3542,8 @@ fun CanvasScreen(
                                             val linkedText = state.strokes.find { it.linkToId == clickedStroke.id && it.strokeType == StrokeType.TEXT }?.text
                                             editingNodeText = linkedText ?: clickedStroke.text
                                         }
+                                    } else if (clickedStroke.strokeType == StrokeType.TEXT && wasAlreadySelected) {
+                                        viewModel.beginTextEdit(clickedStroke.id)
                                     }
                                 } else {
                                     viewModel.clearSelection()
@@ -3440,6 +3583,7 @@ fun CanvasScreen(
                             groupResizeInitialBounds = null
                             viewModel.endSelectionScale()
                         }
+                        isDraggingDocument = false
                         viewModel.endSelectionMove()
 
                         if (activeTool == WhiteboardTool.MAGNIFIER) {
@@ -3885,6 +4029,7 @@ fun CanvasScreen(
                                 }
                                 lassoPoints = emptyList()
                                 isDraggingSelection = false
+                                isDraggingDocument = false
                                 resizeStrokeId = null
                                 resizeHandle = null
                                 resizeInitialBounds = null
@@ -4002,7 +4147,8 @@ fun CanvasScreen(
                         customBackgroundUri = page.pageCustomBackgroundUris.getOrElse(page.pageIndex) { "" },
                         pageIndex = page.pageIndex,
                         hasLassoSelection = lassoSelectionPath != null,
-                        customBackgroundColor = page.customBackgroundColor
+                        customBackgroundColor = page.customBackgroundColor,
+                        editingTextId = page.editingTextId
                     )
                     stage.currentStroke = page.currentStroke
                     val document = page.document
@@ -4166,12 +4312,17 @@ fun CanvasScreen(
                 }
 
                 // 2. Draggable Top Header Pill
+                val headerY = if (pdfScreenY < 72f) {
+                    (pdfScreenY + 12f).roundToInt()
+                } else {
+                    (pdfScreenY - 44f).roundToInt()
+                }
                 Box(
                     modifier = Modifier
                         .offset {
                             IntOffset(
                                 (pdfScreenX + 12f).roundToInt().coerceAtLeast(10),
-                                (pdfScreenY - 42f).roundToInt().coerceAtLeast(10)
+                                headerY.coerceAtLeast(10)
                             )
                         }
                         .wrapContentSize()
@@ -4183,9 +4334,16 @@ fun CanvasScreen(
                                 change.consume()
                                 val worldDx = dragAmount.x / canvasScale.coerceAtLeast(0.001f)
                                 val worldDy = dragAmount.y / canvasScale.coerceAtLeast(0.001f)
+                                val newX = state.documentFrameX + worldDx
+                                val newY = state.documentFrameY + worldDy
                                 viewModel.setDocumentFrame(
-                                    state.documentFrameX + worldDx,
-                                    state.documentFrameY + worldDy,
+                                    newX,
+                                    newY,
+                                    state.documentFrameScale
+                                )
+                                boardStage?.setDocumentFrame(
+                                    newX,
+                                    newY,
                                     state.documentFrameScale
                                 )
                             }
@@ -4245,6 +4403,11 @@ fun CanvasScreen(
                                 val newW = (currentW + worldDx).coerceAtLeast(docWidth * 0.2f)
                                 val newScale = (newW / docWidth).coerceIn(0.2f, 3.0f)
                                 viewModel.setDocumentFrame(
+                                    state.documentFrameX,
+                                    state.documentFrameY,
+                                    newScale
+                                )
+                                boardStage?.setDocumentFrame(
                                     state.documentFrameX,
                                     state.documentFrameY,
                                     newScale
@@ -4322,8 +4485,8 @@ fun CanvasScreen(
             viewModel = viewModel,
             onExit = { showExitConfirmDialog = true },
             onOpenMenu = { showSidebar = true },
-            onInsertImage = { imagePickerLauncher.launch("image/*") },
-            onPickCustomBackground = { customBgPickerLauncher.launch("image/*") },
+            onInsertImage = { imagePickerLauncher.launch(arrayOf("image/*")) },
+            onPickCustomBackground = { customBgPickerLauncher.launch(arrayOf("image/*")) },
             onExport = {
                 exportResult = null
                 viewModel.clearSelection()
@@ -4853,7 +5016,7 @@ fun CanvasScreen(
                         },
                         onInsertImage = {
                             viewModel.targetMindmapBoxId = selectedNode.id
-                            imagePickerLauncher.launch("image/*")
+                            imagePickerLauncher.launch(arrayOf("image/*"))
                         },
                         onOpenStickers = {
                             viewModel.targetMindmapBoxId = selectedNode.id
@@ -4920,224 +5083,367 @@ fun CanvasScreen(
 
         val openDocument = state.document
         if (openDocument != null) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(top = 8.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = Color(0xF21C2130),
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            if (isDocumentBarCollapsed) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                        .padding(start = 140.dp, top = 8.dp)
+                        .clickable { isDocumentBarCollapsed = false },
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xF21C2130),
+                    shadowElevation = 8.dp
                 ) {
-                    TextButton(onClick = {
-                        viewModel.selectPage(pageStep(state.pageIndex, state.pageCount, -1))
-                    }) { Text("Prev", color = Color.White) }
-                    Text(
-                        "${openDocument.name}  ${state.pageIndex + 1}/${state.pageCount}",
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        maxLines = 1
-                    )
-                    TextButton(onClick = {
-                        viewModel.selectPage(pageStep(state.pageIndex, state.pageCount, 1))
-                    }) { Text("Next", color = Color.White) }
-
-                    if (openDocument.kind == DocumentKind.PDF) {
-                        if (state.isPdfOcrActive) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Description,
+                            contentDescription = "Document",
+                            tint = Color(0xFF60A5FA),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        val docTitle = openDocument.name.let {
+                            if (it.length > DocumentViewerConfig.TITLE_MAX_LENGTH) {
+                                it.take(DocumentViewerConfig.TITLE_MAX_LENGTH) + "…"
+                            } else it
+                        }
+                        Text(
+                            "$docTitle  (${state.pageIndex + 1}/${state.pageCount})",
+                            color = Color.White,
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF2563EB).copy(alpha = 0.35f),
+                            modifier = Modifier.padding(start = 4.dp)
+                        ) {
                             Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    color = Color(0xFF60A5FA),
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(Modifier.width(6.dp))
                                 Text(
-                                    "OCR: ${state.pdfOcrCurrentPage}/${state.pdfOcrTotalPages}",
+                                    stringResource(R.string.pdf_show_controls),
                                     color = Color(0xFF93C5FD),
-                                    fontSize = 12.sp,
+                                    fontSize = 11.5.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
-                                Spacer(Modifier.width(8.dp))
-                                TextButton(onClick = { viewModel.cancelPdfOcr() }) {
-                                    Text(stringResource(R.string.pdf_stop), color = Color(0xFFFF6B6B))
-                                }
-                            }
-                        } else {
-                            val currentOcrDoc = state.pdfOcrDocument
-                            val hasOcrForCurrentPage = currentOcrDoc?.pages?.any { it.pageIndex == state.pageIndex } == true
-                            if (currentOcrDoc != null) {
-                                TextButton(
-                                    onClick = { viewModel.togglePdfSearchPanel() },
-                                    colors = ButtonDefaults.textButtonColors(
-                                        contentColor = if (state.showPdfSearchPanel) Color(0xFF34D399) else Color(0xFF60A5FA)
-                                    )
-                                ) {
-                                    Text(
-                                        if (state.showPdfSearchPanel) "Hide Text" else "Search & Text",
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                            }
-                            if (!hasOcrForCurrentPage) {
-                                TextButton(
-                                    onClick = { viewModel.makePdfEditableCurrentPage() },
-                                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF60A5FA))
-                                ) {
-                                    Text(stringResource(R.string.pdf_ocr_page), fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-                            if (currentOcrDoc == null || currentOcrDoc.pages.size < state.pageCount) {
-                                TextButton(
-                                    onClick = { viewModel.makePdfEditable() },
-                                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF93C5FD))
-                                ) {
-                                    Text(
-                                        if (currentOcrDoc == null) "OCR all pages" else "OCR all",
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = stringResource(R.string.pdf_show_controls),
+                                    tint = Color(0xFF93C5FD),
+                                    modifier = Modifier.size(14.dp)
+                                )
                             }
                         }
-                    }
-
-                    // 4-Directional Move Controls
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF283248))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            "Move:",
-                            color = Color(0xFF94A3B8),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 4.dp)
-                        )
-                        IconButton(
-                            onClick = {
-                                viewModel.setDocumentFrame(
-                                    state.documentFrameX - 60f,
-                                    state.documentFrameY,
-                                    state.documentFrameScale
-                                )
-                            },
-                            modifier = Modifier.size(26.dp)
-                        ) {
-                            Text("ÔåÉ", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        }
-                        IconButton(
-                            onClick = {
-                                viewModel.setDocumentFrame(
-                                    state.documentFrameX + 60f,
-                                    state.documentFrameY,
-                                    state.documentFrameScale
-                                )
-                            },
-                            modifier = Modifier.size(26.dp)
-                        ) {
-                            Text("ÔåÆ", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        }
-                        IconButton(
-                            onClick = {
-                                viewModel.setDocumentFrame(
-                                    state.documentFrameX,
-                                    state.documentFrameY - 60f,
-                                    state.documentFrameScale
-                                )
-                            },
-                            modifier = Modifier.size(26.dp)
-                        ) {
-                            Text("Ôåæ", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        }
-                        IconButton(
-                            onClick = {
-                                viewModel.setDocumentFrame(
-                                    state.documentFrameX,
-                                    state.documentFrameY + 60f,
-                                    state.documentFrameScale
-                                )
-                            },
-                            modifier = Modifier.size(26.dp)
-                        ) {
-                            Text("Ôåô", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Spacer(Modifier.width(4.dp))
-
-                    // PDF Zoom Controls
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF283248))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
-                        IconButton(
-                            onClick = {
-                                viewModel.setDocumentFrame(
-                                    state.documentFrameX,
-                                    state.documentFrameY,
-                                    (state.documentFrameScale * 0.9f).coerceIn(0.2f, 3.0f)
-                                )
-                            },
-                            modifier = Modifier.size(26.dp)
-                        ) {
-                            Icon(Icons.Default.Remove, contentDescription = "Shrink PDF", tint = Color.White, modifier = Modifier.size(14.dp))
-                        }
-                        Text(
-                            "${(state.documentFrameScale * 100).roundToInt()}%",
-                            color = Color(0xFF60A5FA),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 4.dp)
-                        )
-                        IconButton(
-                            onClick = {
-                                viewModel.setDocumentFrame(
-                                    state.documentFrameX,
-                                    state.documentFrameY,
-                                    (state.documentFrameScale * 1.1f).coerceIn(0.2f, 3.0f)
-                                )
-                            },
-                            modifier = Modifier.size(26.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = "Enlarge PDF", tint = Color.White, modifier = Modifier.size(14.dp))
-                        }
-                    }
-
-                    Spacer(Modifier.width(4.dp))
-
-                    TextButton(onClick = {
-                        if (canvasSize.width > 0 && canvasSize.height > 0) {
-                            viewModel.fitToContent(canvasSize.width, canvasSize.height)
-                        } else {
-                            viewModel.resetDocumentFrame()
-                        }
-                    }) {
-                        Text(stringResource(R.string.pdf_fit), color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
-                    }
-                    TextButton(onClick = {
-                        viewModel.exportAnnotatedPdf { uri ->
-                            exportedUri = uri
-                            showExportDialog = true
-                        }
-                    }) { Text(stringResource(R.string.pdf_export), color = Color.White) }
-                    TextButton(onClick = { viewModel.closeDocument() }) {
-                        Text("Close", color = Color.White)
                     }
                 }
+            } else {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(top = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xF21C2130),
+                    shadowElevation = 8.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = {
+                            viewModel.selectPage(pageStep(state.pageIndex, state.pageCount, -1))
+                        }) { Text(stringResource(R.string.pdf_prev), color = Color.White) }
+                        val docTitle = if (openDocument.name.length > DocumentViewerConfig.TITLE_MAX_LENGTH) {
+                            openDocument.name.take(DocumentViewerConfig.TITLE_MAX_LENGTH) + "…"
+                        } else openDocument.name
+                        Text(
+                            "$docTitle  ${state.pageIndex + 1}/${state.pageCount}",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+                        TextButton(onClick = {
+                            viewModel.selectPage(pageStep(state.pageIndex, state.pageCount, 1))
+                        }) { Text(stringResource(R.string.pdf_next), color = Color.White) }
+
+                        if (openDocument.kind == DocumentKind.PDF) {
+                            if (state.isPdfOcrActive) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 6.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        color = Color(0xFF60A5FA),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        "OCR: ${state.pdfOcrCurrentPage}/${state.pdfOcrTotalPages}",
+                                        color = Color(0xFF93C5FD),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    TextButton(onClick = { viewModel.cancelPdfOcr() }) {
+                                        Text(stringResource(R.string.pdf_stop), color = Color(0xFFFF6B6B))
+                                    }
+                                }
+                            } else {
+                                val currentOcrDoc = state.pdfOcrDocument
+                                val hasOcrForCurrentPage = currentOcrDoc?.pages?.any { it.pageIndex == state.pageIndex } == true
+                                if (currentOcrDoc != null) {
+                                    TextButton(
+                                        onClick = { viewModel.togglePdfSearchPanel() },
+                                        colors = ButtonDefaults.textButtonColors(
+                                            contentColor = if (state.showPdfSearchPanel) Color(0xFF34D399) else Color(0xFF60A5FA)
+                                        )
+                                    ) {
+                                        Text(
+                                            if (state.showPdfSearchPanel) "Hide Text" else "Search & Text",
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                                if (!hasOcrForCurrentPage) {
+                                    TextButton(
+                                        onClick = { viewModel.makePdfEditableCurrentPage() },
+                                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF60A5FA))
+                                    ) {
+                                        Text(stringResource(R.string.pdf_ocr_page), fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                                if (currentOcrDoc == null || currentOcrDoc.pages.size < state.pageCount) {
+                                    TextButton(
+                                        onClick = { viewModel.makePdfEditable() },
+                                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF93C5FD))
+                                    ) {
+                                        Text(
+                                            if (currentOcrDoc == null) "OCR all pages" else "OCR all",
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 4-Directional Move Controls
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF283248))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                stringResource(R.string.pdf_move),
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            )
+                            IconButton(
+                                onClick = {
+                                    viewModel.setDocumentFrame(
+                                        state.documentFrameX - DocumentViewerConfig.FRAME_NUDGE_STEP_PX,
+                                        state.documentFrameY,
+                                        state.documentFrameScale
+                                    )
+                                },
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowBack,
+                                    contentDescription = stringResource(R.string.pdf_move_left),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    viewModel.setDocumentFrame(
+                                        state.documentFrameX + DocumentViewerConfig.FRAME_NUDGE_STEP_PX,
+                                        state.documentFrameY,
+                                        state.documentFrameScale
+                                    )
+                                },
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowForward,
+                                    contentDescription = stringResource(R.string.pdf_move_right),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    viewModel.setDocumentFrame(
+                                        state.documentFrameX,
+                                        state.documentFrameY - DocumentViewerConfig.FRAME_NUDGE_STEP_PX,
+                                        state.documentFrameScale
+                                    )
+                                },
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowUpward,
+                                    contentDescription = stringResource(R.string.pdf_move_up),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    viewModel.setDocumentFrame(
+                                        state.documentFrameX,
+                                        state.documentFrameY + DocumentViewerConfig.FRAME_NUDGE_STEP_PX,
+                                        state.documentFrameScale
+                                    )
+                                },
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDownward,
+                                    contentDescription = stringResource(R.string.pdf_move_down),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(4.dp))
+
+                        // PDF Zoom Controls
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF283248))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    viewModel.setDocumentFrame(
+                                        state.documentFrameX,
+                                        state.documentFrameY,
+                                        (state.documentFrameScale * DocumentViewerConfig.ZOOM_OUT_FACTOR)
+                                            .coerceIn(DocumentViewerConfig.MIN_SCALE, DocumentViewerConfig.MAX_SCALE)
+                                    )
+                                },
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(Icons.Default.Remove, contentDescription = stringResource(R.string.pdf_shrink), tint = Color.White, modifier = Modifier.size(14.dp))
+                            }
+                            Text(
+                                "${(state.documentFrameScale * 100).roundToInt()}%",
+                                color = Color(0xFF60A5FA),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            )
+                            IconButton(
+                                onClick = {
+                                    viewModel.setDocumentFrame(
+                                        state.documentFrameX,
+                                        state.documentFrameY,
+                                        (state.documentFrameScale * DocumentViewerConfig.ZOOM_IN_FACTOR)
+                                            .coerceIn(DocumentViewerConfig.MIN_SCALE, DocumentViewerConfig.MAX_SCALE)
+                                    )
+                                },
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.pdf_enlarge), tint = Color.White, modifier = Modifier.size(14.dp))
+                            }
+                        }
+
+                        Spacer(Modifier.width(4.dp))
+
+                        TextButton(onClick = {
+                            if (canvasSize.width > 0 && canvasSize.height > 0) {
+                                viewModel.fitToContent(canvasSize.width, canvasSize.height)
+                            } else {
+                                viewModel.resetDocumentFrame()
+                            }
+                        }) {
+                            Text(stringResource(R.string.pdf_fit), color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                        }
+                        TextButton(onClick = {
+                            viewModel.exportAnnotatedPdf { uri ->
+                                exportedUri = uri
+                                showExportDialog = true
+                            }
+                        }) { Text(stringResource(R.string.pdf_export), color = Color.White) }
+
+                        // Hide Topbar Button (Collapse without closing document)
+                        TextButton(
+                            onClick = { isDocumentBarCollapsed = true },
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF93C5FD))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowUp,
+                                contentDescription = stringResource(R.string.pdf_hide_bar),
+                                tint = Color(0xFF93C5FD),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(Modifier.width(2.dp))
+                            Text(stringResource(R.string.pdf_hide_bar), fontSize = 11.5.sp)
+                        }
+
+                        // Close Document with confirmation (Safeguard)
+                        TextButton(
+                            onClick = { showCloseDocConfirmDialog = true },
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFF8080))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.pdf_close_doc),
+                                tint = Color(0xFFFF8080),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(2.dp))
+                            Text(stringResource(R.string.pdf_close_doc), fontSize = 11.5.sp)
+                        }
+                    }
+                }
+            }
+
+            if (showCloseDocConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { showCloseDocConfirmDialog = false },
+                    title = { Text(stringResource(R.string.pdf_close_doc_title), fontWeight = FontWeight.Bold) },
+                    text = {
+                        Text(stringResource(R.string.pdf_close_doc_message, openDocument.name))
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showCloseDocConfirmDialog = false
+                                viewModel.closeDocument()
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFEF4444))
+                        ) {
+                            Text(stringResource(R.string.pdf_close_doc), fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showCloseDocConfirmDialog = false }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                )
             }
 
             val ocrDoc = state.pdfOcrDocument
@@ -5287,6 +5593,47 @@ fun CanvasScreen(
                         }
                     }
                 }
+            }
+
+            // Floating Side Navigation Controls for Multi-Page Documents
+            if (state.pageCount > 1) {
+                DocumentSideNavigation(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(y = (-100).dp)
+                        .padding(start = 12.dp),
+                    currentPage = state.pageIndex,
+                    pageCount = state.pageCount,
+                    onPrevPage = {
+                        if (state.pageIndex > 0) {
+                            viewModel.selectPage(state.pageIndex - 1)
+                        }
+                    },
+                    onNextPage = {
+                        if (state.pageIndex < state.pageCount - 1) {
+                            viewModel.selectPage(state.pageIndex + 1)
+                        }
+                    }
+                )
+
+                DocumentSideNavigation(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .offset(y = (-100).dp)
+                        .padding(end = 12.dp),
+                    currentPage = state.pageIndex,
+                    pageCount = state.pageCount,
+                    onPrevPage = {
+                        if (state.pageIndex > 0) {
+                            viewModel.selectPage(state.pageIndex - 1)
+                        }
+                    },
+                    onNextPage = {
+                        if (state.pageIndex < state.pageCount - 1) {
+                            viewModel.selectPage(state.pageIndex + 1)
+                        }
+                    }
+                )
             }
         }
 
@@ -5489,61 +5836,218 @@ fun CanvasScreen(
 
         val editing = state.strokes.firstOrNull { it.id == state.editingTextId }
         if (editing != null && editing.points.isNotEmpty()) {
-            val origin = CanvasTransform.worldToScreen(
-                editing.points.first(),
-                canvasScale,
-                Offset(canvasOffsetX, canvasOffsetY)
-            )
+            val originalText = remember(editing.id) { editing.text }
+            var draft by remember(editing.id) { mutableStateOf(editing.text) }
+            val editFocusRequester = remember(editing.id) { FocusRequester() }
+
+            LaunchedEffect(editing.id) {
+                editFocusRequester.requestFocus()
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.2f))
+                    .imePadding()
                     .pointerInput(Unit) {
                         detectTapGestures {
                             keyboardController?.hide()
                             focusManager.clearFocus()
                             viewModel.endTextEdit()
                         }
-                    }
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                Column(
+                Surface(
                     modifier = Modifier
-                        .offset { IntOffset(origin.x.roundToInt().coerceAtLeast(8), origin.y.roundToInt().coerceAtLeast(8)) }
-                        .width(240.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White)
-                        .padding(8.dp)
+                        .widthIn(min = 360.dp, max = 680.dp)
+                        .fillMaxWidth(0.72f)
+                        .padding(16.dp)
                         .pointerInput(Unit) {
                             detectTapGestures {
                                 // Consumes tap inside popup so backdrop is not triggered
                             }
-                        }
-                ) {
-                    val warning = state.smartWriteWarning
-                    if (warning != null) {
-                        Text(warning, color = Color(0xFFB45309), fontSize = 12.sp)
-                        Spacer(Modifier.height(4.dp))
-                    }
-                    var draft by remember(editing.id) { mutableStateOf(editing.text) }
-                    OutlinedTextField(
-                        value = draft,
-                        onValueChange = {
-                            draft = it
-                            viewModel.editStrokeText(editing.id, it)
                         },
-                        singleLine = false,
-                        textStyle = androidx.compose.ui.text.TextStyle(
-                            color = Color(editing.colorValue),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    TextButton(onClick = {
-                        keyboardController?.hide()
-                        focusManager.clearFocus()
-                        viewModel.endTextEdit()
-                    }) {
-                        Text("Done")
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (state.isDarkTheme) Color(0xFF1E293B) else Color.White,
+                    shadowElevation = 16.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp)
+                    ) {
+                        // Header
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = stringResource(R.string.text_edit_title),
+                                    tint = BrandOrange,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    stringResource(R.string.text_edit_title),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 17.sp,
+                                    color = if (state.isDarkTheme) Color.White else Color(0xFF0F172A)
+                                )
+                            }
+
+                            // Font size controls
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    stringResource(R.string.text_size_label),
+                                    fontSize = 12.sp,
+                                    color = if (state.isDarkTheme) Color(0xFF94A3B8) else Color(0xFF64748B)
+                                )
+                                IconButton(
+                                    onClick = {
+                                        val newSize = (editing.strokeWidth - TextStrokeConfig.FONT_STEP)
+                                            .coerceIn(TextStrokeConfig.MIN_FONT_SIZE, TextStrokeConfig.MAX_FONT_SIZE)
+                                        viewModel.setTextStrokeSize(editing.id, newSize)
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Text(
+                                        "−",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = if (state.isDarkTheme) Color.White else Color.Black
+                                    )
+                                }
+                                Text(
+                                    "${editing.strokeWidth.toInt()}px",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (state.isDarkTheme) Color.White else Color.Black
+                                )
+                                IconButton(
+                                    onClick = {
+                                        val newSize = (editing.strokeWidth + TextStrokeConfig.FONT_STEP)
+                                            .coerceIn(TextStrokeConfig.MIN_FONT_SIZE, TextStrokeConfig.MAX_FONT_SIZE)
+                                        viewModel.setTextStrokeSize(editing.id, newSize)
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Text(
+                                        "+",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = if (state.isDarkTheme) Color.White else Color.Black
+                                    )
+                                }
+                            }
+                        }
+
+                        val warning = state.smartWriteWarning
+                        if (warning != null) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(warning, color = Color(0xFFB45309), fontSize = 12.sp)
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = draft,
+                            onValueChange = {
+                                draft = it
+                                viewModel.editStrokeText(editing.id, it)
+                            },
+                            singleLine = false,
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = if (editing.colorValue != 0) Color(editing.colorValue) else (if (state.isDarkTheme) Color.White else Color(0xFF0F172A)),
+                                fontSize = 16.sp,
+                                lineHeight = 22.sp
+                            ),
+                            placeholder = {
+                                Text(stringResource(R.string.text_edit_placeholder), color = Color.Gray, fontSize = 15.sp)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 120.dp, max = 280.dp)
+                                .focusRequester(editFocusRequester),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // Footer Action Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Delete button
+                            OutlinedButton(
+                                onClick = {
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    viewModel.deleteStroke(editing.id)
+                                    viewModel.endTextEdit()
+                                },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color(0xFFEF4444)
+                                ),
+                                border = BorderStroke(1.dp, Color(0xFFFCA5A5)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = stringResource(R.string.delete),
+                                    tint = Color(0xFFEF4444),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.text_delete), fontSize = 13.sp)
+                            }
+
+                            Spacer(Modifier.weight(1f))
+
+                            TextButton(
+                                onClick = {
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    viewModel.editStrokeText(editing.id, originalText)
+                                    viewModel.endTextEdit()
+                                }
+                            ) {
+                                Text(stringResource(R.string.cancel), fontSize = 13.sp)
+                            }
+
+                            Spacer(Modifier.width(8.dp))
+
+                            Button(
+                                onClick = {
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    viewModel.editStrokeText(editing.id, draft)
+                                    viewModel.endTextEdit()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = BrandOrange),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = stringResource(R.string.text_done),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.text_done), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                     }
                 }
             }
@@ -6031,7 +6535,7 @@ fun CanvasScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     listOf(
-                        "Insert Image" to { showCommandPalette = false; imagePickerLauncher.launch("image/*") },
+                        "Insert Image" to { showCommandPalette = false; imagePickerLauncher.launch(arrayOf("image/*")) },
                         "Draw Rectangle" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.RECTANGLE) },
                         "Draw Diamond" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.DIAMOND) },
                         "Draw Arrow" to { showCommandPalette = false; viewModel.setTool(WhiteboardTool.ARROW) },
@@ -6985,6 +7489,7 @@ fun CanvasScreen(
             onConfirm = {
                 viewModel.clearCanvas()
                 removeAllMathTools()
+                boardStage?.clearAll()
                 showClearDialog = false
             },
             confirmDestructive = true
@@ -7001,6 +7506,7 @@ fun CanvasScreen(
             onConfirm = {
                 viewModel.clearCanvas()
                 removeAllMathTools()
+                boardStage?.clearAll()
                 showCleanAllDialog = false
             },
             confirmDestructive = true
@@ -7343,6 +7849,64 @@ private fun LaserOverlay(
                     // Intense white center
                     drawCircle(Color.White.copy(alpha = headLife), radius * 0.45f, headPoint)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DocumentSideNavigation(
+    modifier: Modifier = Modifier,
+    currentPage: Int,
+    pageCount: Int,
+    onPrevPage: () -> Unit,
+    onNextPage: () -> Unit
+) {
+    val canGoPrev = currentPage > 0
+    val canGoNext = currentPage < pageCount - 1
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0xF21C2130),
+        border = BorderStroke(1.dp, Color(0x3360A5FA)),
+        shadowElevation = 8.dp
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
+        ) {
+            IconButton(
+                onClick = onPrevPage,
+                enabled = canGoPrev,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowUp,
+                    contentDescription = stringResource(R.string.pdf_prev),
+                    tint = if (canGoPrev) Color.White else Color(0x4DFFFFFF),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Text(
+                "${currentPage + 1}/${pageCount}",
+                color = Color(0xFF93C5FD),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(vertical = 2.dp, horizontal = 4.dp)
+            )
+            IconButton(
+                onClick = onNextPage,
+                enabled = canGoNext,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = stringResource(R.string.pdf_next),
+                    tint = if (canGoNext) Color.White else Color(0x4DFFFFFF),
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
     }

@@ -63,11 +63,11 @@ data class Stroke(
             Rect(minOf(p1.x, p2.x), minOf(p1.y, p2.y), maxOf(p1.x, p2.x), maxOf(p1.y, p2.y))
         } else if (strokeType == StrokeType.TEXT) {
             val origin = points.first()
-            val size = if (strokeWidth >= 12f) strokeWidth else 20f
+            val size = if (strokeWidth in TextStrokeConfig.MIN_FONT_SIZE..TextStrokeConfig.MAX_FONT_SIZE) strokeWidth else TextStrokeConfig.DEFAULT_FONT_SIZE
             val lines = text.ifBlank { " " }.split("\n")
             val widest = lines.maxOf { it.length }.coerceAtLeast(1)
-            val width = (widest * size * 0.62f).coerceAtLeast(size * 2f)
-            val height = lines.size * size * 1.3f
+            val width = (widest * size * TextStrokeConfig.CHAR_WIDTH_RATIO).coerceAtLeast(size * TextStrokeConfig.MIN_WIDTH_FACTOR)
+            val height = (lines.size * size * TextStrokeConfig.LINE_HEIGHT_RATIO).coerceAtLeast(size * TextStrokeConfig.MIN_HEIGHT_FACTOR)
             Rect(origin.x, origin.y, origin.x + width, origin.y + height)
         } else if ((strokeType == StrokeType.IMAGE || strokeType == StrokeType.VIDEO || strokeType == StrokeType.WEB_EMBED) && points.size >= 2) {
             val p1 = points.first()
@@ -189,4 +189,15 @@ enum class StrokeType {
     SPHERE,
     STICKER,
     CONNECTOR
+}
+
+object TextStrokeConfig {
+    const val MIN_FONT_SIZE = 12f
+    const val MAX_FONT_SIZE = 120f
+    const val DEFAULT_FONT_SIZE = 20f
+    const val FONT_STEP = 2f
+    const val LINE_HEIGHT_RATIO = 1.35f
+    const val CHAR_WIDTH_RATIO = 0.65f
+    const val MIN_WIDTH_FACTOR = 2f
+    const val MIN_HEIGHT_FACTOR = 1.5f
 }

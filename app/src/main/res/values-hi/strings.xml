@@ -425,13 +425,34 @@
 
     <!-- PDF, Search & Canvas Overlays -->
     <string name="pdf_stop">रोकें</string>
+    <string name="pdf_prev">पिछला</string>
+    <string name="pdf_next">अगला</string>
+    <string name="pdf_move">हिलाएं:</string>
+    <string name="pdf_move_left">बाएं ले जाएं</string>
+    <string name="pdf_move_right">दाएं ले जाएं</string>
+    <string name="pdf_move_up">ऊपर ले जाएं</string>
+    <string name="pdf_move_down">नीचे ले जाएं</string>
+    <string name="pdf_shrink">PDF छोटा करें</string>
+    <string name="pdf_enlarge">PDF बड़ा करें</string>
+    <string name="pdf_hide_bar">बार छुपाएं</string>
+    <string name="pdf_show_controls">नियंत्रण दिखाएं</string>
+    <string name="pdf_close_doc">दस्तावेज़ बंद करें</string>
+    <string name="pdf_close_doc_title">दस्तावेज़ बंद करें?</string>
+    <string name="pdf_close_doc_message">क्या आप वाकई \'%1$s\' को बंद करना चाहते हैं? इससे दस्तावेज़ व्हाइटबोर्ड कैनवास से हट जाएगा।</string>
     <string name="pdf_ocr_page">इस पृष्ठ का OCR करें</string>
-    <string name="pdf_fit">PDF फ़िट करें</string>
+    <string name="pdf_fit">स्क्रीन में फ़िट करें</string>
     <string name="pdf_export">PDF निर्यात करें</string>
     <string name="pdf_search_placeholder">PDF में खोजें...</string>
     <string name="pdf_no_matches">कोई परिणाम नहीं मिला</string>
     <string name="pdf_copy_to_canvas">कैनवास पर कॉपी करें</string>
     <string name="pdf_copy_for_ai">AI के लिए कॉपी करें</string>
+
+    <!-- Text Stroke Editing -->
+    <string name="text_edit_title">पाठ संपादित करें</string>
+    <string name="text_size_label">आकार:</string>
+    <string name="text_edit_placeholder">पाठ दर्ज या संपादित करें...</string>
+    <string name="text_delete">पाठ हटाएं</string>
+    <string name="text_done">पूर्ण</string>
     <string name="search_google_images">Google पर छवियां खोजें...</string>
     <string name="search_youtube_videos">YouTube वीडियो खोजें या लिंक पेस्ट करें...</string>
     <string name="action_yes">हाँ</string>

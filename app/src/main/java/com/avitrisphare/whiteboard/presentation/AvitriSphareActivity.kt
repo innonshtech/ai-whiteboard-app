@@ -158,6 +158,22 @@ class AvitriSphareActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val needed = mutableListOf<String>()
+            if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                needed.add(android.Manifest.permission.READ_MEDIA_IMAGES)
+            }
+            if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_VIDEO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                needed.add(android.Manifest.permission.READ_MEDIA_VIDEO)
+            }
+            if (needed.isNotEmpty()) {
+                requestPermissions(needed.toTypedArray(), 1001)
+            }
+        } else {
+            if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE), 1001)
+            }
+        }
         extractIncomingUri(intent)?.let {
             externalImportUri.value = it
         }

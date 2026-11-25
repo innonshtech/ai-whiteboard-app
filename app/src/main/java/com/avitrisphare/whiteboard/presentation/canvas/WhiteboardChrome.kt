@@ -7,13 +7,17 @@ import com.avitrisphare.whiteboard.domain.model.isPlacedMedia
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -659,17 +663,28 @@ fun AvitriSphareWhiteboardChrome(
                             }
 
                             if (state.hasStrokeClipboard) {
-                                Text(
-                                    text = "Paste",
-                                    color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
                                         .clickable { onPasteClipboard() }
                                         .padding(horizontal = 8.dp, vertical = 5.dp)
-                                )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentPaste,
+                                        contentDescription = "Paste",
+                                        tint = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF475569),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(Modifier.width(3.dp))
+                                    Text(
+                                        text = "Paste",
+                                        color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
 
                             Row(
@@ -919,7 +934,7 @@ fun AvitriSphareWhiteboardChrome(
                                         .background(BrandOrange)
                                         .clickable {
                                             if (editableStroke.strokeType == StrokeType.TEXT) {
-                                                viewModel.beginTextEdit()
+                                                viewModel.beginTextEdit(editableStroke.id)
                                             } else {
                                                 onEditNodeText(editableStroke.id, editableStroke.text)
                                             }
@@ -994,17 +1009,28 @@ fun AvitriSphareWhiteboardChrome(
                             }
 
                             if (state.hasStrokeClipboard) {
-                                Text(
-                                    text = "Paste",
-                                    color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(if (state.isDarkTheme) Color(0xFF334155) else Color(0xFFF1F5F9))
                                         .clickable { onPasteClipboard() }
                                         .padding(horizontal = 8.dp, vertical = 5.dp)
-                                )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentPaste,
+                                        contentDescription = "Paste",
+                                        tint = if (state.isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF475569),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(Modifier.width(3.dp))
+                                    Text(
+                                        text = "Paste",
+                                        color = if (state.isDarkTheme) Color(0xFFF1F5F9) else Color(0xFF334155),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
 
                             Row(
@@ -1264,93 +1290,165 @@ fun AvitriSphareWhiteboardChrome(
 
             AnimatedVisibility(
                 visible = isPagesListVisible,
-                enter = fadeIn(tween(250)) + slideInHorizontally(tween(300)) { -it } + expandHorizontally(tween(300), expandFrom = Alignment.Start),
-                exit = fadeOut(tween(250)) + slideOutHorizontally(tween(300)) { -it } + shrinkHorizontally(tween(300), shrinkTowards = Alignment.Start),
-                modifier = Modifier.align(Alignment.Start)
+                enter = fadeIn(tween(250)) + slideInVertically(tween(300)) { it } + expandVertically(tween(300)),
+                exit = fadeOut(tween(250)) + slideOutVertically(tween(300)) { it } + shrinkVertically(tween(300)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
             ) {
-                Row(
+                BoxWithConstraints(
                     modifier = Modifier
-                        .wrapContentWidth(Alignment.Start)
-                        .horizontalScroll(rememberScrollState())
-                        .padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Top
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
                 ) {
                     val count = state.pageCount.coerceAtLeast(1)
                     val documentOpen = state.document != null
                     val firstThumb = if (documentOpen) (state.pageIndex - 2).coerceAtLeast(0) else 0
                     val lastThumb = if (documentOpen) (state.pageIndex + 3).coerceAtMost(count - 1) else count - 1
-                    for (index in firstThumb..lastThumb) {
-                        val strokes = if (index == state.pageIndex) {
-                            state.strokes
-                        } else {
-                            state.pagePreviews.getOrElse(index) { emptyList() }
-                        }
-                        val pageBgKey = state.pageBackgroundKeys.getOrElse(index) {
-                            if (state.isDarkCanvas) CanvasBackground.DARK.key else CanvasBackground.DOTTED.key
-                        }
-                        val isPageDark = CanvasBackground.fromKey(pageBgKey) == CanvasBackground.DARK
-                        PageThumbnail(
-                            index = index,
-                            title = state.pageTitles.getOrElse(index) { "Page ${index + 1}" },
-                            strokes = strokes,
-                            selected = index == state.pageIndex,
-                            dark = isPageDark,
-                            onClick = { viewModel.selectPage(index) },
-                            onOptionsClick = { pageMenuIndex = index },
-                            onLongClick = { pageMenuIndex = index }
-                        )
-                    }
-                    if (state.document == null && state.pageCount < 50) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.clickable { viewModel.addPage() }
+                    val totalThumbnails = (lastThumb - firstThumb + 1).coerceAtLeast(0)
+
+                    val actionButtons: @Composable () -> Unit = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.Top
                         ) {
-                            Surface(
-                                modifier = Modifier.size(width = 76.dp, height = 48.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (state.isDarkTheme) Color(0xFF262626) else Color(0xFFF1F5F9),
-                                border = BorderStroke(1.dp, if (state.isDarkTheme) Color(0xFF404040) else Color(0xFFCBD5E1)),
-                                shadowElevation = 0.dp
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.Add,
-                                        contentDescription = "Add page",
-                                        tint = Color(0xFF2563EB),
-                                        modifier = Modifier.size(22.dp)
+                            if (state.document == null && state.pageCount < 50) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.clickable { viewModel.addPage() }
+                                ) {
+                                    Surface(
+                                        modifier = Modifier.size(width = 76.dp, height = 48.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (state.isDarkTheme) Color(0xFF262626) else Color(0xFFF1F5F9),
+                                        border = BorderStroke(1.dp, if (state.isDarkTheme) Color(0xFF404040) else Color(0xFFCBD5E1)),
+                                        shadowElevation = 0.dp
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                Icons.Default.Add,
+                                                contentDescription = "Add page",
+                                                tint = Color(0xFF2563EB),
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = "",
+                                        fontSize = 10.sp
                                     )
                                 }
                             }
-                            Text(
-                                text = "",
-                                fontSize = 10.sp
-                            )
+
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = 44.dp, height = 48.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Brush.horizontalGradient(ButtonGradient))
+                                        .clickable { isPagesListVisible = false },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.ChevronLeft,
+                                        contentDescription = "Hide pages list",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Text(
+                                    text = "",
+                                    fontSize = 10.sp
+                                )
+                            }
                         }
                     }
 
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 44.dp, height = 48.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Brush.horizontalGradient(ButtonGradient))
-                                .clickable { isPagesListVisible = false },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.ChevronLeft,
-                                contentDescription = "Hide pages list",
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
+                    // Total width required: each thumbnail is 84.dp, action buttons are ~136.dp
+                    val requiredWidth = (totalThumbnails * 84).dp + 136.dp
+                    val isOverflowing = requiredWidth > maxWidth
+
+                    if (isOverflowing) {
+                        // Many pages: Thumbnails scroll horizontally, action buttons stay pinned on the right
+                        val pagesLazyListState = rememberLazyListState()
+
+                        LaunchedEffect(state.pageIndex) {
+                            val targetItem = (state.pageIndex - firstThumb).coerceAtLeast(0)
+                            pagesLazyListState.animateScrollToItem(targetItem)
                         }
-                        Text(
-                            text = "",
-                            fontSize = 10.sp
-                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            LazyRow(
+                                state = pagesLazyListState,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                items(totalThumbnails) { offset ->
+                                    val index = firstThumb + offset
+                                    val strokes = if (index == state.pageIndex) {
+                                        state.strokes
+                                    } else {
+                                        state.pagePreviews.getOrElse(index) { emptyList() }
+                                    }
+                                    val pageBgKey = state.pageBackgroundKeys.getOrElse(index) {
+                                        if (state.isDarkCanvas) CanvasBackground.DARK.key else CanvasBackground.DOTTED.key
+                                    }
+                                    val isPageDark = CanvasBackground.fromKey(pageBgKey) == CanvasBackground.DARK
+                                    PageThumbnail(
+                                        index = index,
+                                        title = state.pageTitles.getOrElse(index) { "Page ${index + 1}" },
+                                        strokes = strokes,
+                                        selected = index == state.pageIndex,
+                                        dark = isPageDark,
+                                        onClick = { viewModel.selectPage(index) },
+                                        onOptionsClick = { pageMenuIndex = index },
+                                        onLongClick = { pageMenuIndex = index }
+                                    )
+                                }
+                            }
+
+                            actionButtons()
+                        }
+                    } else {
+                        // Few pages (or pages deleted): Action buttons sit right beside the last thumbnail!
+                        Row(
+                            modifier = Modifier.wrapContentWidth(Alignment.Start),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            for (index in firstThumb..lastThumb) {
+                                val strokes = if (index == state.pageIndex) {
+                                    state.strokes
+                                } else {
+                                    state.pagePreviews.getOrElse(index) { emptyList() }
+                                }
+                                val pageBgKey = state.pageBackgroundKeys.getOrElse(index) {
+                                    if (state.isDarkCanvas) CanvasBackground.DARK.key else CanvasBackground.DOTTED.key
+                                }
+                                val isPageDark = CanvasBackground.fromKey(pageBgKey) == CanvasBackground.DARK
+                                PageThumbnail(
+                                    index = index,
+                                    title = state.pageTitles.getOrElse(index) { "Page ${index + 1}" },
+                                    strokes = strokes,
+                                    selected = index == state.pageIndex,
+                                    dark = isPageDark,
+                                    onClick = { viewModel.selectPage(index) },
+                                    onOptionsClick = { pageMenuIndex = index },
+                                    onLongClick = { pageMenuIndex = index }
+                                )
+                            }
+
+                            actionButtons()
+                        }
                     }
                 }
             }

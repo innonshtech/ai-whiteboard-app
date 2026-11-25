@@ -81,6 +81,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
     var onMoveMedia: ((strokeId: String, deltaX: Float, deltaY: Float) -> Unit)? = null
     var onCloseMedia: ((strokeId: String) -> Unit)? = null
     private var customBackgroundColor: Int? = null
+    private var editingTextId: String? = null
 
     private val activeLiveStrokes = ArrayList<Stroke>()
     private var documentBitmap: Bitmap? = null
@@ -178,11 +179,14 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         customBackgroundUri: String = "",
         pageIndex: Int = 0,
         hasLassoSelection: Boolean = false,
-        customBackgroundColor: Int? = null
+        customBackgroundColor: Int? = null,
+        editingTextId: String? = null
     ) {
         if (previewing) return
         val customBgChanged = customBackgroundUri != this.customBackgroundUri
         val colorChanged = customBackgroundColor != this.customBackgroundColor
+        val editingIdChanged = this.editingTextId != editingTextId
+        this.editingTextId = editingTextId
         val pageIndexChanged = this.currentPageIndex != pageIndex
         this.currentPageIndex = pageIndex
         val pageChanged = pageIndexChanged || background != this.pageBackground || showGrid != this.showGrid || dark != this.dark || customBgChanged || colorChanged
@@ -194,7 +198,8 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         val inkChanged = pageIndexChanged ||
             (sourceStrokes !== strokes) ||
             (sourceSelected !== selected && (selected.size != this.selected.size || selected != this.selected)) ||
-            lassoChanged
+            lassoChanged ||
+            editingIdChanged
 
         this.pageBackground = background
         this.customBackgroundUri = customBackgroundUri
@@ -378,6 +383,38 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         gestureStrokes = null
     }
 
+    fun clearMedia() {
+        for (v in mediaViews.values) {
+            findWebView(v)?.apply {
+                loadUrl("about:blank")
+                stopLoading()
+                destroy()
+            }
+            media.removeView(v)
+        }
+        mediaViews.clear()
+        for (p in players.values) {
+            p.release()
+        }
+        players.clear()
+        media.removeAllViews()
+    }
+
+    fun clearAll() {
+        clearMedia()
+        documentBitmap = null
+        strokes = emptyList()
+        sourceStrokes = emptyList()
+        selected = emptySet()
+        sourceSelected = emptySet()
+        gestureStrokes = null
+        activeLive = null
+        currentStroke = null
+        marquee = null
+        grid.invalidate()
+        ink.invalidate()
+    }
+
     fun shouldDeliverToMedia(event: MotionEvent, tool: WhiteboardTool): Boolean {
         if (tool == WhiteboardTool.HAND || tool == WhiteboardTool.RULER ||
             tool == WhiteboardTool.SPOTLIGHT || tool == WhiteboardTool.SHADE ||
@@ -505,6 +542,24 @@ class BoardStageView(context: Context) : FrameLayout(context) {
                 mediaViews[stroke.id] = created
                 media.addView(created)
             }
+            if (view is ImageView && view.drawable == null && stroke.imageUri.isNotBlank()) {
+                val ready = BitmapCache.get(stroke.imageUri)
+                if (ready != null) {
+                    view.setImageBitmap(ready)
+                } else {
+                    val path = stroke.imageUri
+                    loader.execute {
+                        val bitmap = BitmapCache.decodeSampledBitmap(context, path) ?: return@execute
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            if (view.tag == stroke.id) {
+                                view.setImageBitmap(bitmap)
+                                view.invalidate()
+                                ink.invalidate()
+                            }
+                        }
+                    }
+                }
+            }
             place(view, stroke)
         }
     }
@@ -555,8 +610,12 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         val path = stroke.imageUri
         loader.execute {
             val bitmap = BitmapCache.decodeSampledBitmap(context, path) ?: return@execute
-            post {
-                if (view.tag == stroke.id) view.setImageBitmap(bitmap)
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                if (view.tag == stroke.id) {
+                    view.setImageBitmap(bitmap)
+                    view.invalidate()
+                    ink.invalidate()
+                }
             }
         }
         return view
@@ -954,7 +1013,7 @@ class BoardStageView(context: Context) : FrameLayout(context) {
                     }
                 }
             } else {
-                drawVectorInk(context, strokes, scale, offsetX, offsetY, selected, hasLassoSelection)
+                drawVectorInk(context, strokes, scale, offsetX, offsetY, selected, hasLassoSelection, editingTextId)
             }
         }
     }
