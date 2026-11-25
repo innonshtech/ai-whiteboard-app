@@ -88,7 +88,8 @@ fun DrawScope.drawVectorInk(
     offsetX: Float,
     offsetY: Float,
     selectedIds: Set<String>,
-    hasLassoSelection: Boolean = false
+    hasLassoSelection: Boolean = false,
+    editingTextId: String? = null
 ) {
     val viewport = CanvasTransform.calculateViewportWorldBounds(
         viewportSize = size,
@@ -99,24 +100,24 @@ fun DrawScope.drawVectorInk(
         val selectedStrokes = ArrayList<Stroke>()
         for (stroke in strokes) {
             if (stroke.strokeType == StrokeType.IMAGE && stroke.bounds.overlaps(viewport)) {
-                renderStroke(context, stroke, scale, false)
+                renderStroke(context, stroke, scale, false, editingTextId)
             }
         }
         for (stroke in strokes) {
             if (stroke.id in selectedIds) {
                 selectedStrokes.add(stroke)
             } else if (!stroke.isPlacedMedia() && stroke.bounds.overlaps(viewport)) {
-                renderStroke(context, stroke, scale, false)
+                renderStroke(context, stroke, scale, false, editingTextId)
             }
         }
         if (selectedStrokes.isNotEmpty() && !hasLassoSelection) drawSelectionBox(selectedStrokes, scale)
         for (stroke in selectedStrokes) {
             if (stroke.strokeType == StrokeType.IMAGE) continue
-            renderStroke(context, stroke, scale, false)
+            renderStroke(context, stroke, scale, false, editingTextId)
         }
         for (stroke in strokes) {
             if (stroke.isPlacedMedia() && stroke.strokeType != StrokeType.IMAGE) {
-                renderStroke(context, stroke, scale, stroke.id in selectedIds)
+                renderStroke(context, stroke, scale, stroke.id in selectedIds, editingTextId)
             }
         }
     }

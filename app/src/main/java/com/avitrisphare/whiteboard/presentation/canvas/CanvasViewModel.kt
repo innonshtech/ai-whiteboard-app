@@ -26,6 +26,7 @@ import com.avitrisphare.whiteboard.domain.model.CanvasBackground
 import com.avitrisphare.whiteboard.domain.model.withGraphPaperToggled
 import com.avitrisphare.whiteboard.domain.model.Stroke
 import com.avitrisphare.whiteboard.domain.model.StrokeType
+import com.avitrisphare.whiteboard.domain.model.TextStrokeConfig
 import com.avitrisphare.whiteboard.data.remote.ApiCall
 import com.avitrisphare.whiteboard.data.remote.PanelApi
 import com.avitrisphare.whiteboard.domain.model.isPlacedMedia
@@ -382,6 +383,7 @@ class CanvasViewModel @Inject constructor(
     private var selectionUndoCaptured = false
     private var plainPages: List<List<Stroke>>? = null
     private val renderedPages = java.util.Collections.synchronizedMap(HashMap<Int, Bitmap>())
+    private var activeDocumentSession: DocumentSession? = null
     private var renderJob: Job? = null
     private var pdfOcrJob: Job? = null
     private var viewportWidth = 0f
@@ -1123,14 +1125,12 @@ class CanvasViewModel @Inject constructor(
                 return@launch
             }
 
-            val extracted = withTimeoutOrNull(4_500L) {
+            val extracted = withTimeoutOrNull(15_000L) {
                 withContext(Dispatchers.Default) {
                     try {
                         imageTextExtractor.extractText(bitmap)
-                    } finally {
-                        if (!bitmap.isRecycled) {
-                            bitmap.recycle()
-                        }
+                    } catch (e: Exception) {
+                        null
                     }
                 }
             }
@@ -1214,7 +1214,13 @@ class CanvasViewModel @Inject constructor(
                 _state.update { it.copy(pdfOcrCurrentPage = pageIndex + 1) }
 
                 val pageBitmap = try {
-                    DocumentRenderer.render(file, DocumentKind.PDF, pageIndex)
+                    val cached = renderedPages[pageIndex]
+                    if (cached != null && !cached.isRecycled) {
+                        cached.copy(cached.config ?: Bitmap.Config.ARGB_8888, false)
+                    } else {
+                        val session = getOrOpenDocumentSession(file, DocumentKind.PDF)
+                        session.renderPage(pageIndex)
+                    }
                 } catch (_: Exception) {
                     null
                 }
@@ -1271,29 +1277,55 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun copyPdfTextToCanvas(text: String) {
-        if (text.isBlank()) {
-            showToast("No text to copy")
+        placePdfPageExtractedText(text)
+    }
+
+    fun placePdfPageExtractedText(rawText: String) {
+        val clean = rawText.replace("\r\n", "\n").replace("\r", "\n").trim()
+            .replace(Regex("\n{3,}"), "\n\n")
+        if (clean.isBlank()) {
+            showToast("No readable text found on this page")
             return
         }
+
         val doc = _state.value.document
-        val placement = if (doc != null && doc.pageWidth > 1f) {
-            Offset(doc.pageWidth + 32f, 40f)
+        val frameX = _state.value.documentFrameX
+        val frameY = _state.value.documentFrameY
+        val frameScale = _state.value.documentFrameScale
+        val docWidth = if (doc != null && doc.pageWidth > 1f) doc.pageWidth * frameScale else 0f
+
+        val viewport = CanvasTransform.calculateViewportWorldBounds(
+            viewportSize = androidx.compose.ui.geometry.Size(viewportWidth, viewportHeight),
+            scale = _state.value.scale,
+            offset = Offset(_state.value.offsetX, _state.value.offsetY)
+        )
+
+        val candidateRight = frameX + docWidth + 36f
+        val placementX = if (doc != null && docWidth > 0f) {
+            if (candidateRight + 260f <= viewport.right || (frameX - 420f) < viewport.left) {
+                candidateRight
+            } else {
+                (frameX - 420f).coerceAtLeast(viewport.left + 24f)
+            }
         } else {
-            CanvasTransform.screenToWorld(
-                Offset(viewportWidth / 2f, viewportHeight / 2f),
-                _state.value.scale,
-                Offset(_state.value.offsetX, _state.value.offsetY)
-            )
+            viewport.center.x
         }
+
+        val placementY = if (doc != null) {
+            (frameY + 20f).coerceIn(viewport.top + 30f, (viewport.bottom - 150f).coerceAtLeast(viewport.top + 30f))
+        } else {
+            viewport.center.y
+        }
+
         val textColor = if (_state.value.isDarkCanvas) 0xFFFFFFFF.toInt() else 0xFF1B1F2A.toInt()
 
         saveToUndoStack()
         val textStroke = Stroke(
-            points = listOf(placement),
+            points = listOf(Offset(placementX, placementY)),
             colorValue = textColor,
-            strokeWidth = 20f,
+            strokeWidth = TextStrokeConfig.DEFAULT_FONT_SIZE,
             strokeType = StrokeType.TEXT,
-            text = text.trim()
+            text = clean
         )
 
         _state.update { state ->
@@ -1307,7 +1339,7 @@ class CanvasViewModel @Inject constructor(
         }
         redoStack.clear()
         scheduleSave()
-        showToast("Text placed on canvas as editable block")
+        showToast("Text placed on canvas. Tap 'Edit text' to modify.")
     }
 
     fun copyPdfTextToClipboard(text: String) {
@@ -1332,11 +1364,12 @@ class CanvasViewModel @Inject constructor(
         }
     }
 
-    fun beginTextEdit() {
-        val text = _state.value.strokes.singleOrNull {
-            it.id in _state.value.selectedStrokeIds && it.strokeType == StrokeType.TEXT
+    fun beginTextEdit(strokeId: String? = null) {
+        val targetId = strokeId ?: _state.value.selectedStrokeIds.firstOrNull() ?: return
+        val text = _state.value.strokes.firstOrNull {
+            it.id == targetId && it.strokeType == StrokeType.TEXT
         } ?: return
-        _state.update { it.copy(editingTextId = text.id) }
+        _state.update { it.copy(editingTextId = text.id, selectedStrokeIds = setOf(text.id)) }
     }
 
     fun editStrokeText(id: String, value: String) {
@@ -2077,6 +2110,7 @@ class CanvasViewModel @Inject constructor(
             s.copy(
                 strokes = s.strokes.filterNot { it.id == strokeId },
                 selectedStrokeIds = s.selectedStrokeIds - strokeId,
+                editingTextId = if (s.editingTextId == strokeId) null else s.editingTextId,
                 canUndo = true,
                 canRedo = false
             )
@@ -2214,7 +2248,26 @@ class CanvasViewModel @Inject constructor(
         val targetBoxId = targetMindmapBoxId
         targetMindmapBoxId = null
         viewModelScope.launch {
-            val stored = withContext(Dispatchers.IO) { storeImage(uriString) } ?: uriString
+            val (stored, dimensions) = withContext(Dispatchers.IO) {
+                val path = storeImage(uriString) ?: uriString
+                // Read image bounds to preserve true aspect ratio
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                if (path.startsWith("/")) {
+                    BitmapFactory.decodeFile(path, bounds)
+                } else {
+                    runCatching {
+                        BitmapCache.openInputStream(context, path)?.use {
+                            BitmapFactory.decodeStream(it, null, bounds)
+                        }
+                    }
+                }
+                // Pre-cache bitmap in background thread
+                val bmp = BitmapCache.decodeSampledBitmap(context, path, 2048)
+                if (bmp != null && path != uriString) {
+                    BitmapCache.put(uriString, bmp)
+                }
+                Pair(path, Pair(bounds.outWidth, bounds.outHeight))
+            }
             if (targetBoxId != null) {
                 val targetBox = _state.value.strokes.firstOrNull { it.id == targetBoxId }
                 if (targetBox != null) {
@@ -2236,7 +2289,16 @@ class CanvasViewModel @Inject constructor(
                     return@launch
                 }
             }
-            placeMedia(StrokeType.IMAGE, worldPoint, 520f, 360f, imageUri = stored)
+            val origW = dimensions.first.toFloat()
+            val origH = dimensions.second.toFloat()
+            val (imgW, imgH) = if (origW > 0 && origH > 0) {
+                val maxDim = 560f
+                val s = minOf(maxDim / origW, maxDim / origH).coerceAtMost(1f)
+                Pair((origW * s).coerceAtLeast(80f), (origH * s).coerceAtLeast(80f))
+            } else {
+                Pair(520f, 360f)
+            }
+            placeMedia(StrokeType.IMAGE, worldPoint, imgW, imgH, imageUri = stored)
         }
     }
 
@@ -2318,50 +2380,52 @@ class CanvasViewModel @Inject constructor(
 
     private fun storeImage(uriString: String): String? {
         return try {
-            val bitmap = decodeSampled(uriString, 1600) ?: return null
-            val dir = File(context.filesDir, "media")
-            dir.mkdirs()
-            val file = File(dir, "img_${System.currentTimeMillis()}.jpg")
-            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 86, it) }
-            bitmap.recycle()
-            file.absolutePath
-        } catch (_: Exception) {
+            val existing = File(uriString)
+            if (existing.isAbsolute && existing.exists() && existing.length() > 0 && !uriString.startsWith("content:")) {
+                return existing.absolutePath
+            }
+
+            if (uriString.startsWith("data:image/")) {
+                val dir = File(context.filesDir, "media").apply { mkdirs() }
+                val file = File(dir, "img_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(6)}.png")
+                val comma = uriString.indexOf(',')
+                if (comma >= 0) {
+                    val bytes = android.util.Base64.decode(uriString.substring(comma + 1), android.util.Base64.DEFAULT)
+                    file.writeBytes(bytes)
+                    return file.absolutePath
+                }
+            }
+
+            val dir = File(context.filesDir, "media").apply { mkdirs() }
+            val ext = when {
+                uriString.contains(".png", ignoreCase = true) -> "png"
+                uriString.contains(".webp", ignoreCase = true) -> "webp"
+                else -> "jpg"
+            }
+            val file = File(dir, "img_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(6)}.$ext")
+
+            val inputStream = BitmapCache.openInputStream(context, uriString) ?: return null
+            inputStream.use { input ->
+                file.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            if (file.exists() && file.length() > 0) {
+                file.absolutePath
+            } else null
+        } catch (e: Exception) {
+            android.util.Log.e("CanvasViewModel", "Failed to store image $uriString", e)
             null
         }
     }
 
     private fun decodeSampled(uriString: String, maxEdge: Int): Bitmap? {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        openImage(uriString)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        var sample = 1
-        while (bounds.outWidth / sample > maxEdge * 2 || bounds.outHeight / sample > maxEdge * 2) {
-            sample *= 2
-        }
-        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        return openImage(uriString)?.use { BitmapFactory.decodeStream(it, null, opts) }
+        return BitmapCache.decodeSampledBitmap(context, uriString, maxEdge)
     }
 
     private fun openImage(uriString: String): java.io.InputStream? {
-        return when {
-            uriString.startsWith("data:image/") -> {
-                val comma = uriString.indexOf(',')
-                if (comma >= 0) {
-                    val base64 = uriString.substring(comma + 1)
-                    val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
-                    java.io.ByteArrayInputStream(bytes)
-                } else null
-            }
-            uriString.startsWith("/") -> File(uriString).inputStream()
-            uriString.startsWith("http://") || uriString.startsWith("https://") -> {
-                val connection = java.net.URL(uriString).openConnection()
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0")
-                connection.connectTimeout = 12000
-                connection.readTimeout = 12000
-                connection.getInputStream()
-            }
-            else -> context.contentResolver.openInputStream(Uri.parse(uriString))
-        }
+        return BitmapCache.openInputStream(context, uriString)
     }
 
     fun updateStrokeText(id: String, newText: String) {
@@ -2825,14 +2889,6 @@ class CanvasViewModel @Inject constructor(
     }
 
     fun copySelectedStrokes() {
-        if (_state.value.document != null) {
-            _state.update {
-                it.copy(
-                    errorMessage = "Copying is not supported on document-backed boards because pages are tied to the PDF file."
-                )
-            }
-            return
-        }
         val selected = _state.value.selectedStrokeIds
         if (selected.isEmpty()) return
         strokeClipboard = _state.value.strokes.filter { it.id in selected }
@@ -2842,18 +2898,16 @@ class CanvasViewModel @Inject constructor(
             val count = strokeClipboard.size
             val msg = if (count == 1) "Copied! Ready to paste" else "Copied $count items! Ready to paste"
             showToast(msg)
+
+            val textToCopy = strokeClipboard.mapNotNull { it.text.takeIf { t -> t.isNotBlank() } }.joinToString("\n")
+            if (textToCopy.isNotBlank()) {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Whiteboard Text", textToCopy))
+            }
         }
     }
 
     fun pasteStrokeClipboard(targetCenter: Offset? = null) {
-        if (_state.value.document != null) {
-            _state.update {
-                it.copy(
-                    errorMessage = "Pasting is not supported on document-backed boards because pages are tied to the PDF file."
-                )
-            }
-            return
-        }
         if (strokeClipboard.isEmpty()) return
         saveToUndoStack()
 
@@ -3157,7 +3211,13 @@ class CanvasViewModel @Inject constructor(
         pdfOcrJob = viewModelScope.launch(Dispatchers.Default) {
             _state.update { it.copy(isPdfOcrActive = true, pdfOcrCurrentPage = 1, pdfOcrTotalPages = 1) }
             val pageBitmap = try {
-                DocumentRenderer.render(file, DocumentKind.PDF, pageIndex)
+                val cached = renderedPages[pageIndex]
+                if (cached != null && !cached.isRecycled) {
+                    cached.copy(cached.config ?: Bitmap.Config.ARGB_8888, false)
+                } else {
+                    val session = getOrOpenDocumentSession(file, DocumentKind.PDF)
+                    session.renderPage(pageIndex)
+                }
             } catch (_: Exception) {
                 null
             }
@@ -3177,9 +3237,12 @@ class CanvasViewModel @Inject constructor(
             merged.add(PdfPageOcr(pageIndex, pageText))
             val ocrDoc = PdfOcrDocument(doc.path, merged.sortedBy { it.pageIndex })
             _state.update {
-                it.copy(isPdfOcrActive = false, pdfOcrDocument = ocrDoc, showPdfSearchPanel = true)
+                it.copy(isPdfOcrActive = false, pdfOcrDocument = ocrDoc)
             }
             scheduleSave()
+            withContext(Dispatchers.Main) {
+                placePdfPageExtractedText(pageText)
+            }
         }
     }
 
@@ -3744,6 +3807,10 @@ class CanvasViewModel @Inject constructor(
                 }
                 pdfOcrJob?.cancel()
                 clearRenderedPages()
+                activeDocumentSession?.close()
+                activeDocumentSession = withContext(Dispatchers.IO) {
+                    DocumentRenderer.openSession(opened.file, opened.kind)
+                }
                 pages.clear()
                 repeat(opened.pageCount) { pages.add(emptyList()) }
                 activePage = 0
@@ -3785,6 +3852,8 @@ class CanvasViewModel @Inject constructor(
         pdfOcrJob?.cancel()
         renderJob?.cancel()
         clearRenderedPages()
+        activeDocumentSession?.close()
+        activeDocumentSession = null
         _pageBitmap.value = null
         val restored = plainPages
         if (restored != null) {
@@ -3820,9 +3889,10 @@ class CanvasViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val pdf = android.graphics.pdf.PdfDocument()
+                val session = getOrOpenDocumentSession(File(document.path), document.kind)
                 layers.forEachIndexed { index, strokes ->
                     val cached = renderedPages[index]
-                    val bitmap = cached ?: DocumentRenderer.render(File(document.path), document.kind, index)
+                    val bitmap = cached ?: session.renderPage(index)
                     try {
                         val pageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, index + 1).create()
                         val page = pdf.startPage(pageInfo)
@@ -3904,19 +3974,48 @@ class CanvasViewModel @Inject constructor(
         }
     }
 
+    private fun getOrOpenDocumentSession(file: File, kind: DocumentKind): DocumentSession {
+        val existing = activeDocumentSession
+        if (existing != null && existing.file.absolutePath == file.absolutePath && existing.kind == kind) {
+            return existing
+        }
+        existing?.close()
+        val session = DocumentRenderer.openSession(file, kind)
+        activeDocumentSession = session
+        return session
+    }
+
     private fun renderDocumentPage(index: Int) {
         val document = _state.value.document ?: return
         renderJob?.cancel()
-        _pageBitmap.value = renderedPages[index]
+        val cached = renderedPages[index]
+        if (cached != null && !cached.isRecycled) {
+            _pageBitmap.value = cached
+            val fitted = fitDocument(cached.width.toFloat(), cached.height.toFloat())
+            _state.update {
+                it.copy(
+                    document = it.document?.copy(pageWidth = cached.width.toFloat(), pageHeight = cached.height.toFloat()),
+                    scale = fitted.first,
+                    offsetX = fitted.second,
+                    offsetY = fitted.third
+                )
+            }
+        }
         renderJob = viewModelScope.launch {
             val bitmap = withContext(Dispatchers.IO) {
-                renderedPages[index] ?: DocumentRenderer.render(File(document.path), document.kind, index).also { rendered ->
+                val existing = renderedPages[index]
+                if (existing != null && !existing.isRecycled) {
+                    existing
+                } else {
+                    val session = getOrOpenDocumentSession(File(document.path), document.kind)
+                    val rendered = session.renderPage(index)
                     renderedPages[index] = rendered
                     val stale = renderedPages.keys.filter { kotlin.math.abs(it - index) > 2 }.toList()
                     stale.forEach { key ->
                         val removed = renderedPages.remove(key)
                         if (removed != null && removed !== _pageBitmap.value && !removed.isRecycled) removed.recycle()
                     }
+                    rendered
                 }
             }
             if (!isActive || _state.value.pageIndex != index) return@launch
@@ -3931,10 +4030,21 @@ class CanvasViewModel @Inject constructor(
                 )
             }
             val next = index + 1
-            if (next < pages.size && renderedPages[next] == null) {
+            val prev = index - 1
+            if (next < pages.size && (renderedPages[next] == null || renderedPages[next]?.isRecycled == true)) {
                 launch(Dispatchers.IO) {
                     try {
-                        renderedPages[next] = DocumentRenderer.render(File(document.path), document.kind, next)
+                        val session = getOrOpenDocumentSession(File(document.path), document.kind)
+                        renderedPages[next] = session.renderPage(next)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+            if (prev >= 0 && (renderedPages[prev] == null || renderedPages[prev]?.isRecycled == true)) {
+                launch(Dispatchers.IO) {
+                    try {
+                        val session = getOrOpenDocumentSession(File(document.path), document.kind)
+                        renderedPages[prev] = session.renderPage(prev)
                     } catch (_: Exception) {
                     }
                 }
@@ -4058,7 +4168,7 @@ class CanvasViewModel @Inject constructor(
             }
             if (currentTools.any { it.kind == matchingKind }) curTool else _state.value.inkTool
         } else curTool
-        val shouldReset = resetTransform || pages.getOrNull(index)?.isEmpty() == true
+        val shouldReset = resetTransform || (_state.value.document == null && pages.getOrNull(index)?.isEmpty() == true)
         clearLaser()
         _state.update {
             it.copy(
@@ -4461,6 +4571,23 @@ class CanvasViewModel @Inject constructor(
         }
     }
 
+    fun setTextStrokeSize(strokeId: String, size: Float) {
+        val clamped = size.coerceIn(TextStrokeConfig.MIN_FONT_SIZE, TextStrokeConfig.MAX_FONT_SIZE)
+        saveToUndoStack()
+        _state.update { s ->
+            s.copy(
+                strokeWidth = clamped,
+                strokes = s.strokes.map { stroke ->
+                    if (stroke.id == strokeId) stroke.copy(strokeWidth = clamped) else stroke
+                },
+                canUndo = true,
+                canRedo = false
+            )
+        }
+        redoStack.clear()
+        scheduleSave()
+    }
+
     fun setStrokeWidth(width: Float) {
         val clamped = width.coerceIn(1f, 50f)
         val tool = _state.value.inkTool
@@ -4659,14 +4786,42 @@ class CanvasViewModel @Inject constructor(
             setPaneStrokes(index, emptyList())
             return
         }
-        if (_state.value.strokes.isEmpty() && _state.value.mathTools.isEmpty()) return
+        val hasContent = _state.value.strokes.isNotEmpty() || _state.value.mathTools.isNotEmpty() || _state.value.document != null
+        if (!hasContent) return
+
         saveToUndoStack()
+
+        pdfOcrJob?.cancel()
+        pdfOcrJob = null
+        renderJob?.cancel()
+        renderJob = null
+        clearRenderedPages()
+        activeDocumentSession?.close()
+        activeDocumentSession = null
+        _pageBitmap.value = null
+        plainPages = null
+
+        if (activePage in pages.indices) {
+            pages[activePage] = emptyList()
+        }
+
         _state.update { s ->
             s.copy(
                 strokes = emptyList(),
+                document = null,
                 currentStroke = null,
                 selectedStrokeIds = emptySet(),
                 mathTools = emptyList(),
+                documentFrameX = 0f,
+                documentFrameY = 0f,
+                documentFrameScale = 1f,
+                isPdfOcrActive = false,
+                pdfOcrCurrentPage = 0,
+                pdfOcrTotalPages = 0,
+                pdfOcrDocument = null,
+                showPdfSearchPanel = false,
+                pdfSearchQuery = "",
+                editingTextId = null,
                 canUndo = true,
                 canRedo = false
             )
@@ -4907,6 +5062,8 @@ class CanvasViewModel @Inject constructor(
             } catch (_: Exception) {
             }
         }
+        activeDocumentSession?.close()
+        activeDocumentSession = null
         super.onCleared()
     }
 

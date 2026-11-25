@@ -428,13 +428,34 @@
 
     <!-- PDF, Search & Canvas Overlays -->
     <string name="pdf_stop">Stop</string>
+    <string name="pdf_prev">Prev</string>
+    <string name="pdf_next">Next</string>
+    <string name="pdf_move">Move:</string>
+    <string name="pdf_move_left">Move Left</string>
+    <string name="pdf_move_right">Move Right</string>
+    <string name="pdf_move_up">Move Up</string>
+    <string name="pdf_move_down">Move Down</string>
+    <string name="pdf_shrink">Shrink PDF</string>
+    <string name="pdf_enlarge">Enlarge PDF</string>
+    <string name="pdf_hide_bar">Hide Bar</string>
+    <string name="pdf_show_controls">Show Controls</string>
+    <string name="pdf_close_doc">Close Doc</string>
+    <string name="pdf_close_doc_title">Close Document?</string>
+    <string name="pdf_close_doc_message">Are you sure you want to close \'%1$s\'? This will remove the document from the whiteboard canvas.</string>
     <string name="pdf_ocr_page">OCR this page</string>
-    <string name="pdf_fit">Fit PDF</string>
+    <string name="pdf_fit">Fit to Screen</string>
     <string name="pdf_export">Export PDF</string>
     <string name="pdf_search_placeholder">Search within PDF...</string>
     <string name="pdf_no_matches">No matches found</string>
     <string name="pdf_copy_to_canvas">Copy to Canvas</string>
     <string name="pdf_copy_for_ai">Copy for AI</string>
+
+    <!-- Text Stroke Editing -->
+    <string name="text_edit_title">Edit Text</string>
+    <string name="text_size_label">Size:</string>
+    <string name="text_edit_placeholder">Enter or edit text...</string>
+    <string name="text_delete">Delete Text</string>
+    <string name="text_done">Done</string>
     <string name="search_google_images">Search images on Google...</string>
     <string name="search_youtube_videos">Search YouTube videos or paste link...</string>
     <string name="action_yes">Yes</string>
