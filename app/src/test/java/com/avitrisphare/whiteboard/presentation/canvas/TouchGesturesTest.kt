@@ -8,9 +8,9 @@ import org.junit.Test
 class TouchGesturesTest {
 
     @Test
-    fun `forty contacts are kept and extras are not tracked`() {
-        assertEquals(40, retainedPointerCount(40))
-        assertEquals(40, retainedPointerCount(64))
+    fun `sixty four contacts are kept and extras are not tracked`() {
+        assertEquals(64, retainedPointerCount(64))
+        assertEquals(64, retainedPointerCount(80))
         assertEquals(1, retainedPointerCount(1))
     }
 
@@ -274,41 +274,19 @@ class TouchGesturesTest {
     }
 
     @Test
-    fun `dual tip hardware resolution does not flip when Tip 2 is selected in menu`() {
-        val xdpi = 77f
-        val fineTipMajor = 1.373291f
-        val thickTipMajor = 3.2043457f
-
-        val fineIsNib = isPenNibContact(isEraser = false, isStylus = false, majorPx = fineTipMajor, minorPx = fineTipMajor, xdpi = xdpi)
-        val thickIsNib = isPenNibContact(isEraser = false, isStylus = false, majorPx = thickTipMajor, minorPx = thickTipMajor, xdpi = xdpi)
-
-        assertTrue(fineIsNib)
-        org.junit.Assert.assertFalse(thickIsNib)
-
-        // When user is editing Tip 1 (useSecondaryPenColor = false):
-        // Physical Fine Tip -> Tip 1 (isSecondaryPen = false)
-        // Physical Thick Tip -> Tip 2 (isSecondaryPen = true)
-        val tip1WithMenuTip1 = if (fineTipMajor in 0.1f..5.0f) !fineIsNib else false
-        val tip2WithMenuTip1 = if (thickTipMajor in 0.1f..5.0f) !thickIsNib else false
-        org.junit.Assert.assertFalse("Fine tip must draw with Tip 1 when menu is on Tip 1", tip1WithMenuTip1)
-        assertTrue("Thick tip must draw with Tip 2 when menu is on Tip 1", tip2WithMenuTip1)
-
-        // When user opens menu, selects Tip 2 (useSecondaryPenColor = true) and touches board without moving back:
-        // Physical Fine Tip MUST STILL draw with Tip 1 (isSecondaryPen = false)
-        // Physical Thick Tip MUST STILL draw with Tip 2 (isSecondaryPen = true)
-        val tip1WithMenuTip2 = if (fineTipMajor in 0.1f..5.0f) !fineIsNib else true
-        val tip2WithMenuTip2 = if (thickTipMajor in 0.1f..5.0f) !thickIsNib else true
-        org.junit.Assert.assertFalse("Fine tip must NEVER draw with Tip 2 even if user selected Tip 2 in menu", tip1WithMenuTip2)
-        assertTrue("Thick tip must draw with Tip 2 even if user selected Tip 2 in menu", tip2WithMenuTip2)
+    fun `drawing tip follows pen module not contact size`() {
+        org.junit.Assert.assertFalse(resolveSecondaryPen(menuUsesSecondary = false))
+        assertTrue(resolveSecondaryPen(menuUsesSecondary = true))
     }
 
     @Test
-    fun `up to 40 simultaneous touch points recognized correctly`() {
-        assertEquals(40, retainedPointerCount(40))
-        assertEquals(40, retainedPointerCount(64))
+    fun `up to 64 simultaneous touch points recognized correctly`() {
+        assertEquals(64, retainedPointerCount(64))
+        assertEquals(64, retainedPointerCount(80))
         assertEquals(0, retainedPointerCount(0))
         assertEquals(20, retainedPointerCount(20))
-        assertEquals(40, MAX_TOUCH_POINTS)
+        assertEquals(40, retainedPointerCount(40))
+        assertEquals(64, MAX_TOUCH_POINTS)
 
         // Verify TouchContacts tracks contacts and enforces MAX_TOUCH_POINTS
         val contacts = TouchContacts(null)
@@ -488,8 +466,8 @@ class TouchGesturesTest {
     }
 
     @Test
-    fun `forty simultaneous touches generate forty distinct independent strokes`() {
-        val strokes = (0 until 40).map { pointerId ->
+    fun `sixty four simultaneous touches generate sixty four distinct independent strokes`() {
+        val strokes = (0 until 64).map { pointerId ->
             com.avitrisphare.whiteboard.domain.model.Stroke(
                 id = "stroke_ptr_$pointerId",
                 points = listOf(
@@ -503,10 +481,10 @@ class TouchGesturesTest {
                 strokeType = com.avitrisphare.whiteboard.domain.model.StrokeType.PEN
             )
         }
-        assertEquals(40, strokes.size)
+        assertEquals(64, strokes.size)
         val ids = strokes.map { it.id }.toSet()
-        assertEquals(40, ids.size)
-        for (i in 0 until 40) {
+        assertEquals(64, ids.size)
+        for (i in 0 until 64) {
             assertEquals(3, strokes[i].points.size)
             assertEquals(i * 40f, strokes[i].points[0].x, 0.001f)
         }

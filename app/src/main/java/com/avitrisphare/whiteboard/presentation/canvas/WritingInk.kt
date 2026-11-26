@@ -3,9 +3,8 @@ package com.avitrisphare.whiteboard.presentation.canvas
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Switch
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Palette
 import com.avitrisphare.whiteboard.core.theme.BrandOrange
 
 import androidx.compose.animation.AnimatedVisibility
@@ -14,8 +13,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,9 +69,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke as InkStroke
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerInputChange
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -105,8 +100,8 @@ fun strokeInkHalfWidth(stroke: Stroke): Float {
 }
 
 /**
- * In-progress ink. The path grows by one segment per point so a long stroke
- * does not rebuild its whole curve on every touch sample.
+ * In-progress ink. The path grows by one segment per sample so a long stroke
+ * does not rebuild on every touch event.
  */
 class LiveInk {
     var stroke: Stroke? = null
@@ -124,15 +119,8 @@ class LiveInk {
     }
 
     fun extend(point: Offset) {
-        val control = pending
-        if (control == null) {
-            pending = point
-            return
-        }
-        val midX = (control.x + point.x) / 2f
-        val midY = (control.y + point.y) / 2f
-        path.quadraticBezierTo(control.x, control.y, midX, midY)
-        tip = Offset(midX, midY)
+        path.lineTo(point.x, point.y)
+        tip = point
         pending = point
     }
 
@@ -229,10 +217,11 @@ fun writingToolIcon(tool: WhiteboardTool): ImageVector = when (tool) {
 fun InkToolPanel(
     state: CanvasState,
     viewModel: CanvasViewModel,
+    showColorWheel: Boolean = false,
+    onToggleColorWheel: () -> Unit = {},
     onClose: () -> Unit = {}
 ) {
     val editingSecondary = state.useSecondaryPenColor
-    var showColorWheel by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     val currentColor = if (editingSecondary) state.secondaryColor else state.selectedColor
     val currentTipTool = if (editingSecondary) state.secondaryInkTool else state.inkTool
@@ -282,6 +271,7 @@ fun InkToolPanel(
                         .clip(CircleShape)
                         .background(Color(currentColor))
                         .border(1.dp, Color(0xFFD1D5DB), CircleShape)
+                        .clickable { onToggleColorWheel() }
                 )
                 Spacer(Modifier.width(8.dp))
                 val displayToolLabel = when (currentTipTool) {
@@ -786,7 +776,7 @@ fun InkToolPanel(
                         Text("ⓘ", fontSize = 9.sp, color = Color(0xFF94A3B8))
                     }
                     Text(
-                        text = "Stylus Dual Tip",
+                        text = "Double-tap pen to switch",
                         fontSize = 9.5.sp,
                         color = Color(0xFF94A3B8)
                     )
@@ -913,7 +903,6 @@ fun InkToolPanel(
 
         Spacer(Modifier.height(10.dp))
 
-        // 6. Active Color Palette Matrix (21 Core Hues)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -926,7 +915,7 @@ fun InkToolPanel(
                 color = BrandOrange
             )
             Text(
-                text = "21 Core Hues",
+                text = "20 Hues + Custom",
                 fontSize = 9.5.sp,
                 color = Color(0xFF94A3B8)
             )
@@ -936,30 +925,40 @@ fun InkToolPanel(
 
         val coreHues = remember {
             listOf(
-                // Row 1
-                0xFF111827.toInt(), // Black
-                0xFF374151.toInt(), // Dark Slate
-                0xFF64748B.toInt(), // Slate Blue
-                0xFFFFFFFF.toInt(), // White
-                0xFFFEF3C7.toInt(), // Cream
-                0xFF78716C.toInt(), // Taupe
-                0xFF1E293B.toInt(), // Deep Navy
-                // Row 2
-                0xFFEF4444.toInt(), // Red
-                0xFFF26A1B.toInt(), // Brand Orange
-                0xFFF59E0B.toInt(), // Amber
-                0xFF10B981.toInt(), // Emerald
-                0xFF34D399.toInt(), // Mint
-                0xFF06B6D4.toInt(), // Cyan
-                0xFF0EA5E9.toInt(), // Sky Blue
-                // Row 3
-                0xFF3B82F6.toInt(), // Electric Blue
-                0xFF6366F1.toInt(), // Indigo
-                0xFFA855F7.toInt(), // Purple
-                0xFFEC4899.toInt(), // Pink
-                0xFFEA580C.toInt(), // Rust Orange
-                0xFF65A30D.toInt(), // Olive Lime
-                0xFF4C1D95.toInt()  // Deep Violet
+                0xFF111827.toInt(),
+                0xFF374151.toInt(),
+                0xFF64748B.toInt(),
+                0xFFFFFFFF.toInt(),
+                0xFFFEF3C7.toInt(),
+                0xFF78716C.toInt(),
+                0xFF1E293B.toInt(),
+                0xFFEF4444.toInt(),
+                0xFFF26A1B.toInt(),
+                0xFFF59E0B.toInt(),
+                0xFF10B981.toInt(),
+                0xFF34D399.toInt(),
+                0xFF06B6D4.toInt(),
+                0xFF0EA5E9.toInt(),
+                0xFF3B82F6.toInt(),
+                0xFF6366F1.toInt(),
+                0xFFA855F7.toInt(),
+                0xFFEC4899.toInt(),
+                0xFFEA580C.toInt(),
+                0xFF65A30D.toInt()
+            )
+        }
+
+        val rainbowBrush = remember {
+            Brush.sweepGradient(
+                listOf(
+                    Color.Red,
+                    Color.Yellow,
+                    Color.Green,
+                    Color.Cyan,
+                    Color.Blue,
+                    Color.Magenta,
+                    Color.Red
+                )
             )
         }
 
@@ -973,176 +972,106 @@ fun InkToolPanel(
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     for (col in 0 until 7) {
-                        val colorVal = coreHues[row * 7 + col]
-                        val isSelected = (currentColor and 0xFFFFFF) == (colorVal and 0xFFFFFF)
-                        val isWhiteOrLight = colorVal == 0xFFFFFFFF.toInt() || colorVal == 0xFFFEF3C7.toInt()
+                        val isCustomSlot = (row == 2 && col == 6)
+                        if (isCustomSlot) {
+                            val isCustomPicked = coreHues.none { (currentColor and 0xFFFFFF) == (it and 0xFFFFFF) }
+                            val isActive = showColorWheel || isCustomPicked
 
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(colorVal))
-                                .border(
-                                    width = if (isSelected) 2.dp else if (isWhiteOrLight) 1.dp else 0.dp,
-                                    color = if (isSelected) BrandOrange else if (isWhiteOrLight) Color(0xFFE2E8F0) else Color.Transparent,
-                                    shape = RoundedCornerShape(6.dp)
-                                )
-                                .clickable { applyColor(colorVal) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isSelected) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = if (isWhiteOrLight) Color(0xFF1E293B) else Color.White,
-                                    modifier = Modifier.size(14.dp)
-                                )
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(28.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(rainbowBrush)
+                                    .border(
+                                        width = if (isActive) 2.dp else 1.dp,
+                                        color = if (isActive) BrandOrange else Color(0xFFCBD5E1),
+                                        shape = RoundedCornerShape(6.dp)
+                                    )
+                                    .clickable { onToggleColorWheel() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isCustomPicked) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(currentColor))
+                                            .border(1.dp, Color.White, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        val r = (currentColor shr 16) and 0xFF
+                                        val g = (currentColor shr 8) and 0xFF
+                                        val b = currentColor and 0xFF
+                                        val isLight = (0.299 * r + 0.587 * g + 0.114 * b) >= 128
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Custom Color Selected",
+                                            tint = if (isLight) Color(0xFF1E293B) else Color.White,
+                                            modifier = Modifier.size(10.dp)
+                                        )
+                                    }
+                                } else if (showColorWheel) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White)
+                                            .border(0.5.dp, Color.Black.copy(alpha = 0.3f), CircleShape)
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Palette,
+                                        contentDescription = "Custom Color Wheel",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            val colorVal = coreHues[row * 7 + col]
+                            val isSelected = (currentColor and 0xFFFFFF) == (colorVal and 0xFFFFFF)
+                            val isWhiteOrLight = colorVal == 0xFFFFFFFF.toInt() || colorVal == 0xFFFEF3C7.toInt()
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(28.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(colorVal))
+                                    .border(
+                                        width = if (isSelected) 2.dp else if (isWhiteOrLight) 1.dp else 0.dp,
+                                        color = if (isSelected) BrandOrange else if (isWhiteOrLight) Color(0xFFE2E8F0) else Color.Transparent,
+                                        shape = RoundedCornerShape(6.dp)
+                                    )
+                                    .clickable { applyColor(colorVal) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = if (isWhiteOrLight) Color(0xFF1E293B) else Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
+        }
 
-        Spacer(Modifier.height(8.dp))
-
-        // 7. Continuous Rainbow Hue Gradient Bar
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(12.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(
-                            Color.Red, Color.Yellow, Color.Green, Color.Cyan,
-                            Color.Blue, Color.Magenta, Color.Red
-                        )
-                    )
-                )
-                .pointerInput(Unit) {
-                    detectTapGestures { offset ->
-                        val fraction = (offset.x / size.width).coerceIn(0f, 1f)
-                        val hue = fraction * 360f
-                        applyColor(Color.hsv(hue, 1f, 1f).toArgb())
-                    }
-                }
-                .pointerInput(Unit) {
-                    detectDragGestures { change, _ ->
-                        change.consume()
-                        val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                        val hue = fraction * 360f
-                        applyColor(Color.hsv(hue, 1f, 1f).toArgb())
-                    }
-                }
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        // 8. Bottom Action Bar: Color Picker, Opacity, HEX code badge
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (showColorWheel) Color(0xFFFFF7ED) else Color(0xFFF1F5F9))
-                        .border(
-                            width = 1.dp,
-                            color = if (showColorWheel) BrandOrange else Color(0xFFE2E8F0),
-                            shape = RoundedCornerShape(6.dp)
-                        )
-                        .clickable { showColorWheel = !showColorWheel },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Palette,
-                        contentDescription = "Color Wheel",
-                        tint = if (showColorWheel) BrandOrange else Color(0xFF475569),
-                        modifier = Modifier.size(15.dp)
-                    )
-                }
-            }
-
-            Box(
+        if (scrollState.maxValue > 0) {
+            VerticalScrollbar(
+                scrollState = scrollState,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFFF8FAFC))
-                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(6.dp))
-                    .clickable { showColorWheel = !showColorWheel }
-                    .padding(horizontal = 8.dp, vertical = 5.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "HEX ",
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF94A3B8)
-                    )
-                    Text(
-                        text = String.format("#%06X", currentColor and 0xFFFFFF),
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.Default.ContentCopy,
-                        contentDescription = null,
-                        tint = Color(0xFF94A3B8),
-                        modifier = Modifier.size(11.dp)
-                    )
-                }
-            }
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .padding(vertical = 4.dp)
+            )
         }
-
-        // 9. Expandable Color Wheel
-        AnimatedVisibility(
-            visible = showColorWheel,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(Color(0xFFE2E8F0))
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "Custom Color Wheel",
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF334155)
-                )
-                Spacer(Modifier.height(8.dp))
-                HueWheel(
-                    modifier = Modifier.size(160.dp),
-                    onPick = { applyColor(it) }
-                )
-                Spacer(Modifier.height(6.dp))
-            }
-        }
-        }
-
-        VerticalScrollbar(
-            scrollState = scrollState,
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight()
-                .padding(vertical = 4.dp)
-        )
     }
 }
 
@@ -1538,54 +1467,5 @@ fun EraserToolPanel(
                 inactiveTrackColor = Color(0xFFFFEDD5)
             )
         )
-    }
-}
-
-@Composable
-private fun HueWheel(
-    modifier: Modifier = Modifier,
-    onPick: (Int) -> Unit
-) {
-    val hueColors = listOf(
-        Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red
-    )
-    Box(
-        modifier = modifier
-            .pointerInput(Unit) {
-                val cx = size.width / 2f
-                val cy = size.height / 2f
-                detectTapGestures { offset ->
-                    if (cx <= 0f || cy <= 0f) return@detectTapGestures
-                    val dx = offset.x - cx
-                    val dy = offset.y - cy
-                    val distance = sqrt(dx * dx + dy * dy)
-                    val radius = min(cx, cy)
-                    if (distance > radius) return@detectTapGestures
-                    val angle = (Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())) + 360.0) % 360.0
-                    val saturation = (distance / radius).coerceIn(0f, 1f)
-                    onPick(Color.hsv(angle.toFloat(), saturation, 1f).toArgb())
-                }
-            }
-            .pointerInput(Unit) {
-                val cx = size.width / 2f
-                val cy = size.height / 2f
-                detectDragGestures { change, _ ->
-                    change.consume()
-                    val offset = change.position
-                    if (cx <= 0f || cy <= 0f) return@detectDragGestures
-                    val dx = offset.x - cx
-                    val dy = offset.y - cy
-                    val distance = sqrt(dx * dx + dy * dy)
-                    val radius = min(cx, cy)
-                    val angle = (Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())) + 360.0) % 360.0
-                    val saturation = (distance / radius).coerceIn(0f, 1f)
-                    onPick(Color.hsv(angle.toFloat(), saturation, 1f).toArgb())
-                }
-            }
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            drawCircle(brush = Brush.sweepGradient(hueColors))
-            drawCircle(brush = Brush.radialGradient(listOf(Color.White, Color.Transparent)))
-        }
     }
 }

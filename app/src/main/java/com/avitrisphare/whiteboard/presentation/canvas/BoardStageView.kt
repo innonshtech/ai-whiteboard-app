@@ -248,7 +248,25 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         if (pageChanged || moved || inkChanged) {
             ink.invalidate()
         }
-        if (moved || pageIndexChanged) live.invalidate()
+        if (inkChanged && activeLiveStrokes.isNotEmpty()) {
+            val stillLive = HashSet<String>(activeLiveStrokes.size)
+            for (liveStroke in activeLiveStrokes) stillLive.add(liveStroke.id)
+            for (stroke in strokes) {
+                stillLive.remove(stroke.id)
+                if (stillLive.isEmpty()) break
+            }
+            if (stillLive.size != activeLiveStrokes.size) {
+                if (stillLive.isEmpty()) {
+                    activeLiveStrokes.clear()
+                    activeLive = null
+                } else {
+                    activeLiveStrokes.removeAll { it.id !in stillLive }
+                }
+                live.invalidate()
+            }
+        } else if (moved || pageIndexChanged) {
+            live.invalidate()
+        }
     }
 
     fun viewScale(): Float = scale
@@ -1147,12 +1165,9 @@ class BoardStageView(context: Context) : FrameLayout(context) {
         private fun strokePath(points: List<Offset>): Path {
             path.reset()
             path.moveTo(points[0].x, points[0].y)
-            for (index in 1 until points.size - 1) {
-                val midX = (points[index].x + points[index + 1].x) / 2f
-                val midY = (points[index].y + points[index + 1].y) / 2f
-                path.quadTo(points[index].x, points[index].y, midX, midY)
+            for (index in 1 until points.size) {
+                path.lineTo(points[index].x, points[index].y)
             }
-            path.lineTo(points.last().x, points.last().y)
             return path
         }
 

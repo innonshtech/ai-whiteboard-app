@@ -125,21 +125,10 @@ fun CanvasPreview(
                         val path = Path()
                         val firstPoint = pointsList.first()
                         path.moveTo(firstPoint.x * scale + offsetX, firstPoint.y * scale + offsetY)
-                        
-                        for (i in 1 until pointsList.size - 1) {
-                            val p1 = pointsList[i]
-                            val p2 = pointsList[i+1]
-                            val midX = ((p1.x + p2.x) / 2f) * scale + offsetX
-                            val midY = ((p1.y + p2.y) / 2f) * scale + offsetY
-                            path.quadraticBezierTo(
-                                p1.x * scale + offsetX, 
-                                p1.y * scale + offsetY, 
-                                midX, 
-                                midY
-                            )
+                        for (i in 1 until pointsList.size) {
+                            val p = pointsList[i]
+                            path.lineTo(p.x * scale + offsetX, p.y * scale + offsetY)
                         }
-                        val lastPoint = pointsList.last()
-                        path.lineTo(lastPoint.x * scale + offsetX, lastPoint.y * scale + offsetY)
 
                         drawPath(
                             path = path,
