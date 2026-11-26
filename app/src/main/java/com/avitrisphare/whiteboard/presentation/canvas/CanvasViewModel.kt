@@ -2150,7 +2150,7 @@ class CanvasViewModel @Inject constructor(
     fun moveSelectedStrokes(delta: Offset) {
         if (delta == Offset.Zero || _state.value.selectedStrokeIds.isEmpty()) return
         val selectedIds = _state.value.selectedStrokeIds
-        val boundary = getScreenWorldBounds()
+        val boundary = if (_state.value.document != null) getScreenWorldBounds() else null
         _state.update { s ->
             val selectedNodes = s.strokes.filter { it.id in selectedIds && isMindMapNode(it) }
             val otherNodes = s.strokes.filter { it.id !in selectedIds && isMindMapNode(it) }
