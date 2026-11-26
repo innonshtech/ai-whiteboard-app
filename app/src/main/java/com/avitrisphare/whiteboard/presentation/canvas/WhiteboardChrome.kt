@@ -77,6 +77,7 @@ import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.AutoFixNormal
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.ChangeHistory
@@ -391,6 +392,7 @@ fun AvitriSphareWhiteboardChrome(
     var showBgColorWheel by remember { mutableStateOf(false) }
     var showSelectionColorWheel by remember { mutableStateOf(false) }
     var showStrokeColorWheel by remember { mutableStateOf(false) }
+    var showInkColorWheel by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.selectedStrokeIds) {
         if (state.selectedStrokeIds.isEmpty()) showSelectionColorWheel = false
@@ -398,6 +400,7 @@ fun AvitriSphareWhiteboardChrome(
     LaunchedEffect(panel) {
         if (panel != "color") showStrokeColorWheel = false
         if (panel != "background") showBgColorWheel = false
+        if (panel != "ink") showInkColorWheel = false
     }
 
     val toolIconBounds = remember { mutableStateMapOf<String, Rect>() }
@@ -1826,6 +1829,15 @@ fun AvitriSphareWhiteboardChrome(
                                                 }
                                                 toggle("ink")
                                             },
+                                            onPenDoubleClick = {
+                                                viewModel.toggleActivePenTip()
+                                                val next = !state.useSecondaryPenColor
+                                                Toast.makeText(
+                                                    context,
+                                                    if (next) "Tip 2 active" else "Tip 1 active",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            },
                                             onDropdownClick = {
                                                 toggle("ink")
                                             }
@@ -2756,10 +2768,38 @@ fun AvitriSphareWhiteboardChrome(
                             onClose = { panel = null }
                         )
                     }
-                    "ink" -> DockPopover(maxWidth = 360.dp, maxHeight = 210.dp, scrollable = false) {
-                        InkToolPanel(state = state, viewModel = viewModel, onClose = {
-                            panel = null
-                        })
+                    "ink" -> Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        DockPopover(maxWidth = 360.dp, maxHeight = 210.dp, scrollable = false) {
+                            InkToolPanel(
+                                state = state,
+                                viewModel = viewModel,
+                                showColorWheel = showInkColorWheel,
+                                onToggleColorWheel = { showInkColorWheel = !showInkColorWheel },
+                                onClose = {
+                                    panel = null
+                                    showInkColorWheel = false
+                                }
+                            )
+                        }
+                        if (showInkColorWheel) {
+                            val activeColor = if (state.useSecondaryPenColor) state.secondaryColor else state.selectedColor
+                            ColorWheelPanel(
+                                initialColor = if (activeColor == 0) 0xFF1B1F2A.toInt() else activeColor,
+                                isDark = state.isDarkTheme,
+                                title = stringResource(R.string.ink_colour),
+                                onColorSelected = { color ->
+                                    if (state.useSecondaryPenColor) {
+                                        viewModel.setSecondaryColor(color)
+                                    } else {
+                                        viewModel.setColor(color)
+                                    }
+                                },
+                                onClose = { showInkColorWheel = false }
+                            )
+                        }
                     }
                     "color" -> Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -3281,6 +3321,7 @@ private fun PenSplitDockItem(
     modifier: Modifier = Modifier,
     isDark: Boolean = LocalDarkTheme.current,
     onPenClick: () -> Unit,
+    onPenDoubleClick: () -> Unit = {},
     onDropdownClick: () -> Unit
 ) {
     val activeBg = Color(0xFFF26A1B)
@@ -3314,7 +3355,12 @@ private fun PenSplitDockItem(
         Box(
             modifier = Modifier
                 .fillMaxHeight()
-                .clickable(onClick = onPenClick)
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { onPenClick() },
+                        onDoubleTap = { onPenDoubleClick() }
+                    )
+                }
                 .padding(start = if (active) 10.dp else 6.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
             contentAlignment = Alignment.Center
         ) {

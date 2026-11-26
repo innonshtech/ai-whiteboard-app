@@ -165,7 +165,7 @@ data class CanvasState(
     val inkTool: WhiteboardTool = WhiteboardTool.PEN,
     val isToolLocked: Boolean = false,
     val isDrawToShapeEnabled: Boolean = false,
-    val isMultiTouchEnabled: Boolean = false,
+    val isMultiTouchEnabled: Boolean = true,
     val smartWriteEnabled: Boolean = false,
     val smartWriteLanguageTag: String = "en",
     val smartWriteIntervalMs: Long = 500L,
@@ -3006,6 +3006,10 @@ class CanvasViewModel @Inject constructor(
                 currentTool = if (useSecondary) it.secondaryInkTool else it.inkTool
             )
         }
+    }
+
+    fun toggleActivePenTip() {
+        setActivePenSlot(if (_state.value.useSecondaryPenColor) 1 else 2)
     }
 
     fun setSecondaryStrokeWidth(width: Float) {

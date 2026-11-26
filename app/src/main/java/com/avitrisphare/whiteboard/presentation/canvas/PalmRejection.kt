@@ -9,7 +9,7 @@ import androidx.input.motionprediction.MotionEventPredictor
 import kotlin.math.hypot
 
 /** The infrared frame reports at most this many contacts at once. */
-const val MAX_TOUCH_POINTS = 40
+const val MAX_TOUCH_POINTS = 64
 
 /** A resting palm, while a stylus is down, covers more than this area. */
 const val PALM_AREA_CM2 = 3f
@@ -254,6 +254,12 @@ fun isPenNibContact(
     )
 }
 
+/**
+ * Tip 1 vs Tip 2 for a stroke. The pen module (double-tap or Tip 1/Tip 2) chooses this.
+ * Contact size is not used.
+ */
+fun resolveSecondaryPen(menuUsesSecondary: Boolean): Boolean = menuUsesSecondary
+
 /** True if the MotionEvent tool type is a stylus tip or stylus eraser. */
 fun isStylusToolType(toolType: Int): Boolean {
     return toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER
@@ -348,6 +354,8 @@ class TouchContacts(view: View? = null) {
         activeContacts.clear()
         val limit = event.pointerCount.coerceAtMost(MAX_TOUCH_POINTS)
         val upIndex = if (action == MotionEvent.ACTION_POINTER_UP) event.actionIndex else -1
+        val isDownAction = action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN
+        val downIndex = if (isDownAction) event.actionIndex else -1
         for (index in 0 until limit) {
             if (index == upIndex) continue
             val id = event.getPointerId(index).toLong()
@@ -367,12 +375,11 @@ class TouchContacts(view: View? = null) {
                 stylus = true
                 sawStylus = true
             }
-            if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
+            if (index == downIndex) {
                 lastDownMajor = major
                 lastDownMinor = minor
                 lastDownTool = tool
                 lastDownSize = size
-                android.util.Log.i("AvitriTouch", "ACTION_DOWN idx=$index id=$id tool=$tool major=$major minor=$minor size=$size")
                 classifier.recordDown(major, minor, size, tool)
             }
         }
@@ -383,7 +390,7 @@ class TouchContacts(view: View? = null) {
         stylusActive = stylus
         activeCount = seen.size
 
-        // One stylus tip needs a look-ahead. A full 40-point frame does not.
+        // One stylus tip needs a look-ahead. A full 64-point frame does not.
         val pred = predictor
         if (pred == null || event.pointerCount > 2) {
             predictDx = 0f

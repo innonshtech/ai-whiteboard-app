@@ -101,18 +101,34 @@ fun ColorWheelCard(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val initialAlpha = remember(initialColor) {
+        if (initialColor == 0) 1f else (((initialColor ushr 24) and 0xFF) / 255f)
+    }
+
     val hsv = remember(initialColor) {
         FloatArray(3).apply {
-            val safeColor = if (initialColor == 0) 0xFF3B82F6.toInt() else initialColor
+            val safeColor = if (initialColor == 0) 0xFF3B82F6.toInt() else (initialColor or 0xFF000000.toInt())
             AndroidColor.colorToHSV(safeColor, this)
         }
     }
 
     var currentHue by remember(initialColor) { mutableFloatStateOf(hsv[0]) }
     var currentSat by remember(initialColor) { mutableFloatStateOf(hsv[1]) }
-    var currentVal by remember(initialColor) { mutableFloatStateOf(if (hsv[2] <= 0.02f) 1f else hsv[2]) }
+    var currentVal by remember(initialColor) { mutableFloatStateOf(if (hsv[2] <= 0.02f) 0f else hsv[2]) }
+    var currentOpacity by remember(initialColor) { mutableFloatStateOf(if (initialColor == 0) 1f else initialAlpha) }
+
+    fun getBaseColor(): Color {
+        return if (currentVal <= 0.02f) {
+            Color.Black
+        } else {
+            Color.hsv(currentHue, currentSat, 1f)
+        }
+    }
+
     var pickedColor by remember(initialColor) {
-        mutableIntStateOf(if (initialColor == 0) 0xFF3B82F6.toInt() else initialColor)
+        val base = if (hsv[2] <= 0.02f) Color.Black else Color.hsv(hsv[0], hsv[1], 1f)
+        val alpha = if (initialColor == 0) 1f else initialAlpha
+        mutableIntStateOf(base.copy(alpha = alpha).toArgb())
     }
 
     Column(
@@ -152,111 +168,95 @@ fun ColorWheelCard(
 
         Spacer(Modifier.height(6.dp))
 
-        // Circular Color Wheel with selection indicator
+        // Circular Color Wheel with selection indicator (fades to white as opacity decreases)
         CircularColorWheel(
             selectedHue = currentHue,
             selectedSat = currentSat,
-            brightness = currentVal,
+            opacity = currentOpacity,
             modifier = Modifier.size(148.dp),
             onColorPick = { hue, sat, col ->
                 currentHue = hue
                 currentSat = sat
-                pickedColor = col
-                onColorSelected(col)
+                currentVal = 1f
+                val newCol = Color.hsv(hue, sat, 1f).copy(alpha = currentOpacity).toArgb()
+                pickedColor = newCol
+                onColorSelected(newCol)
             }
         )
 
         Spacer(Modifier.height(6.dp))
 
-        // Brightness Slider
+        // Opacity Slider (gradient from white on left to solid color on right)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "Brightness",
+                text = "Opacity",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Medium,
                 color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
             )
             Text(
-                text = "${(currentVal * 100).roundToInt()}%",
+                text = "${(currentOpacity * 100).roundToInt()}%",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1E293B)
             )
         }
 
-        Slider(
-            value = currentVal,
-            onValueChange = { v ->
-                currentVal = v
-                val newCol = Color.hsv(currentHue, currentSat, currentVal).toArgb()
-                pickedColor = newCol
-                onColorSelected(newCol)
-            },
-            valueRange = 0.05f..1f,
-            colors = SliderDefaults.colors(
-                thumbColor = BrandOrange,
-                activeTrackColor = BrandOrange,
-                inactiveTrackColor = if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(20.dp)
-        )
-
-        Spacer(Modifier.height(4.dp))
-
-        // Quick Palette presets (including Black and White)
-        val quickPresets = listOf(
-            0xFF000000.toInt(), // Black
-            0xFFFFFFFF.toInt(), // White
-            0xFFEF4444.toInt(), // Red
-            0xFFF97316.toInt(), // Orange
-            0xFFEAB308.toInt(), // Yellow
-            0xFF22C55E.toInt(), // Green
-            0xFF06B6D4.toInt(), // Cyan
-            0xFF3B82F6.toInt(), // Blue
-            0xFFA855F7.toInt()  // Purple
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            quickPresets.forEach { preset ->
-                val isPresetSelected = pickedColor == preset
-                Box(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .clip(CircleShape)
-                        .background(Color(preset))
-                        .border(
-                            width = if (isPresetSelected) 2.dp else 1.dp,
-                            color = if (isPresetSelected) BrandOrange else (if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1)),
-                            shape = CircleShape
-                        )
-                        .clickable {
-                            val presetHsv = FloatArray(3)
-                            AndroidColor.colorToHSV(preset, presetHsv)
-                            currentHue = presetHsv[0]
-                            currentSat = presetHsv[1]
-                            currentVal = if (presetHsv[2] <= 0.02f) 0.05f else presetHsv[2]
-                            pickedColor = preset
-                            onColorSelected(preset)
-                        }
+        val opacityTrackBrush = remember(currentHue, currentSat, currentVal) {
+            val base = getBaseColor()
+            Brush.horizontalGradient(
+                listOf(
+                    Color.White,
+                    base
                 )
-            }
+            )
         }
 
-        Spacer(Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            // Custom gradient track behind slider
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(opacityTrackBrush)
+                    .border(
+                        width = 1.dp,
+                        color = if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+            )
+            Slider(
+                value = currentOpacity,
+                onValueChange = { o ->
+                    currentOpacity = o
+                    val base = getBaseColor()
+                    val newCol = base.copy(alpha = currentOpacity).toArgb()
+                    pickedColor = newCol
+                    onColorSelected(newCol)
+                },
+                valueRange = 0f..1f,
+                colors = SliderDefaults.colors(
+                    thumbColor = BrandOrange,
+                    activeTrackColor = Color.Transparent,
+                    inactiveTrackColor = Color.Transparent
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
 
-        // Bottom preview pill with color swatch, hex code, and Done button
+        Spacer(Modifier.height(8.dp))
+
+        // Bottom preview pill with color swatch, hex code, opacity percentage, and Done button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -275,14 +275,28 @@ fun ColorWheelCard(
                     modifier = Modifier
                         .size(20.dp)
                         .clip(CircleShape)
-                        .background(Color(pickedColor))
-                        .border(1.5.dp, if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1), CircleShape)
-                )
+                        .background(Color.White)
+                        .border(1.5.dp, if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .background(Color(pickedColor))
+                    )
+                }
                 Text(
                     text = String.format("#%06X", pickedColor and 0xFFFFFF),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (isDark) Color(0xFFF1F5F9) else Color(0xFF1E293B)
+                )
+                Text(
+                    text = "${(currentOpacity * 100).roundToInt()}%",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF94A3B8)
                 )
             }
 
@@ -331,7 +345,7 @@ fun ColorWheelDialog(
 fun CircularColorWheel(
     selectedHue: Float,
     selectedSat: Float,
-    brightness: Float,
+    opacity: Float = 1f,
     modifier: Modifier = Modifier,
     onColorPick: (hue: Float, sat: Float, color: Int) -> Unit
 ) {
@@ -343,7 +357,7 @@ fun CircularColorWheel(
 
     Box(
         modifier = modifier
-            .pointerInput(brightness) {
+            .pointerInput(opacity) {
                 val cx = size.width / 2f
                 val cy = size.height / 2f
                 detectTapGestures { offset ->
@@ -355,11 +369,11 @@ fun CircularColorWheel(
                     if (distance > radius) return@detectTapGestures
                     val angle = (Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())) + 360.0) % 360.0
                     val sat = (distance / radius).coerceIn(0f, 1f)
-                    val col = Color.hsv(angle.toFloat(), sat, brightness.coerceIn(0f, 1f)).toArgb()
+                    val col = Color.hsv(angle.toFloat(), sat, 1f).copy(alpha = opacity.coerceIn(0f, 1f)).toArgb()
                     onColorPick(angle.toFloat(), sat, col)
                 }
             }
-            .pointerInput(brightness) {
+            .pointerInput(opacity) {
                 val cx = size.width / 2f
                 val cy = size.height / 2f
                 detectDragGestures { change, _ ->
@@ -372,7 +386,7 @@ fun CircularColorWheel(
                     val radius = min(cx, cy)
                     val angle = (Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())) + 360.0) % 360.0
                     val sat = (distance / radius).coerceIn(0f, 1f)
-                    val col = Color.hsv(angle.toFloat(), sat, brightness.coerceIn(0f, 1f)).toArgb()
+                    val col = Color.hsv(angle.toFloat(), sat, 1f).copy(alpha = opacity.coerceIn(0f, 1f)).toArgb()
                     onColorPick(angle.toFloat(), sat, col)
                 }
             }
@@ -386,9 +400,13 @@ fun CircularColorWheel(
             drawCircle(brush = Brush.sweepGradient(hueColors), radius = radius, center = Offset(cx, cy))
             drawCircle(brush = Brush.radialGradient(listOf(Color.White, Color.Transparent), radius = radius), radius = radius, center = Offset(cx, cy))
 
-            // Darken based on brightness
-            if (brightness < 1f) {
-                drawCircle(color = Color.Black.copy(alpha = (1f - brightness).coerceIn(0f, 1f)), radius = radius, center = Offset(cx, cy))
+            // Fade towards white based on opacity (if opacity < 1f)
+            if (opacity < 1f) {
+                drawCircle(
+                    color = Color.White.copy(alpha = (1f - opacity).coerceIn(0f, 1f)),
+                    radius = radius,
+                    center = Offset(cx, cy)
+                )
             }
 
             // Draw outer border ring

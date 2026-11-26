@@ -29,9 +29,9 @@ data class Stroke(
     @Transient
     private var _cachedSmoothedPath: Path? = null
 
-    /**
-     * Reusable, lazily calculated smoothed bezier path.
-     * Prevents re-allocating Path objects and re-calculating bezier curves on every render frame.
+        /**
+     * Reusable path through the captured samples.
+     * Prevents re-allocating Path objects on every render frame.
      */
     val cachedPath: Path
         get() {
@@ -116,19 +116,14 @@ data class Stroke(
 
         fun createSmoothedPath(points: List<Offset>): Path {
             val path = Path()
-            if (points.size < 2) {
-                if (points.isNotEmpty()) {
-                    path.moveTo(points[0].x, points[0].y)
-                }
-                return path
-            }
+            if (points.isEmpty()) return path
             path.moveTo(points[0].x, points[0].y)
-            for (i in 1 until points.size - 1) {
-                val midX = (points[i].x + points[i + 1].x) / 2f
-                val midY = (points[i].y + points[i + 1].y) / 2f
-                path.quadraticBezierTo(points[i].x, points[i].y, midX, midY)
+            if (points.size == 1) return path
+            // Follow captured samples. Midpoint-quad smoothing pulled letters
+            // off the true stroke and bent corners of handwriting.
+            for (i in 1 until points.size) {
+                path.lineTo(points[i].x, points[i].y)
             }
-            path.lineTo(points.last().x, points.last().y)
             return path
         }
     }
