@@ -62,6 +62,14 @@ class PanelApi(
         post("/api/v1/auth/logout", "{}", accessToken)
     }
 
+    suspend fun checkTeacherSession(accessToken: String): Boolean {
+        if (accessToken.isBlank()) return false
+        return when (val http = get("/api/v1/users/me", accessToken)) {
+            is HttpResult.Body -> true
+            is HttpResult.Failed -> false
+        }
+    }
+
     /**
      * Sends a base64-encoded PNG of the selected strokes to the backend.
      * The backend holds Vision API credentials; the app never touches them.

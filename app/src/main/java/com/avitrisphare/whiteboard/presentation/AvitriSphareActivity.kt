@@ -359,36 +359,57 @@ class AvitriSphareActivity : ComponentActivity() {
 
                 LaunchedEffect(start) {
                     if (start == null || start == "locked" || start == "license") return@LaunchedEffect
+                    var lastPanelCheck = System.currentTimeMillis()
                     while (isActive) {
-                        delay(3 * 60 * 1000L)
-                        val currentKey = session.snapshot().licenseKey ?: continue
-                        when (val check = panelApi.checkLicense(currentKey, session.panelId())) {
-                            is LicenseCheckResult.Expired, is LicenseCheckResult.SchoolInactive -> {
-                                isLocked = true
-                                session.markLocked(true)
-                                navController.navigate("locked") {
+                        delay(10 * 1000L)
+
+                        // 1. Real-time check: kick teacher out immediately if license is expired by Admin
+                        val currentTeacher = teacher ?: session.snapshot().teacher
+                        if (currentTeacher != null && currentTeacher.accessToken.isNotBlank()) {
+                            val isValid = panelApi.checkTeacherSession(currentTeacher.accessToken)
+                            if (!isValid) {
+                                session.logout()
+                                teacher = null
+                                navController.navigate("qr") {
                                     popUpTo(0) { inclusive = true }
                                 }
-                                break
+                                continue
                             }
-                            is LicenseCheckResult.Valid -> {
-                                session.saveLicense(currentKey, check.license)
-                            }
-                            is LicenseCheckResult.Invalid -> {
-                                session.clearLicense()
-                                navController.navigate("license") {
-                                    popUpTo(0) { inclusive = true }
-                                }
-                                break
-                            }
-                            is LicenseCheckResult.NetworkError -> {
-                                if (session.isLicenseExpiredLocally()) {
+                        }
+
+                        // 2. Check classroom hardware panel license every 3 minutes
+                        val now = System.currentTimeMillis()
+                        if (now - lastPanelCheck >= 3 * 60 * 1000L) {
+                            lastPanelCheck = now
+                            val currentKey = session.snapshot().licenseKey ?: continue
+                            when (val check = panelApi.checkLicense(currentKey, session.panelId())) {
+                                is LicenseCheckResult.Expired, is LicenseCheckResult.SchoolInactive -> {
                                     isLocked = true
                                     session.markLocked(true)
                                     navController.navigate("locked") {
                                         popUpTo(0) { inclusive = true }
                                     }
                                     break
+                                }
+                                is LicenseCheckResult.Valid -> {
+                                    session.saveLicense(currentKey, check.license)
+                                }
+                                is LicenseCheckResult.Invalid -> {
+                                    session.clearLicense()
+                                    navController.navigate("license") {
+                                        popUpTo(0) { inclusive = true }
+                                    }
+                                    break
+                                }
+                                is LicenseCheckResult.NetworkError -> {
+                                    if (session.isLicenseExpiredLocally()) {
+                                        isLocked = true
+                                        session.markLocked(true)
+                                        navController.navigate("locked") {
+                                            popUpTo(0) { inclusive = true }
+                                        }
+                                        break
+                                    }
                                 }
                             }
                         }
